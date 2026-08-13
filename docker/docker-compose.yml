@@ -1,0 +1,137 @@
+# ─────────────────────────────────────────────────────────────
+# Gafeso — Infrastructure de développement
+# Lancement : docker compose -f docker/docker-compose.yml up -d
+# Les valeurs par défaut permettent un démarrage sans .env ;
+# elles sont surchargées par les variables du .env racine si présent.
+# ─────────────────────────────────────────────────────────────
+
+# Voir docker-compose.prod.yml : défaut historique conservé pour ne pas
+# détacher les volumes d'un poste de développement déjà en place. Un nouveau
+# clone reçoit COMPOSE_PROJECT_NAME=gafeso via .env.example.
+name: ${COMPOSE_PROJECT_NAME:-bibliocloud}
+
+services:
+  # ── PostgreSQL 16 : base de données principale (multi-tenant par schémas) ──
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bibliocloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bibliocloud_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-bibliocloud}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bibliocloud} -d ${POSTGRES_DB:-bibliocloud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis : cache + files d'attente BullMQ ──
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Meilisearch : moteur de recherche (OPAC) ──
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-meili_dev_master_key}
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Elasticsearch : moteur de recherche OPTIONNEL (profil « elasticsearch ») ──
+  # NE DÉMARRE PAS par défaut. À n'activer que si vous choisissez ES plutôt que
+  # Meilisearch (SEARCH_ENGINE=elasticsearch), typiquement pour réutiliser un ES
+  # déjà en place. ⚠ RAM : ES réclame 2–4 Go là où Meilisearch vit dans ~100 Mo
+  # — Meilisearch reste le choix RECOMMANDÉ (voir docs/search-engines.md).
+  #   Démarrer :  docker compose --profile elasticsearch up -d elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    profiles: ["elasticsearch"]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false" # dev local ; en prod, activer TLS + auth
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms1g -Xmx1g} # borne la RAM heap (dev)
+    ports:
+      - "${ELASTIC_PORT:-9200}:9200"
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── MinIO : stockage objet S3-compatible (fichiers, couvertures, EPUB) ──
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bibliocloud}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bibliocloud_dev}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Mailpit : attrape-mails de développement (SMTP + interface web) ──
+  mailpit:
+    image: axllent/mailpit:v1.20
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/livez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  db_data:
+  redis_data:
+  meili_data:
+  elastic_data:
+  minio_data:
+  mailpit_data:

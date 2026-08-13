@@ -1,0 +1,41 @@
+{
+  "name": "gafeso",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gafeso — la maison des livres : SIGB multi-tenant open-source pour l'Afrique de l'Ouest",
+  "license": "AGPL-3.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:shell": "bash scripts/lib/slugify.test.sh",
+    "infra:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d",
+    "infra:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
+    "infra:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f",
+    "infra:ps": "docker compose --env-file .env -f docker/docker-compose.yml ps",
+    "db:generate": "npm run db:generate -w @gafeso/api",
+    "db:migrate": "npm run db:migrate -w @gafeso/api",
+    "db:seed": "npm run db:seed -w @gafeso/api",
+    "db:studio": "npm run db:studio -w @gafeso/api",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "provision:production": "node scripts/provision-production.mjs",
+    "reindex": "node scripts/reindex.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  },
+  "overrides": {
+    "multer": "^2.2.0",
+    "@xmldom/xmldom": "^0.8.13",
+    "qs": "^6.15.3"
+  }
+}

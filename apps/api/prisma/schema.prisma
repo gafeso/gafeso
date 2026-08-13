@@ -1,0 +1,861 @@
+// Gafeso — Prisma Schema (v2)
+// Multi-tenant via PostgreSQL schemas
+// public schema = shared (commercial catalog, federation, payments)
+// tenant_<slug> schema = per-school (patrons, loans, local records, students)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PUBLIC SCHEMA — Shared / Platform data
+// ═══════════════════════════════════════════════════════════
+
+model Tenant {
+  id            String          @id @default(uuid())
+  name          String
+  slug          String          @unique
+  status        TenantStatus    @default(ACTIVE)
+  plan          TenantPlan      @default(STARTER)
+  domains       Domain[]
+  settings      TenantSettings?
+  subscriptions Subscription[]
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
+model Domain {
+  id        String  @id @default(uuid())
+  tenantId  String  @map("tenant_id")
+  domain    String  @unique
+  isPrimary Boolean @default(false) @map("is_primary")
+  sslStatus String  @default("pending") @map("ssl_status")
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@map("domains")
+}
+
+model TenantSettings {
+  id                         String  @id @default(uuid())
+  tenantId                   String  @unique @map("tenant_id")
+  logoUrl                    String? @map("logo_url")
+  primaryColor               String  @default("#0F2B46") @map("primary_color")
+  secondaryColor             String  @default("#D97B2B") @map("secondary_color")
+  locale                     String  @default("fr")
+  timezone                   String  @default("Africa/Ouagadougou")
+  currency                   String  @default("XOF")
+  // Page d'accueil vitrine (spec docs/spec-accueil-tenant.md) — tout par
+  // tenant, dans le schéma public (pas de sync-schema à propager).
+  // themeTokens : tokens de couleur NEUTRES/support de la vitrine (fonds,
+  //   surface, textes, highlight, danger, primary-dark, accent-soft). --primary
+  //   et --accent NE sont PAS ici : partagés avec l'app (primaryColor /
+  //   secondaryColor ci-dessus) — un seul choix de couleur par école.
+  // latticeEnabled : motif décoratif (croisillons) activé pour cette école.
+  // homepageContent : contenu éditable de la vitrine (identité, stats, espaces,
+  //   services, horaires, ressources, contact) — voir home-content.ts.
+  themeTokens                Json?   @map("theme_tokens")
+  latticeEnabled             Boolean @default(false) @map("lattice_enabled")
+  homepageContent            Json?   @map("homepage_content")
+  // 2FA OBLIGATOIRE pour les rôles disposant de comptes.gerer / etablissement.gerer.
+  // Schéma public (pas de sync-schema) → défaut non-null sans risque.
+  require2fa                 Boolean @default(false) @map("require_2fa")
+  // Rappels de circulation par email (moteur : reminders.service). Tout dans le
+  // schéma public (pas de sync-schema). remindersEnabled : bascule globale.
+  // reminderDaysBefore (N) : rappel d'échéance J-N. overdueRepeatDays (M) :
+  // relance de retard à J+1 puis tous les M jours. reminderTemplates : sujet +
+  // corps éditables par type ({ dueSoon: {subject, body}, overdue: {...} }) —
+  // défauts FR appliqués à la lecture si null (reminder-templates.ts).
+  remindersEnabled           Boolean @default(false) @map("reminders_enabled")
+  reminderDaysBefore         Int     @default(2) @map("reminder_days_before")
+  overdueRepeatDays          Int     @default(7) @map("overdue_repeat_days")
+  reminderTemplates          Json?   @map("reminder_templates")
+  // Politique de circulation en ligne (self-service lecteur). Schéma public →
+  // pas de sync-schema. onlineRenewalEnabled : renouvellement en ligne autorisé.
+  // onlineRenewalMax : plafond de renouvellements en ligne par prêt.
+  // onlineRenewalDays : durée (jours) accordée à chaque renouvellement.
+  // onlineRenewalRefuseOverdue : refuser si le prêt est déjà en retard.
+  // holdPickupDays : durée de mise de côté d'une réservation disponible.
+  onlineRenewalEnabled       Boolean @default(true) @map("online_renewal_enabled")
+  onlineRenewalMax           Int     @default(2) @map("online_renewal_max")
+  onlineRenewalDays          Int     @default(14) @map("online_renewal_days")
+  onlineRenewalRefuseOverdue Boolean @default(true) @map("online_renewal_refuse_overdue")
+  holdPickupDays             Int     @default(7) @map("hold_pickup_days")
+  // Cœur offline : durée (jours) du bail de licence hors-ligne émis par l'école.
+  // Schéma public → pas de sync-schema ; défaut non-null sans risque.
+  offlineLicenseTtlDays      Int     @default(14) @map("offline_license_ttl_days")
+  // Échéance des prêts : HEURE fixe (HH:MM) dans le FUSEAU de l'établissement.
+  // Réglable et non figé : une constante juste pour une école redevient fausse
+  // pour la suivante — c'est ce qui s'était produit avec l'année académique.
+  loanDueTime                String  @default("16:00") @map("loan_due_time")
+  tenant                     Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@map("tenant_settings")
+}
+
+// Journal des rappels de circulation envoyés — schéma PUBLIC (comme audit_logs).
+// Volontairement hors des schémas tenant : (1) table de log dénormalisée
+// (destinataire, titre, code-barres, échéance figés à l'envoi) → l'écran admin
+// se lit sans jointure inter-schéma ; (2) `checkoutId`/`tenantId` sont des UUID
+// globalement uniques → pas de FK (même parti pris que audit_logs). L'unicité
+// (checkoutId, type, stageKey) est la garantie d'IDEMPOTENCE : un même rappel
+// ne peut être journalisé (donc envoyé) qu'une fois. Statut : PENDING (réservé
+// avant envoi, anti-double-envoi inter-instances), SENT (terminal),
+// FAILED / SKIPPED_NO_EMAIL (retentés au prochain passage).
+model ReminderLog {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  checkoutId     String    @map("checkout_id")
+  type           String // DUE_SOON | OVERDUE
+  stageKey       String    @map("stage_key") // discriminant d'idempotence (date d'échéance / n° de relance)
+  recipientEmail String?   @map("recipient_email")
+  recipientName  String?   @map("recipient_name")
+  itemBarcode    String?   @map("item_barcode")
+  recordTitle    String?   @map("record_title")
+  dueDate        DateTime? @map("due_date")
+  status         String    @default("PENDING") // PENDING | SENT | FAILED | SKIPPED_NO_EMAIL
+  error          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([checkoutId, type, stageKey])
+  @@index([tenantId, createdAt])
+  @@map("reminder_logs")
+}
+
+// ── Commercial catalog (paid books, shared across schools) ──
+
+model CommercialTitle {
+  id          String            @id @default(uuid())
+  title       String
+  author      String
+  isbn        String?
+  publisherId String?           @map("publisher_id")
+  coverUrl    String?           @map("cover_url")
+  description String?
+  language    String            @default("fr")
+  priceXof    Int               @map("price_xof") // purchase price in FCFA
+  fileFormat  String            @map("file_format") // pdf, epub
+  fileUrl     String            @map("file_url") // encrypted master file
+  publisher   Publisher?        @relation(fields: [publisherId], references: [id])
+  collections CollectionTitle[]
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([title])
+  @@index([isbn])
+  @@map("commercial_titles")
+}
+
+model Publisher {
+  id           String            @id @default(uuid())
+  name         String
+  contactEmail String?           @map("contact_email")
+  revenueShare Float             @default(0.7) @map("revenue_share") // 70% to publisher
+  titles       CommercialTitle[]
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  @@map("publishers")
+}
+
+// ── External library (federated catalogs) ──
+
+model ExternalLibrary {
+  id           String    @id @default(uuid())
+  name         String // "Bibliothèque Nationale du Burkina"
+  protocol     String // "OAI-PMH", "Z39.50", "SRU"
+  endpointUrl  String    @map("endpoint_url")
+  contactEmail String?   @map("contact_email")
+  status       String    @default("active")
+  lastHarvest  DateTime? @map("last_harvest")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("external_libraries")
+}
+
+// ── Collections (groups of resources with access rules) ──
+// A collection can hold commercial titles AND/OR external resources.
+// Access is granted to classes / subscription tiers.
+
+model Collection {
+  id          String            @id @default(uuid())
+  name        String // "Ressources Droit L1", "Abonnement Médecine 2026"
+  description String?
+  type        CollectionType    @default(INTERNAL)
+  sourceId    String?           @map("source_id") // external library id or subscription id
+  // Propriétaire pour les collections INTERNAL (ressources numérisées propres
+  // à une école, voir CollectionTitle.recordId) : null pour les collections
+  // partagées (COMMERCIAL/EXTERNAL), fixé au premier document ajouté sinon.
+  tenantId    String?           @map("tenant_id")
+  // Collection SOCLE créée au provisioning de l'école : elle reçoit
+  // automatiquement les documents numérisés, et porte la règle d'accès par
+  // défaut. Une école n'en a qu'une (index unique partiel côté migration).
+  // Modifiable et supprimable comme n'importe quelle collection.
+  isDefault   Boolean           @default(false) @map("is_default")
+  titles      CollectionTitle[]
+  accessRules AccessRule[]
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("collections")
+}
+
+// Un item de collection référence SOIT un titre du catalogue commercial
+// (titleId, schéma public), SOIT un BiblioRecord numérisé localement par une
+// école (recordId — simple identifiant, pas de FK : BiblioRecord vit dans le
+// schéma tenant_<slug>, hors de portée d'une relation Prisma depuis le schéma
+// public). Exactement l'un des deux doit être renseigné (appliqué en code).
+model CollectionTitle {
+  id           String           @id @default(uuid())
+  collectionId String           @map("collection_id")
+  titleId      String?          @map("title_id")
+  recordId     String?          @map("record_id")
+  collection   Collection       @relation(fields: [collectionId], references: [id])
+  title        CommercialTitle? @relation(fields: [titleId], references: [id])
+
+  @@unique([collectionId, titleId])
+  @@unique([collectionId, recordId])
+  @@index([recordId])
+  @@map("collection_titles")
+}
+
+// AccessRule: who can access a collection.
+// Matches on tenant + class/level + subscription tier.
+model AccessRule {
+  id               String     @id @default(uuid())
+  collectionId     String     @map("collection_id")
+  tenantId         String     @map("tenant_id") // which school
+  className        String?    @map("class_name") // "L1_DROIT", null = all classes
+  subscriptionTier String?    @map("subscription_tier") // "premium", null = any tier
+  collection       Collection @relation(fields: [collectionId], references: [id])
+
+  @@index([tenantId, className])
+  @@map("access_rules")
+}
+
+enum CollectionType {
+  INTERNAL // school's own digitized resources
+  COMMERCIAL // paid titles from commercial catalog
+  EXTERNAL // from a federated external library
+}
+
+// ── Subscriptions (school pays for external collections) ──
+
+model Subscription {
+  id           String    @id @default(uuid())
+  tenantId     String    @map("tenant_id")
+  collectionId String?   @map("collection_id") // the unlocked collection
+  name         String // "Abonnement Médecine 2026"
+  priceXof     Int       @map("price_xof")
+  billingCycle String    @default("yearly") @map("billing_cycle") // monthly, yearly
+  startDate    DateTime  @map("start_date")
+  endDate      DateTime? @map("end_date")
+  status       String    @default("active")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  payments     Payment[]
+
+  @@map("subscriptions")
+}
+
+// ── Payments (mobile money first) ──
+
+model Payment {
+  id             String        @id @default(uuid())
+  subscriptionId String?       @map("subscription_id")
+  tenantId       String?       @map("tenant_id")
+  amountXof      Int           @map("amount_xof")
+  provider       String // "orange_money", "wave", "mtn_momo", "card"
+  providerRef    String?       @map("provider_ref") // transaction id from provider
+  status         PaymentStatus @default(PENDING)
+  purpose        String // "subscription", "title_purchase"
+  metadata       Json?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("payments")
+}
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("super_admins")
+}
+
+// Journal d'audit des actions sensibles. Vit dans le schéma PUBLIC (pas
+// tenant_<slug>) — décision volontaire :
+//  - les actions PLATEFORME (endpoints super-admin par clé API, provisioning)
+//    n'ont AUCUN schéma tenant → il leur faut un domicile commun ;
+//  - une connexion ÉCHOUÉE peut précéder toute résolution de compte ;
+//  - une seule surface de consultation, filtrée par tenantId (comme les
+//    collections d'access-control, déjà en public + filtrage applicatif) ;
+//  - AUCUN sync-schema à propager (contrairement à une table tenant) — une
+//    simple migration suffit (voir DEPLOY.md).
+// tenantId nullable : renseigné pour les actions d'une école, null pour les
+// actions plateforme. Colonne simple (pas de FK) : le journal est append-only
+// et ne doit jamais coupler son écriture à l'existence du tenant.
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String?  @map("tenant_id")
+  // Acteur DÉNORMALISÉ : survit à la suppression du compte, et couvre les
+  // connexions échouées (email inconnu → pas d'actorId).
+  actorId     String?  @map("actor_id")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  action      String // ex. auth.login.success, role.update, account.delete
+  targetType  String?  @map("target_type") // user | role | record | category | homepage | tenant
+  targetId    String?  @map("target_id")
+  targetLabel String?  @map("target_label") // libellé lisible (email supprimé, nom du rôle…)
+  ip          String?
+  metadata    Json? // contexte additionnel (ancien/nouveau, fonctions, raison d'échec…)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@index([tenantId, actorId])
+  @@map("audit_logs")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum TenantPlan {
+  STARTER
+  PRO
+  UNIVERSITY
+  ON_PREMISE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ═══════════════════════════════════════════════════════════
+// TENANT SCHEMA — Per-school data (tenant_<slug>)
+// ═══════════════════════════════════════════════════════════
+
+// ── Expected students (pre-loaded list for auto-activation) ──
+// Imported from the school's CSV/Excel. If a student registers with a
+// matching matricule + email, their account is auto-activated.
+
+model ExpectedStudent {
+  id         String   @id @default(uuid())
+  matricule  String   @unique
+  email      String
+  firstName  String   @map("first_name")
+  lastName   String   @map("last_name")
+  className  String   @map("class_name") // "L1_DROIT", "M2_MEDECINE"
+  claimed    Boolean  @default(false) // true once an account is created
+  importedAt DateTime @default(now()) @map("imported_at")
+
+  @@index([email])
+  @@map("expected_students")
+}
+
+// ── User accounts ──
+
+// Rôles dynamiques par école : chaque rôle porte une liste de fonctions
+// (catalogue dans src/auth/functions.ts). Les rôles système (Étudiant,
+// Bibliothécaire, Gestionnaire, Acquisitions, Administrateur) sont seedés
+// et non modifiables/supprimables ; l'école peut créer les siens. Quand
+// users.role_id est null, les fonctions viennent du repli historique sur
+// l'enum users.role (voir AuthzService).
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  functions   String[]
+  isSystem    Boolean  @default(false) @map("is_system")
+  users       User[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("roles")
+}
+
+model User {
+  id               String           @id @default(uuid())
+  email            String           @unique
+  matricule        String?          @unique // for students
+  password         String? // null until student sets it via secure link
+  firstName        String           @map("first_name")
+  lastName         String           @map("last_name")
+  role             UserRole         @default(STUDENT)
+  roleId           String?          @map("role_id") // rôle dynamique (prioritaire sur l'enum)
+  customRole       Role?            @relation(fields: [roleId], references: [id])
+  status           AccountStatus    @default(PENDING)
+  className        String?          @map("class_name") // student's current class
+  subscriptionTier String           @default("free") @map("subscription_tier")
+  passwordTokens   PasswordToken[]
+  patron           Patron?
+  enrollments      Enrollment[]
+  devices          Device[]
+  offlineLicenses  OfflineLicense[]
+  createdAt        DateTime         @default(now()) @map("created_at")
+  activatedAt      DateTime?        @map("activated_at")
+
+  // Double authentification (2FA). Colonnes TOUTES nullables : la table `users`
+  // vit dans chaque schéma tenant, et le rattrapage sync-schema ajoute les
+  // colonnes en NULLABLE sans défaut (buildAddMissingColumnsStatements) — un
+  // Int/booléen NON NULL casserait la lecture Prisma des lignes existantes.
+  totpSecret        String?   @map("totp_secret") // secret TOTP base32 (posé au setup)
+  totpEnabledAt     DateTime? @map("totp_enabled_at") // 2FA active si non null
+  totpLastStep      Int?      @map("totp_last_step") // anti-rejeu : dernier pas de temps accepté
+  backupCodes       Json?     @map("backup_codes") // tableau de hachages de codes de secours (usage unique)
+  emailOtpHash      String?   @map("email_otp_hash") // repli OTP par email (haché)
+  emailOtpExpiresAt DateTime? @map("email_otp_expires_at")
+  emailOtpAttempts  Int?      @map("email_otp_attempts") // tentatives sur l'OTP email courant
+
+  @@index([status])
+  @@index([className])
+  @@map("users")
+}
+
+// ── Enrollment (classes, niveaux, inscriptions) ──
+
+model SchoolClass {
+  id          String       @id @default(uuid())
+  name        String       @unique // "L1_DROIT" — référencé par users.class_name / access_rules
+  label       String? // "Licence 1 Droit"
+  level       String? // "L1", "M2"...
+  enrollments Enrollment[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@map("school_classes")
+}
+
+// Une inscription par étudiant et par année académique ; la classe active
+// est reflétée dans users.class_name (utilisé par access-control).
+model Enrollment {
+  id           String      @id @default(uuid())
+  userId       String      @map("user_id")
+  classId      String      @map("class_id")
+  academicYear String      @map("academic_year") // "2026-2027"
+  enrolledAt   DateTime    @default(now()) @map("enrolled_at")
+  user         User        @relation(fields: [userId], references: [id])
+  schoolClass  SchoolClass @relation(fields: [classId], references: [id])
+
+  @@unique([userId, academicYear])
+  @@index([classId, academicYear])
+  @@map("enrollments")
+}
+
+// Secure token for "set your password" email link (24h expiry)
+model PasswordToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("password_tokens")
+}
+
+enum UserRole {
+  STUDENT
+  LIBRARIAN // catalogs, circulation
+  MANAGER // activates accounts, manages students
+  ACQUISITIONS
+  ADMIN // school admin
+}
+
+enum AccountStatus {
+  PENDING // awaiting manual activation by a manager
+  ACTIVE // can log in
+  SUSPENDED
+  EXPIRED
+}
+
+// ── Cataloging (local records) ──
+
+// Catégories (domaines) du catalogue d'une école — alimente la liste
+// déroulante de saisie des notices et regroupe la page constellation
+// (OpacService.constellation, facette Meilisearch exacte). `name` est
+// normalisé (espaces réduits, minuscules) à la création/au renommage : c'est
+// la même valeur qui est stockée sur `BiblioRecord.category` (pas de clé
+// étrangère — comparaison par chaîne, comme `users.class_name`/`SchoolClass`).
+// Remplace la saisie libre, source de doublons dans la constellation
+// (medecine / Medecine / médecine considérés comme 3 domaines distincts).
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("categories")
+}
+
+model BiblioRecord {
+  id                String              @id @default(uuid())
+  marcData          Json                @map("marc_data")
+  marcFormat        MarcFormat          @default(UNIMARC) @map("marc_format")
+  recordType        String              @map("record_type")
+  title             String
+  // Complément / sous-titre (cahier des charges fiche de saisie §2.1). Affiché
+  // « Titre : complément » — le séparateur relève de l'AFFICHAGE, jamais stocké.
+  titleComplement   String?             @map("title_complement")
+  author            String?
+  isbn              String?
+  publishYear       Int?                @map("publish_year")
+  language          String              @default("fr")
+  publisher         String? // éditeur — extrait des métadonnées PDF/EPUB (brique 2) ou saisi manuellement
+  // Publication / soutenance (cahier fiche de saisie §2.3) — tous nullables.
+  // Ville d'édition SÉPARÉE de l'éditeur (jamais concaténés) ; champs de
+  // soutenance pertinents pour Thèse/Mémoire seulement (affichage
+  // conditionnel §3) ; l'année de soutenance réutilise publishYear (champ
+  // année générique existant, libellé conditionnel côté formulaire).
+  publicationCity   String?             @map("publication_city")
+  defenseUniversity String?             @map("defense_university")
+  defensePlace      String?             @map("defense_place")
+  summary           String? // résumé/description — §3, tous types
+  coverUrl          String?             @map("cover_url")
+  category          String? // maps to constellation domain: "droit", "medecine"...
+  items             Item[]
+  holds             Hold[]
+  digitalCopy       DigitalCopy?
+  offlineLicenses   OfflineLicense[]
+  contributors      RecordContributor[]
+  keywords          RecordKeyword[]
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@index([title])
+  @@index([category])
+  @@map("biblio_records")
+}
+
+// Mots-clés (cahier fiche de saisie §2.4) : table dédiée + liaison n-n plutôt
+// qu'un tableau de chaînes — permet l'autocomplétion et la réutilisation
+// entre fiches du tenant (option « recommandée » du cahier). Noms normalisés
+// comme les catégories (minuscules, espaces réduits). Règle des 3 minimum
+// appliquée côté service (non rétroactive — décision §0).
+model Keyword {
+  id      String          @id @default(uuid())
+  name    String          @unique
+  records RecordKeyword[]
+
+  @@map("keywords")
+}
+
+model RecordKeyword {
+  recordId  String       @map("record_id")
+  keywordId String       @map("keyword_id")
+  record    BiblioRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  keyword   Keyword      @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@id([recordId, keywordId])
+  @@map("record_keywords")
+}
+
+// Contributeur d'une notice, avec rôle (cahier fiche de saisie §2.2) :
+// plusieurs contributeurs par fiche, ≥1 AUTEUR_PRINCIPAL exigé côté serveur.
+// Le rôle est un String validé applicativement (CONTRIBUTOR_ROLES,
+// cataloging/contributor-roles.ts) et PAS un enum Postgres — même idiome que
+// recordType : extensible sans migration (« traducteur », « préfacier »…
+// annoncés), et le sync-schema tenant ne rattrape pas les colonnes enum.
+// Pendant la transition, biblio_records.author reste alimenté avec le nom du
+// premier auteur principal (suppression prévue dans une migration ultérieure).
+model RecordContributor {
+  id       String       @id @default(uuid())
+  recordId String       @map("record_id")
+  name     String
+  role     String // AUTEUR_PRINCIPAL | AUTEUR_SECONDAIRE | DIRECTEUR_MEMOIRE
+  position Int          @default(0) // tri d'affichage
+  // Lien vers la fiche d'autorité (fichier d'autorités, à la PMB). NULLable :
+  // `name` reste dénormalisé (une contribution s'affiche même sans lien). FK
+  // RESTRICT → un auteur rattaché à des œuvres ne peut pas être supprimé.
+  authorId String?      @map("author_id")
+  record   BiblioRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  author   Author?      @relation(fields: [authorId], references: [id])
+
+  @@index([recordId])
+  @@index([authorId])
+  @@map("record_contributors")
+}
+
+// Fiche d'autorité auteur (fichier d'autorités, sur le modèle de l'index
+// Autorités de PMB — demande directrice BUC 2026-07-17). Propre à chaque école
+// (schéma tenant). `normalizedName` = clé de déduplication (minuscule, sans
+// accents, espaces réduits) : l'autocomplétion et la migration s'y appuient
+// pour éviter les doublons. Index (pas unique) : les homonymes restent
+// possibles, l'app guide la réutilisation et la fusion nettoie les doublons.
+model Author {
+  id             String              @id @default(uuid())
+  displayName    String              @map("display_name")
+  normalizedName String              @map("normalized_name")
+  bio            String?
+  birthYear      Int?                @map("birth_year")
+  deathYear      Int?                @map("death_year")
+  contributions  RecordContributor[]
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  @@index([normalizedName])
+  @@index([displayName])
+  @@map("authors")
+}
+
+// Fichier numérique (PDF/EPUB) rattaché à une notice — stocké dans MinIO.
+// Un seul exemplaire numérique par notice pour l'instant (1↔1).
+// Phase 2 SANS DRM : le fichier stocké est en clair côté objet ; l'accès en
+// lecture passe par une URL signée temporaire (voir storage.service.ts) et,
+// à la brique 4, par access-control. Le chiffrement Readium LCP est Phase 3.
+model DigitalCopy {
+  id            String        @id @default(uuid())
+  recordId      String        @unique @map("record_id")
+  objectKey     String        @map("object_key") // chemin dans le bucket MinIO (fichier CLAIR, lecture en ligne)
+  fileFormat    DigitalFormat @map("file_format")
+  fileSizeBytes Int           @map("file_size_bytes")
+  originalName  String        @map("original_name")
+  uploadedAt    DateTime      @default(now()) @map("uploaded_at")
+  record        BiblioRecord  @relation(fields: [recordId], references: [id])
+
+  // ── Ingestion offline (cœur offline-licensing) — toutes NULLABLES ─────────
+  // Le clair (objectKey ci-dessus) est CONSERVÉ pour la lecture en ligne
+  // (pdf.js). En parallèle, un blob AEAD segmenté (16 Ko) est produit pour la
+  // lecture offline. La CEK (clé de contenu) N'EST JAMAIS stockée en clair :
+  // encWrappedCek = CEK enveloppée par la KEK serveur (AES-256-GCM). encStatus
+  // pilote l'idempotence de la (ré)ingestion : "pending" | "ready" | "failed".
+  encObjectKey    String?   @map("enc_object_key") // blob chiffré dans MinIO
+  encWrappedCek   String?   @map("enc_wrapped_cek") // CEK wrappée par la KEK (base64), jamais en clair
+  encSegSize      Int?      @map("enc_seg_size") // taille de segment AEAD (octets)
+  encAlgo         String?   @map("enc_algo") // marqueur de format, ex. "aead-seg-gcm-16k/v1"
+  encStatus       String?   @map("enc_status") // pending | ready | failed
+  encError        String?   @map("enc_error") // dernier message d'échec d'ingestion
+  xrefValidatedAt DateTime? @map("xref_validated_at")
+  encryptedAt     DateTime? @map("encrypted_at")
+
+  @@map("digital_copies")
+}
+
+enum DigitalFormat {
+  PDF
+  EPUB
+}
+
+// ── Cœur offline (module offline-licensing) ──────────────────────────────
+// Modèles PAR-TENANT (câblés dans tenancy/tenant-schema.ts : TENANT_TABLES +
+// TENANT_FOREIGN_KEYS). Statuts en TEXTE (JAMAIS d'enum) et colonnes nullables :
+// le sync-schema crée ces tables sur les écoles déjà provisionnées sans casser
+// les lignes existantes (un enum/NOT NULL sans défaut le casserait).
+
+// Appareil enregistré d'un lecteur. Porte la clé PUBLIQUE servant à envelopper
+// la CEK ; la clé privée reste non-exportable dans l'Android Keystore de
+// l'appareil et n'est jamais transmise au serveur.
+model Device {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  label     String? // libellé lisible (ex. modèle du téléphone)
+  publicKey String           @map("public_key") // clé publique appareil (SPKI base64) pour envelopper la CEK
+  platform  String? // "android" (iOS = v2)
+  createdAt DateTime         @default(now()) @map("created_at")
+  revokedAt DateTime?        @map("revoked_at") // appareil désenregistré / bloqué
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenses  OfflineLicense[]
+
+  @@index([userId])
+  @@map("devices")
+}
+
+// Bail offline signé pour un triplet (document, utilisateur, appareil). `status`
+// en TEXTE : "active" | "revoked" | "expired". La signature Ed25519 (clé privée
+// serveur, hors dépôt) est vérifiée par l'app avant tout rendu.
+model OfflineLicense {
+  id         String       @id @default(uuid())
+  recordId   String       @map("record_id") // le document (notice) = "docId" côté mobile
+  userId     String       @map("user_id")
+  deviceId   String       @map("device_id")
+  status     String       @default("active") // TEXTE, pas d'enum
+  issuedAt   DateTime     @default(now()) @map("issued_at")
+  expiresAt  DateTime     @map("expires_at") // borne du bail (TTL tenant, défaut 14 j)
+  wrappedCek String       @map("wrapped_cek") // CEK enveloppée pour la clé publique appareil (RSA-OAEP)
+  rights     Json? // { watermark, noPrint, ... }
+  signature  String // signature Ed25519 du corps de licence
+  revokedAt  DateTime?    @map("revoked_at")
+  record     BiblioRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // UNE licence par (utilisateur, appareil, document). Sans cette contrainte,
+  // chaque appui sur « télécharger » créait une licence de plus : révoquer
+  // « la » licence n'en révoquait qu'une, les autres restaient actives et le
+  // blob restait téléchargeable. L'administrateur croyait l'accès coupé.
+  // Vérifié en conditions réelles : 7 licences pour un même document.
+  @@unique([userId, deviceId, recordId])
+  @@index([userId])
+  @@index([deviceId])
+  @@index([recordId])
+  @@map("offline_licenses")
+}
+
+model Item {
+  id         String       @id @default(uuid())
+  recordId   String       @map("record_id")
+  barcode    String       @unique
+  callNumber String?      @map("call_number")
+  location   String?
+  status     ItemStatus   @default(AVAILABLE)
+  itemType   String?      @map("item_type")
+  record     BiblioRecord @relation(fields: [recordId], references: [id])
+  checkouts  Checkout[]
+
+  // Jointures notice→exemplaires (fiche notice, disponibilité OPAC, placeHold)
+  // et filtres where: { recordId } — la FK n'est pas indexée automatiquement.
+  @@index([recordId])
+  @@map("items")
+}
+
+enum MarcFormat {
+  MARC21
+  UNIMARC
+}
+
+enum ItemStatus {
+  AVAILABLE
+  CHECKED_OUT
+  ON_HOLD
+  IN_TRANSIT
+  DAMAGED
+  LOST
+  WITHDRAWN
+  // Introuvable à l'issue d'un récolement (inventaire) — statut dédié posé par
+  // l'action « marquer les manquants » à la clôture d'une session.
+  MISSING
+}
+
+// ── Circulation ──
+
+model Checkout {
+  id           String    @id @default(uuid())
+  itemId       String    @map("item_id")
+  patronId     String    @map("patron_id")
+  checkoutDate DateTime  @default(now()) @map("checkout_date")
+  dueDate      DateTime  @map("due_date")
+  returnDate   DateTime? @map("return_date")
+  renewals     Int       @default(0)
+  fineAmount   Int       @default(0) @map("fine_amount")
+  item         Item      @relation(fields: [itemId], references: [id])
+  patron       Patron    @relation(fields: [patronId], references: [id])
+
+  @@index([patronId])
+  @@index([dueDate])
+  // Retour par code-barres et comptages « prêts en cours d'un adhérent »
+  // (returnDate IS NULL) — voir circulation.service (checkout/situation).
+  @@index([patronId, returnDate])
+  // Séries temporelles du tableau de bord (stats.service) : prêts groupés par
+  // date de prêt, retours par date de retour (date_trunc sur période).
+  @@index([checkoutDate])
+  @@index([returnDate])
+  @@map("checkouts")
+}
+
+model Hold {
+  id         String       @id @default(uuid())
+  recordId   String       @map("record_id")
+  patronId   String       @map("patron_id")
+  status     HoldStatus   @default(PENDING)
+  priority   Int          @default(0)
+  expiryDate DateTime?    @map("expiry_date")
+  // Idempotence de l'email « réservation disponible » : posé au moment de l'envoi.
+  // NULLable (table tenant) → le rattrapage sync-schema l'ajoute sans défaut.
+  notifiedAt DateTime?    @map("notified_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  record     BiblioRecord @relation(fields: [recordId], references: [id])
+  patron     Patron       @relation(fields: [patronId], references: [id])
+
+  // Table interrogée ~16× dans circulation.service, presque toujours par
+  // (recordId, status) — file d'attente d'une notice — ou par patronId.
+  @@index([recordId, status])
+  @@index([patronId])
+  @@map("holds")
+}
+
+// ── Récolement / inventaire (vague 2) ──
+// Sessions d'inventaire persistées (un récolement réel dure des jours →
+// interruptible et reprenable). Tables TENANT → propagation par sync-schema.
+// scope/status/result en TEXTE (pas d'enum Postgres) : évite la douleur de
+// propagation des enums tenant (parti pris déjà retenu pour les rôles de
+// contributeur).
+model InventorySession {
+  id        String          @id @default(uuid())
+  name      String
+  scope     String          @default("ALL") // ALL | LOCATION
+  location  String? // localisation ciblée si scope = LOCATION
+  status    String          @default("OPEN") // OPEN | CLOSED
+  createdBy String?         @map("created_by") // email de l'agent (trace)
+  createdAt DateTime        @default(now()) @map("created_at")
+  closedAt  DateTime?       @map("closed_at")
+  scans     InventoryScan[]
+
+  @@map("inventory_sessions")
+}
+
+model InventoryScan {
+  id        String           @id @default(uuid())
+  sessionId String           @map("session_id")
+  barcode   String
+  // Exemplaire résolu (null si code-barres inconnu). Pas de FK : un exemplaire
+  // supprimé ne doit pas effacer l'historique de scan.
+  itemId    String?          @map("item_id")
+  result    String // SEEN | ON_LOAN | UNKNOWN | OUT_OF_SCOPE
+  scannedAt DateTime         @default(now()) @map("scanned_at")
+  session   InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Un code-barres n'est compté qu'une fois par session (re-scan → « déjà vu »).
+  @@unique([sessionId, barcode])
+  @@index([sessionId])
+  @@map("inventory_scans")
+}
+
+model CirculationRule {
+  id             String @id @default(uuid())
+  patronCategory String @map("patron_category")
+  itemType       String @map("item_type")
+  loanPeriodDays Int    @map("loan_period_days")
+  maxRenewals    Int    @default(1) @map("max_renewals")
+  maxCheckouts   Int    @default(5) @map("max_checkouts")
+  finePerDay     Int    @default(0) @map("fine_per_day")
+
+  @@unique([patronCategory, itemType])
+  @@map("circulation_rules")
+}
+
+enum HoldStatus {
+  PENDING
+  AVAILABLE
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+// ── Patrons ──
+
+model Patron {
+  id               String     @id @default(uuid())
+  userId           String?    @unique @map("user_id")
+  barcode          String     @unique
+  category         String
+  registrationDate DateTime   @default(now()) @map("registration_date")
+  expiryDate       DateTime?  @map("expiry_date")
+  user             User?      @relation(fields: [userId], references: [id])
+  checkouts        Checkout[]
+  holds            Hold[]
+
+  @@map("patrons")
+}

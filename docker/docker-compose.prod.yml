@@ -1,0 +1,253 @@
+# ─────────────────────────────────────────────────────────────
+# Gafeso — Déploiement de PRODUCTION
+#
+# Lance TOUT : infrastructure + api + web + reverse proxy (Caddy, HTTPS
+# automatique). Contrairement à docker-compose.yml (dev — infra seule,
+# app en `npm run dev` sur l'hôte), ici l'api et le web tournent dans
+# des images construites depuis le dépôt (apps/api/Dockerfile,
+# apps/web/Dockerfile) : le serveur exécute exactement le code du commit
+# déployé, rien depuis l'hôte n'est monté en volume pour le code source.
+#
+# Procédure complète : voir DEPLOY.md à la racine du dépôt.
+#
+# Lancement :
+#   docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --build
+# ─────────────────────────────────────────────────────────────
+
+# Nom de projet Compose : il PRÉFIXE les volumes, le réseau et les images.
+# Le changer sur une install existante « détacherait » ses volumes — donc ses
+# données. Le défaut reste l'historique `bibliocloud-prod` pour que toute
+# installation antérieure démarre sans intervention ; install.sh écrit
+# COMPOSE_PROJECT_NAME=gafeso-prod dans le .env.prod des NOUVELLES installations.
+name: ${COMPOSE_PROJECT_NAME:-bibliocloud-prod}
+
+services:
+  # ── PostgreSQL 16 : base de données principale ──
+  # Pas de port publié à l'hôte : uniquement joignable depuis le réseau
+  # Docker interne (api). Utiliser `docker compose exec db psql ...` pour
+  # une intervention manuelle.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER requis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
+      POSTGRES_DB: ${POSTGRES_DB:-bibliocloud}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bibliocloud} -d ${POSTGRES_DB:-bibliocloud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis : cache + files d'attente BullMQ ──
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Meilisearch : moteur de recherche (OPAC) ──
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY requis (32 caractères aléatoires minimum en prod)}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      # /health n'exige jamais de clé (endpoint volontairement ouvert par
+      # Meilisearch pour les sondes d'infra, y compris avec une master key).
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── MinIO : stockage objet (fichiers numériques, couvertures) ──
+  # Le bucket "covers" est public (couvertures d'ouvrages) : Caddy le
+  # publie sur un sous-domaine dédié (voir Caddyfile + MINIO_PUBLIC_URL
+  # dans .env.prod). Le bucket "digital-copies" reste interne — l'accès
+  # passe toujours par une URL signée temporaire délivrée par l'API.
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requis (16 caractères minimum)}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── API NestJS ──
+  # Le point d'entrée de l'image (docker-entrypoint.sh) applique les
+  # migrations Prisma en attente (`prisma migrate deploy`, idempotent) AVANT
+  # de démarrer le serveur — aucune étape manuelle à la mise à jour.
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      APP_URL: ${APP_URL:?APP_URL requis (ex. https://bibliotheque.gafeso.exemple)}
+      # Adresse PUBLIQUE de l'API, telle qu'un appareil mobile hors du réseau
+      # doit la joindre. Distincte de l'URL interne (api:4000) : c'est celle que
+      # /.well-known/gafeso.json publie après le scan du QR d'établissement.
+      API_PUBLIC_URL: ${API_DOMAIN:?API_DOMAIN requis (ex. https://api.bibliotheque.gafeso.exemple)}
+      CORS_ORIGINS: ${CORS_ORIGINS:-${APP_URL}}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bibliocloud}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-bibliocloud}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis (32 caractères aléatoires minimum)}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY requis (24 caractères aléatoires minimum)}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # URL publique du bucket "covers" (voir Caddyfile, sous-domaine storage.*)
+      # — sans elle, les URLs de couverture générées pointeraient vers le nom
+      # interne "minio", injoignable depuis le navigateur.
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:?MINIO_PUBLIC_URL requis (ex. https://storage.bibliotheque.gafeso.exemple)}
+      # SMTP réel — voir DEPLOY.md « Configurer le SMTP réel ». Laissé vide
+      # par défaut : l'app démarre quand même et journalise les emails au
+      # lieu de les envoyer (mode dégradé explicite, jamais un crash).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-}   # vide = déduit du port par MailService
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Gafeso <no-reply@gafeso.local>}
+      # ── Cœur offline (module offline-licensing) ──
+      # Sans ces deux clés l'api REFUSE de démarrer (garde-fou OfflineKeysService).
+      # install.sh les génère dans .env.prod ; en installation manuelle, voir
+      # .env.prod.example (KEK 32 octets base64 + Ed25519 PEM PKCS8 sur UNE ligne,
+      # retours à la ligne échappés en \n — un env_file ne gère pas le multiligne).
+      OFFLINE_CONTENT_KEK: ${OFFLINE_CONTENT_KEK:?OFFLINE_CONTENT_KEK requis (32 octets base64, voir .env.prod.example)}
+      OFFLINE_LICENSE_PRIVATE_KEY: ${OFFLINE_LICENSE_PRIVATE_KEY:?OFFLINE_LICENSE_PRIVATE_KEY requis (Ed25519 PEM PKCS8 sur une ligne, voir .env.prod.example)}
+    healthcheck:
+      # 127.0.0.1, jamais "localhost" : dans l'image Alpine, `getent hosts
+      # localhost` résout en IPv6 (::1) avant l'IPv4 — voir le commentaire
+      # détaillé sur le healthcheck du service `web` ci-dessous, qui touche
+      # concrètement les deux services même si l'API (bind dual-stack par
+      # défaut de Node, `app.listen(port)` sans host) n'est en réalité pas
+      # affectée. Gardé cohérent sur les deux pour ne pas dépendre de ce
+      # détail d'implémentation.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Frontend Next.js ──
+  # API_URL est un ARG DE BUILD (pas une variable d'environnement runtime) :
+  # next.config.mjs le lit pour construire le rewrite /api/* → figé dans la
+  # sortie standalone au moment de `next build`. Voir le commentaire dans
+  # apps/web/Dockerfile. Le changer implique un rebuild de cette image.
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:4000
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      # URL INTERNE de l'API (réseau Docker) pour le rendu SERVEUR des pages
+      # (Server Components — ex. l'accueil « / » qui appelle GET /tenancy/home
+      # via lib/server-api.ts → process.env.API_URL). Distincte du build-arg
+      # API_URL ci-dessus : celui-là fige le rewrite /api/* au BUILD, mais la
+      # sortie standalone ne conserve PAS cet ENV au runtime — sans cette
+      # ligne, le fetch serveur retombe sur http://localhost:4000 et l'accueil
+      # affiche le repli minimal. Même valeur que le service API (api:4000).
+      API_URL: http://api:4000
+    healthcheck:
+      # 127.0.0.1, jamais "localhost" : constaté en prod, le conteneur
+      # restait "unhealthy" (wget: can't connect to remote host: Connection
+      # refused) alors que les logs montraient Next bien démarré ("Ready").
+      # Cause : dans l'image Alpine, "localhost" résout en IPv6 (::1)
+      # AVANT l'IPv4 (`getent hosts localhost` → ::1 en premier), mais
+      # Next.js standalone avec HOSTNAME=0.0.0.0 (voir Dockerfile) n'écoute
+      # QU'en IPv4 — `/proc/net/tcp6` ne montre aucun listener. wget suit la
+      # résolution IPv6 en premier, se fait refuser la connexion, et
+      # n'essaie pas l'IPv4 ensuite. 127.0.0.1 contourne la résolution DNS.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Caddy : reverse proxy + HTTPS automatique (Let's Encrypt) ──
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      # Ports HÔTE surchargeables (défauts 80/443 pour un vrai déploiement).
+      # Un installateur en mode localhost/essai, ou un serveur derrière un
+      # load-balancer, peut les remapper (ex. HTTP_PORT=8080) sans toucher au
+      # conteneur — voir install.sh.
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3 (QUIC)
+    environment:
+      # Domaines — voir DEPLOY.md. PUBLIC_DOMAIN peut être un domaine unique
+      # ou (recommandé, multi-établissements) un domaine avec sous-domaines
+      # par école (ex. bibliotheque.gafeso.exemple) déclarés séparément dans le
+      # Caddyfile si besoin d'un certificat par école.
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?PUBLIC_DOMAIN requis (ex. bibliotheque.gafeso.exemple)}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN requis (ex. api.bibliotheque.gafeso.exemple) — un bloc Caddy avec une adresse vide empêche le démarrage, ce domaine n'est donc pas optionnel}
+      STORAGE_DOMAIN: ${STORAGE_DOMAIN:?STORAGE_DOMAIN requis (ex. storage.bibliotheque.gafeso.exemple)}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL requis (contact certificats Let's Encrypt)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db_data:
+  redis_data:
+  meili_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

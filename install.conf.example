@@ -1,0 +1,84 @@
+# install.conf — réponses pour l'installation NON-INTERACTIVE de Gafeso.
+#
+#   cp install.conf.example install.conf
+#   # éditez les valeurs ci-dessous, puis :
+#   ./install.sh --config install.conf
+#
+# Même chemin de code que l'installation interactive : ces variables
+# REMPLACENT simplement les questions. Les SECRETS ne sont PAS ici — ils sont
+# générés automatiquement par install.sh (Postgres, JWT, MinIO, clé admin,
+# mot de passe super-admin). Ce fichier n'est donc pas sensible, mais il est
+# tout de même ignoré par git (voir .gitignore).
+
+# ── Domaine ──
+# Domaine principal réel (HTTPS/Let's Encrypt automatique), ou "localhost"
+# pour un essai local (HTTP, sans certificat).
+DOMAIN=localhost
+
+# ── Administrateur ──
+# Sert au contact Let's Encrypt (Caddy) ET de compte super-admin plateforme.
+ADMIN_EMAIL=admin@exemple.org
+
+# Administrateur de la BIBLIOTHÈQUE : la boîte qui recevra le lien de mot de
+# passe oublié et les notifications. DOIT être une adresse réelle et relevée.
+# Laissée vide, elle reprend ADMIN_EMAIL (cas mono-établissement, même
+# personne). Elle n'est JAMAIS fabriquée à partir du domaine d'installation :
+# un `admin@<domaine>` qui n'existe chez personne rend l'administrateur
+# injoignable par son propre logiciel, sans que rien ne le signale.
+LIBRARY_ADMIN_EMAIL=
+
+# ── Moteur de recherche ──
+# meilisearch (recommandé, ~100 Mo) | elasticsearch (2–4 Go, cluster EXISTANT).
+SEARCH_ENGINE=meilisearch
+# Si SEARCH_ENGINE=elasticsearch, URL du nœud ES existant :
+# ELASTIC_NODE=http://mon-elasticsearch:9200
+
+# ── SMTP (optionnel) ──
+# Laisser SMTP_HOST vide = emails journalisés (désactivés proprement),
+# à configurer plus tard.
+#
+# SMTP_HOST est l'hôte du FOURNISSEUR (lisible dans le MX du domaine :
+# `dig +short MX mon-domaine`), PAS le domaine de l'établissement — dont le
+# certificat ne couvre pas ce service, ce qui fait échouer STARTTLS sans qu'un
+# seul mail ne parte.
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+# Adresse d'expédition. Elle doit appartenir au DOMAINE DU COMPTE SMTP, pas au
+# domaine d'installation : un serveur accepte l'authentification puis jette un
+# message dont l'expéditeur ne lui appartient pas, pendant que le journal
+# applicatif affiche « Email envoyé ». Vide = déduite de SMTP_USER si celui-ci
+# est une adresse email.
+MAIL_FROM_ADDR=
+# SMTP_SECURE est DÉDUIT DU PORT (465 = TLS implicite, sinon STARTTLS) et écrit
+# explicitement dans .env.prod. Ne le forcez que si votre fournisseur sort de
+# l'ordinaire — une valeur `true` sur le port 587 provoque un « 535 Incorrect
+# authentication data » qui accuse à tort les identifiants.
+# SMTP_SECURE=
+
+# ── Premier établissement ──
+SCHOOL_NAME=Ma Bibliothèque
+SCHOOL_SLUG=ma-bibliotheque
+SCHOOL_COLOR=#1E5E3A
+
+# ── Docker (mode non-interactif) ──
+# Si Docker (ou le plugin Compose v2) manque, le script propose de l'installer
+# via le script officiel https://get.docker.com — les dépôts Ubuntu/Debian ne
+# fournissent PAS 'docker-compose-plugin'. En non-interactif aucune question
+# n'est possible : sans cette ligne, le script s'arrête avec la marche à suivre.
+# INSTALL_DOCKER=1
+
+# ── DNS (mode non-interactif) ──
+# En non-interactif le script ne peut poser aucune question. Si les trois
+# enregistrements ne pointent pas encore vers ce serveur, l'installation
+# s'arrête — sauf si vous demandez explicitement de passer outre. Caddy
+# échouera alors à obtenir les certificats puis réessaiera seul une fois le
+# DNS corrigé (aucune réinstallation nécessaire).
+# SKIP_DNS_CHECK=1
+
+# ── Ports hôte (avancé) ──
+# Défauts 80/443 pour un vrai déploiement. À changer pour un essai local
+# derrière un port occupé, ou derrière un load-balancer.
+# HTTP_PORT=80
+# HTTPS_PORT=443

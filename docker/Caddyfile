@@ -1,0 +1,114 @@
+# ─────────────────────────────────────────────────────────────
+# Gafeso — Reverse proxy de production (Caddy)
+#
+# HTTPS automatique (Let's Encrypt) pour chaque domaine déclaré ci-dessous.
+# Les variables {$...} sont substituées depuis l'environnement du service
+# `caddy` dans docker-compose.prod.yml (lui-même alimenté par .env.prod).
+#
+# Trois domaines, TOUS OBLIGATOIRES (un bloc de site avec une adresse vide
+# empêche Caddy de démarrer — pas de domaine "optionnel" possible ici sans
+# gabarit de génération séparé, hors périmètre) :
+#   PUBLIC_DOMAIN  — l'application (Next.js). C'est le point d'entrée
+#                    principal : la page web appelle elle-même /api/* en
+#                    interne (voir apps/web/next.config.mjs), donc TOUT le
+#                    trafic normal (étudiants, personnel) passe par ici.
+#   API_DOMAIN     — accès direct à l'API (Swagger si SWAGGER_ENABLED=true,
+#                    future appli mobile, intégrations tierces). Le trafic
+#                    normal du site n'en a pas besoin (déjà proxifié en
+#                    interne par le web) mais le sous-domaine doit exister
+#                    pour que Caddy démarre — un sous-domaine dédié type
+#                    api.<domaine> convient.
+#   STORAGE_DOMAIN — sert le bucket MinIO "covers" (couvertures
+#                    d'ouvrages, lecture publique) directement au navigateur,
+#                    ET les URLs signées temporaires du bucket privé
+#                    "digital-copies" (lecture en ligne OPAC) — voir
+#                    MINIO_PUBLIC_URL dans .env.prod et
+#                    StorageService.getSignedDownloadUrl/rewriteToPublicOrigin.
+#                    Host FORCÉ à l'endpoint interne (header_up ci-dessous) :
+#                    la signature AWS SigV4 porte sur le Host au moment de la
+#                    signature (MINIO_ENDPOINT, ex. "minio:9000") — sans ce
+#                    forçage, MinIO recevrait le Host public du navigateur et
+#                    rejetterait la requête (SignatureDoesNotMatch), même
+#                    avec une signature par ailleurs valide.
+# ─────────────────────────────────────────────────────────────
+{
+	email {$ACME_EMAIL}
+}
+
+# ── Application (Next.js) — point d'entrée principal ──
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	# En-têtes de sécurité de base (l'API pose déjà les siens via helmet
+	# pour ses propres réponses — ceci couvre les pages servies par Next).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	reverse_proxy web:3000
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ── API directe (optionnel) ──
+# N'est actif que si API_DOMAIN est renseigné dans .env.prod. Utile pour
+# Swagger (SWAGGER_ENABLED=true côté api), une future appli mobile, ou des
+# intégrations tierces qui ne doivent pas passer par le rewrite du web.
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+
+	# SÉCURITÉ (audit 2026-07-14) : la résolution multi-tenant côté API se fie à
+	# X-Forwarded-Host. Sur ce chemin exposé en direct, un client pourrait
+	# l'usurper pour cibler le schéma d'une AUTRE école (register/opac sans
+	# jeton). On FORCE donc X-Forwarded-Host au Host réel de la requête
+	# (api.<domaine>) : il ne résout aucune école (ce n'est pas un domaine
+	# d'établissement), ce qui neutralise l'usurpation. Le trafic normal des
+	# écoles passe par PUBLIC_DOMAIN → web (qui pose lui-même X-Forwarded-Host),
+	# pas par ce bloc. Une intégration ciblant une école doit passer par le
+	# domaine de l'école, pas par ce sous-domaine API générique.
+	reverse_proxy api:4000 {
+		header_up X-Forwarded-Host {host}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ── Stockage (couvertures publiques + URLs signées digital-copies) ──
+{$STORAGE_DOMAIN} {
+	encode zstd gzip
+
+	# /covers/* : bucket à lecture anonyme (policy posée par
+	# StorageService.ensureBucket) — accessible sans signature.
+	# /digital-copies/* : bucket privé, accessible UNIQUEMENT via une URL
+	# signée temporaire (StorageService.getSignedDownloadUrl) ; MinIO refuse
+	# tout accès anonyme (policy par défaut).
+	#
+	# header_up Host minio:9000 : la signature AWS SigV4 des URLs de
+	# digital-copies porte sur le Host au moment de la signature (l'API signe
+	# avec MINIO_ENDPOINT:MINIO_PORT, l'endpoint interne) — Caddy préserve
+	# normalement le Host du navigateur (storage.bibliotheque.exemple.bf ici), ce qui
+	# ferait échouer la vérification côté MinIO (SignatureDoesNotMatch) sans
+	# ce forçage. Sans effet sur /covers (accès anonyme, Host non vérifié).
+	reverse_proxy minio:9000 {
+		header_up Host minio:9000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

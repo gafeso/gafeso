@@ -1,0 +1,44 @@
+name: CI
+
+# Build de l'API et du web + suite de tests, sur chaque Pull Request et sur main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: # déclenchement manuel (utile après un changement d'infra CI)
+
+# Annule les runs redondants sur une même branche/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer le client Prisma
+        run: npm run db:generate
+
+      - name: Build (API + web)
+        run: npm run build
+
+      # Suite de tests de l'API : volontairement isolée — Prisma est mocké et AUCUNE base,
+      # AUCUN service externe ni fichier .env n'est requis. Les suites qui exigent l'infra
+      # (e2e offline-licensing, vecteur croisé, parité moteurs de recherche) sont gardées
+      # derrière des variables d'environnement (OFFLINE_E2E, SEARCH_PARITY) et donc ignorées ici.
+      - name: Tests API
+        run: npm run test -w @gafeso/api

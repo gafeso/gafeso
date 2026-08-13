@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./",
+    // Les DTOs/entités sont peuplés par NestJS (ValidationPipe), pas par un constructeur
+    "strictPropertyInitialization": false,
+    // Désactivé : avec deleteOutDir de nest-cli, un .tsbuildinfo obsolète bloque l'émission
+    "incremental": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

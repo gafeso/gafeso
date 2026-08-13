@@ -1,0 +1,31 @@
+# Le contexte de build Docker part de la racine du monorepo (requis pour les
+# workspaces npm — voir apps/api/Dockerfile et apps/web/Dockerfile). On exclut
+# tout ce que `turbo prune` régénère ou qui n'a pas sa place dans une image.
+
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+.git
+.gitignore
+docker/data
+
+# Documentation et données locales : thèses numérisées (~12 GB), maquettes,
+# rapports d'audit, dumps. Aucune image ne les copie — les laisser dans le
+# contexte de build ferait transférer plusieurs Go à CHAQUE build (lenteur et
+# instabilité réseau constatées).
+docs/
+*.dump
+
+# Env locaux — jamais dans une image (les secrets passent par les
+# variables d'environnement du déploiement, voir DEPLOY.md)
+.env
+.env.local
+.env.*.local
+*.env.backup*
+
+*.log
+.DS_Store

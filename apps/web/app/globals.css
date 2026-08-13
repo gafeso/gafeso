@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Couleurs de marque par défaut (Gafeso) — surchargées par le
+   ThemeProvider avec les couleurs de l'école (TenantSettings). */
+:root {
+  --brand-primary-rgb: 15 43 70; /* #0F2B46 */
+  --brand-secondary-rgb: 217 123 43; /* #D97B2B */
+  /* Couleur de LECTURE (titres + texte courant) : un marron lisible, INDÉPENDANT
+     de la couleur primaire de l'école. Motif : `ink` = couleur primaire du
+     tenant ; quand une école la règle en vert (ex. #1B5E3A), tout le texte
+     hérité devenait vert et peu lisible (titres, cellules de tableau…). Le vert
+     reste l'identité de l'école là où il est EXPLICITE (fond des boutons
+     `bg-ink`, logo `text-ink`, constellation). Ajustable ici en une ligne. */
+  --heading-rgb: 74 50 32; /* #4A3220 — marron lisible, contraste AA/AAA sur fond clair */
+}
+
+body {
+  @apply bg-paper antialiased;
+  /* Texte par défaut en marron lisible (voir --heading-rgb) plutôt que la
+     couleur primaire du tenant. */
+  color: rgb(var(--heading-rgb));
+}
+
+/* Nœuds de la page constellation : léger zoom + surbrillance au survol */
+.constellation-node {
+  cursor: pointer;
+}
+.constellation-node g {
+  transition: transform 0.2s ease, filter 0.2s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.constellation-node:hover g,
+.constellation-node:focus-visible g {
+  transform: scale(1.07);
+  filter: brightness(1.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .constellation-node g {
+    transition: none;
+  }
+}
+
+/* ── Animations de la constellation (désactivées si reduced-motion) ── */
+@media (prefers-reduced-motion: no-preference) {
+  /* Scintillement des étoiles */
+  .bc-star {
+    animation: bc-twinkle 4s ease-in-out infinite;
+  }
+  @keyframes bc-twinkle {
+    0%, 100% { opacity: var(--star-o, 0.3); }
+    50% { opacity: calc(var(--star-o, 0.3) * 0.25); }
+  }
+
+  /* Respiration lente des anneaux néon */
+  .bc-ring {
+    animation: bc-pulse 3.6s ease-in-out infinite;
+  }
+  @keyframes bc-pulse {
+    0%, 100% { stroke-opacity: 1; }
+    50% { stroke-opacity: 0.55; }
+  }
+
+  /* Flux d'énergie le long des liaisons (tirets défilants) */
+  .bc-flow {
+    stroke-dasharray: 5 16;
+    animation: bc-flow 1.6s linear infinite;
+  }
+  @keyframes bc-flow {
+    to { stroke-dashoffset: -21; }
+  }
+
+  /* Halo du hub central qui respire */
+  .bc-hub {
+    animation: bc-breathe 5s ease-in-out infinite;
+  }
+  @keyframes bc-breathe {
+    0%, 100% { stroke-opacity: 1; }
+    50% { stroke-opacity: 0.7; }
+  }
+}
