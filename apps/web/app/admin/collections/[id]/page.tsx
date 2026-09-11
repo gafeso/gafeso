@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { Alert, Badge, Button, Card, Input, Textarea } from '@/components/ui';
 import { Combobox } from '@/components/ui/combobox';
@@ -35,29 +36,62 @@ interface SearchHit {
   author: string | null;
 }
 
-// Document local dont on n'a que l'id (recordId) : on va chercher son titre
-// séparément (accessible à tout membre du personnel connecté, pas de
-// fonction requise sur GET /cataloging/records/:id).
-function useRecordTitle(recordId: string | null) {
-  const [label, setLabel] = useState<string | null>(null);
+/**
+ * Titre d'un document local dont on n'a que l'identifiant.
+ *
+ * ⚠ `GET /collections/documents/:recordId`, DERRIÈRE `collections.gerer` — la
+ * permission de cet écran. Elle rend l'identifiant et le titre, rien d'autre.
+ *
+ * L'histoire vaut d'être gardée, parce qu'elle s'est jouée en un jour :
+ * l'écran appelait `/cataloging/records/:id`, ouverte à tout compte
+ * authentifié ; le backend l'a fermée derrière `catalogue.gerer`, et un rôle
+ * portant `collections.gerer` sans `catalogue.gerer` — ce que la maquette
+ * prévoit pour le Bibliothécaire — s'est retrouvé avec un 403 ici. La réponse
+ * n'a pas été d'élargir un droit, mais d'exposer le strict nécessaire derrière
+ * celui qu'on a déjà.
+ *
+ * ⚠ ELLE NE PORTE PAS L'AUTEUR, et l'écran n'affiche donc plus
+ * « Titre — Auteur ». Mesuré avant de l'accepter : sur les 352 notices du fonds,
+ * ZÉRO titre est porté par plus d'une notice — le titre seul désigne le
+ * document. Ce qui ferait revenir sur cette décision est une mesure, pas une
+ * intuition : un catalogue réel où deux notices partagent un titre (deux
+ * éditions, un volume de série).
+ *
+ * TROIS ÉTATS, ET NON DEUX. L'écriture précédente rendait `null` aussi bien
+ * pendant le chargement qu'en cas d'échec, et l'appelant affichait « … » pour
+ * les deux : une panne s'écrivait donc comme un chargement, et les points de
+ * suspension restaient là pour toujours. Un échec se DIT.
+ *
+ * Une route dédiée au titre, couverte par `collections.gerer`, est attendue
+ * côté API ; elle remplacera cet appel.
+ */
+type EtatTitre = { etat: 'chargement' } | { etat: 'connu'; label: string } | { etat: 'echec' };
+
+function useRecordTitle(recordId: string | null): EtatTitre {
+  const [etat, setEtat] = useState<EtatTitre>({ etat: 'chargement' });
   useEffect(() => {
     if (!recordId) return;
-    api<{ title: string; author: string | null }>(
-      `/cataloging/records/${recordId}`,
+    setEtat({ etat: 'chargement' });
+    api<{ id: string; title: string }>(
+      `/collections/documents/${encodeURIComponent(recordId)}`,
       {},
       getToken(),
     )
-      .then((r) => setLabel(r.author ? `${r.title} — ${r.author}` : r.title))
-      .catch(() => setLabel(null));
+      .then((r) => setEtat({ etat: 'connu', label: r.title }))
+      .catch(() => setEtat({ etat: 'echec' }));
   }, [recordId]);
-  return label;
+  return etat;
 }
 
 function RecordRow({ item, onRemove }: { item: CollectionTitleItem; onRemove: () => void }) {
-  const localLabel = useRecordTitle(item.recordId);
+  const titreLocal = useRecordTitle(item.recordId);
   const label = item.title
     ? `${item.title.title} — ${item.title.author}`
-    : (localLabel ?? '…');
+    : titreLocal.etat === 'connu'
+      ? titreLocal.label
+      : titreLocal.etat === 'chargement'
+        ? LIBELLES.commun.chargement
+        : LIBELLES.collections.titreIndisponible;
   return (
     <Card className="flex items-center justify-between !p-3 text-sm">
       <div>
@@ -363,8 +397,12 @@ export default function CollectionDetailPage() {
         ))}
       </div>
 
+      {/* `{rules?.length ?? 0}` annonçait « Règles d'accès (0) » tant que le
+          chargement n'avait pas abouti. Zéro règle n'est pas anodin ici : ça se
+          lit « aucune restriction ». On ne met un nombre entre parenthèses que
+          lorsqu'on le connaît. */}
       <h2 className="mt-8 font-serif text-xl font-bold">
-        Règles d’accès ({rules?.length ?? 0})
+        Règles d’accès{rules ? ` (${rules.length})` : ''}
       </h2>
       <p className="mt-1 text-sm text-muted">
         Un étudiant a accès dès qu’UNE règle correspond à sa classe ET son abonnement.

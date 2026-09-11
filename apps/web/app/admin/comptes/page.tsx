@@ -330,7 +330,7 @@ export default function ComptesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-3xl font-bold">Comptes</h1>
         <div className="flex flex-wrap gap-2">
-          {functions?.includes('etudiants.importer') && (
+          {functions?.includes('outils.lecteurs') && (
             <Link href="/admin/import-etudiants">
               <Button variant="ghost">Importer une liste d’étudiants (CSV)</Button>
             </Link>

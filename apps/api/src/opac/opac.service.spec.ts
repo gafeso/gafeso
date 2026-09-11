@@ -3,6 +3,12 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OpacService } from './opac.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
 
+/** OpacService injecte PrismaService depuis les chiffres publics ; ces cas-ci
+ *  ne l'utilisent pas, un objet inerte suffit. */
+function fauxPrisma() {
+  return { forTenant: () => ({}) };
+}
+
 function makeSearch(result: Partial<Record<string, unknown>> = {}) {
   return {
     search: vi.fn().mockResolvedValue({
@@ -39,7 +45,7 @@ const ctx: StudentAccessContext = {
 describe('OpacService — recherche', () => {
   it('construit les filtres échappés et demande les facettes', async () => {
     const search = makeSearch();
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
 
     await service.searchCatalog('zinda', {
       q: 'droit',
@@ -61,14 +67,14 @@ describe('OpacService — recherche', () => {
 
   it('échappe les guillemets dans les valeurs de facette', async () => {
     const search = makeSearch();
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
     await service.searchCatalog('zinda', { category: 'a"b' });
     expect(search.search.mock.calls[0][1].filter).toEqual(['category = "a\\"b"']);
   });
 
   it('valeurs par défaut : page 1, 20 résultats, pas de filtre', async () => {
     const search = makeSearch({ totalHits: 3 });
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
     const result = await service.searchCatalog('zinda', {});
     expect(search.search.mock.calls[0][1]).toMatchObject({
       filter: [],
@@ -85,7 +91,7 @@ describe('OpacService — constellation', () => {
       totalHits: 6,
       facetDistribution: { category: { droit: 2, medecine: 3, informatique: 1 } },
     });
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
 
     const result = await service.constellation('zinda');
 
@@ -98,7 +104,7 @@ describe('OpacService — constellation', () => {
   });
 
   it('catalogue vide → aucun domaine', async () => {
-    const service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    const service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
     expect(await service.constellation('zinda')).toEqual({
       totalRecords: 0,
       domains: [],
@@ -122,7 +128,7 @@ describe('OpacService — fiche détaillée', () => {
   let service: OpacService;
 
   beforeEach(() => {
-    service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any);
+    service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
   });
 
   it('synthétise la disponibilité depuis les exemplaires', async () => {
@@ -154,7 +160,11 @@ describe('OpacService — fiche détaillée', () => {
       digitalCopy: null,
     });
     const result = await service.recordDetail(db, 'rec-1');
-    expect(result.availability?.borrowable).toBe(false);
+    // `recordDetail` rend un `Record<string, unknown>` (contrat gelé, composé
+    // clé par clé) : on nomme donc la forme qu'on inspecte, au lieu d'un `any`
+    // qui tairait un changement de cette clé.
+    const dispo = result.availability as { borrowable: boolean } | null;
+    expect(dispo?.borrowable).toBe(false);
   });
 
   it('notice introuvable → 404', async () => {
@@ -208,7 +218,7 @@ describe('OpacService — URL de lecture en ligne', () => {
   it('renvoie une URL signée à expiration courte (5 min) et le titre de la notice, quand l’accès est accordé', async () => {
     const digitalCopy = makeDigitalCopyService();
     const accessControl = makeAccessControl({ granted: true });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
     } as any;
@@ -227,7 +237,7 @@ describe('OpacService — URL de lecture en ligne', () => {
 
   it('notice introuvable → 404, aucune URL générée', async () => {
     const digitalCopy = makeDigitalCopyService();
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, makeAccessControl() as any);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, makeAccessControl() as any, fauxPrisma() as any);
     const db = { biblioRecord: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
 
     await expect(service.getReadUrl(db, 'ghost', ctx)).rejects.toBeInstanceOf(NotFoundException);
@@ -237,7 +247,7 @@ describe('OpacService — URL de lecture en ligne', () => {
   it('personnel (ctx null) : lecture sans contrôle de classe/abonnement', async () => {
     const digitalCopy = makeDigitalCopyService();
     const accessControl = makeAccessControl({ granted: false, message: 'peu importe' });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
     } as any;
@@ -257,7 +267,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       requiredClassName: 'L1_DROIT',
       message: 'Réservé aux étudiants de L1_DROIT.',
     });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
     } as any;

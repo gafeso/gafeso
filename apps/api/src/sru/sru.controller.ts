@@ -1,5 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
@@ -18,6 +20,8 @@ export class SruController {
   constructor(private readonly sru: SruService) {}
 
   @Get('lookup')
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('interoperabilite')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiBearerAuth()

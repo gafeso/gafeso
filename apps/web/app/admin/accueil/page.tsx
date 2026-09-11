@@ -2,7 +2,7 @@
 
 // Administration → Page d'accueil (spec docs/spec-accueil-tenant.md §5).
 // Édite le contenu, le thème (couleurs + motif) et les images de la vitrine.
-// Réservé à etablissement.gerer (l'API revérifie). À la sauvegarde : PATCH
+// Réservé à etablissement.apparence (l'API revérifie). À la sauvegarde : PATCH
 // /tenancy/settings puis purge du cache SSR de l'accueil (POST /revalidate).
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
@@ -11,9 +11,13 @@ import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { Alert, Button, Card, Input, Textarea } from '@/components/ui';
+import { LIBELLES } from '@/lib/libelles';
+import { MAX_DIAPOSITIVES } from '@/lib/hero-slides';
 
 // Défauts des tokens vitrine (miroir de home-theme.ts côté API) — pour le
 // bouton « réinitialiser ».
+const T = LIBELLES.adminBandeau;
+
 const DEFAULT_TOKENS: Record<string, string> = {
   accent: '#C1592C',
   accentSoft: '#E8B98C',
@@ -58,6 +62,7 @@ const EMPTY_CONTENT: HomeContent = {
     heroImageUrl: null,
     heroImageKicker: '',
     heroImageCaption: '',
+    heroSlides: [],
   },
   stats: [],
   espaces: [],
@@ -142,7 +147,7 @@ function ColorField({
 
 export default function AdminAccueilPage() {
   const { functions } = useMyFunctions();
-  const allowed = functions?.includes('etablissement.gerer');
+  const allowed = functions?.includes('etablissement.apparence');
 
   const [content, setContent] = useState<HomeContent>(EMPTY_CONTENT);
   const [primary, setPrimary] = useState('#0F2B46');
@@ -151,7 +156,8 @@ export default function AdminAccueilPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<'logo' | 'hero' | null>(null);
+  // `number` = index de la diapositive en cours d'envoi.
+  const [uploading, setUploading] = useState<'logo' | 'hero' | number | null>(null);
 
   useEffect(() => {
     api<{
@@ -176,8 +182,13 @@ export default function AdminAccueilPage() {
     [],
   );
 
-  async function uploadImage(kind: 'logo' | 'hero', file: File) {
-    setUploading(kind);
+  /** Envoie un fichier et REND son URL — l'appelant décide où la poser. */
+  async function uploadImage(
+    kind: 'logo' | 'hero',
+    file: File,
+    marqueur: 'logo' | 'hero' | number = kind,
+  ): Promise<string | null> {
+    setUploading(marqueur);
     setError(null);
     try {
       const body = new FormData();
@@ -193,9 +204,11 @@ export default function AdminAccueilPage() {
         throw new Error(msg?.message ?? 'Envoi impossible.');
       }
       const { url } = (await res.json()) as { url: string };
-      setId(kind === 'logo' ? 'logoUrl' : 'heroImageUrl', url);
+      return url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Envoi impossible.');
+      // `null` explicite : l'appelant ne doit pas poser d'URL sur un échec.
+      return null;
     } finally {
       setUploading(null);
     }
@@ -233,7 +246,8 @@ export default function AdminAccueilPage() {
   if (functions && !allowed) {
     return (
       <Alert tone="error">
-        Vous n’avez pas la permission de gérer l’établissement.
+        Vous n’avez pas la permission de modifier l’apparence de l’établissement
+            (fonction «&nbsp;etablissement.apparence&nbsp;»).
       </Alert>
     );
   }
@@ -267,16 +281,14 @@ export default function AdminAccueilPage() {
           <Field label="Sous-titre (université)" value={id.subtitle} onChange={(v) => setId('subtitle', v)} />
           <Field label="Eyebrow du hero" value={id.tagline} onChange={(v) => setId('tagline', v)} />
           <div />
-          <Field label="Accroche — début" value={id.heroTitle} onChange={(v) => setId('heroTitle', v)} />
+          <Field label="Accroche — début" value={id.heroTitle} onChange={(v) => setId('heroTitle', v)} placeholder={LIBELLES.defauts.accroche} />
           <Field label="Accroche — mise en valeur" value={id.heroTitleAccent} onChange={(v) => setId('heroTitleAccent', v)} />
           <div className="col-span-2">
-            <TextArea label="Paragraphe de présentation" value={id.lead} onChange={(v) => setId('lead', v)} />
+            <TextArea label="Paragraphe de présentation" value={id.lead} onChange={(v) => setId('lead', v)} placeholder={LIBELLES.defauts.presentation} />
           </div>
           <div className="col-span-2">
-            <Field label="Indice sous la recherche" value={id.searchHint} onChange={(v) => setId('searchHint', v)} />
+            <Field label="Indice sous la recherche" value={id.searchHint} onChange={(v) => setId('searchHint', v)}  placeholder={LIBELLES.defauts.indiceRecherche} />
           </div>
-          <Field label="Sur-titre de la photo" value={id.heroImageKicker} onChange={(v) => setId('heroImageKicker', v)} />
-          <Field label="Légende de la photo" value={id.heroImageCaption} onChange={(v) => setId('heroImageCaption', v)} />
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-4">
@@ -284,17 +296,171 @@ export default function AdminAccueilPage() {
             label="Logo"
             url={id.logoUrl}
             uploading={uploading === 'logo'}
-            onUpload={(f) => uploadImage('logo', f)}
+            onUpload={async (f) => {
+              const url = await uploadImage('logo', f);
+              if (url) setId('logoUrl', url);
+            }}
             onClear={() => setId('logoUrl', null)}
           />
-          <ImageField
-            label="Photo du hero"
-            url={id.heroImageUrl}
-            uploading={uploading === 'hero'}
-            onUpload={(f) => uploadImage('hero', f)}
-            onClear={() => setId('heroImageUrl', null)}
-          />
         </div>
+      </Card>
+
+      {/* ── Bandeau : diapositives ── */}
+      <Card className="mt-4">
+        <h2 className="font-serif text-lg font-bold">{T.titre}</h2>
+        <p className="mt-1 text-sm text-muted">{T.ordreCompte}</p>
+        <p className="mt-1 text-xs text-muted">{T.limite(MAX_DIAPOSITIVES)}</p>
+
+        <div className="mt-4 flex flex-col gap-4">
+          {id.heroSlides.map((slide, i) => (
+            <div key={i} className="rounded-lg border border-line p-3">
+              <div className="flex items-center justify-between gap-3">
+                <b className="text-sm">
+                  {T.diapositive(i + 1)}
+                  {/* ⚠ Écrit à l'écran, pas deviné : c'est l'information qui
+                      décide de ce que voit un téléphone. */}
+                  {i === 0 && (
+                    <span className="ml-2 rounded bg-ocre/15 px-2 py-0.5 text-[11px] font-semibold text-ocre">
+                      {T.premiereMobile}
+                    </span>
+                  )}
+                </b>
+                <RowControls
+                  onUp={() => setId('heroSlides', move(id.heroSlides, i, -1))}
+                  onDown={() => setId('heroSlides', move(id.heroSlides, i, 1))}
+                  onRemove={() => setId('heroSlides', removeAt(id.heroSlides, i))}
+                />
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <ImageField
+                  label={T.image}
+                  url={slide.imageUrl || null}
+                  uploading={uploading === i}
+                  onUpload={async (f) => {
+                    const url = await uploadImage('hero', f, i);
+                    if (url) {
+                      setId(
+                        'heroSlides',
+                        id.heroSlides.map((d, k) => (k === i ? { ...d, imageUrl: url } : d)),
+                      );
+                    }
+                  }}
+                  onClear={() =>
+                    setId(
+                      'heroSlides',
+                      id.heroSlides.map((d, k) => (k === i ? { ...d, imageUrl: '' } : d)),
+                    )
+                  }
+                />
+                <div className="flex flex-col gap-3">
+                  <Field
+                    label={T.titreChamp}
+                    value={slide.titre}
+                    onChange={(v) =>
+                      setId(
+                        'heroSlides',
+                        id.heroSlides.map((d, k) => (k === i ? { ...d, titre: v } : d)),
+                      )
+                    }
+                  />
+                  <Field
+                    label={T.surtitreChamp}
+                    value={slide.surtitre}
+                    onChange={(v) =>
+                      setId(
+                        'heroSlides',
+                        id.heroSlides.map((d, k) => (k === i ? { ...d, surtitre: v } : d)),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* L'image est OBLIGATOIRE : on le dit tout de suite, plutôt que
+                  de laisser la diapositive disparaître en silence à l'écran. */}
+              {!slide.imageUrl && (
+                <p role="alert" className="mt-2 text-xs text-red-800">
+                  {T.imageObligatoire}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* La limite se DIT, elle ne se découvre pas au refus. */}
+        {id.heroSlides.length < MAX_DIAPOSITIVES ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-3"
+            onClick={() =>
+              setId('heroSlides', [...id.heroSlides, { imageUrl: '', titre: '', surtitre: '' }])
+            }
+          >
+            {T.ajouter}
+          </Button>
+        ) : (
+          <p className="mt-3 text-xs text-muted">{T.limiteAtteinte(MAX_DIAPOSITIVES)}</p>
+        )}
+
+        {/* ⚠ REPRISE d'une configuration à image unique — visible et NON
+            destructive. On ne migre jamais tout seul : l'API reconstruit déjà
+            une diapositive à la volée, sans rien écrire. Une migration
+            implicite s'inscrirait dans les données du client au premier
+            enregistrement d'un champ sans rapport. */}
+        {id.heroImageUrl && id.heroSlides.length === 0 && (
+          <div className="mt-4 rounded-lg border border-ocre/50 bg-ocre/5 p-3">
+            <b className="text-sm">{T.ancienneTitre}</b>
+            <p className="mt-1 text-sm text-muted">{T.ancienneExplication}</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={id.heroImageUrl}
+              alt=""
+              className="mt-2 max-h-24 w-auto rounded border border-line object-contain"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-2"
+              onClick={() =>
+                setId('heroSlides', [
+                  {
+                    imageUrl: id.heroImageUrl ?? '',
+                    titre: id.heroImageCaption,
+                    surtitre: id.heroImageKicker,
+                  },
+                ])
+              }
+            >
+              {T.ancienneReprendre}
+            </Button>
+          </div>
+        )}
+
+        {/* Une fois la liste peuplée, les trois champs historiques n'ont plus
+            AUCUN effet : on ne les affiche donc plus comme des champs. On dit
+            qu'ils existent encore, et on laisse leur suppression au seul
+            geste explicite — effacer les données d'un client ne se fait pas
+            en passant. */}
+        {id.heroImageUrl && id.heroSlides.length > 0 && (
+          <div className="mt-4 rounded-lg border border-line bg-paper/60 p-3">
+            <b className="text-sm">{T.ancienneInactiveTitre}</b>
+            <p className="mt-1 text-sm text-muted">{T.ancienneInactive}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-2"
+              onClick={() => {
+                setId('heroImageUrl', null);
+                setId('heroImageKicker', '');
+                setId('heroImageCaption', '');
+              }}
+            >
+              {T.ancienneSupprimer}
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* ── Statistiques ── */}
@@ -511,19 +677,45 @@ export default function AdminAccueilPage() {
 }
 
 // ── Petits champs réutilisables ──
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  /**
+   * Défaut du PRODUIT, montré en indication de saisie — jamais en valeur.
+   * En valeur, il serait enregistré au premier « Enregistrer » et deviendrait
+   * le texte de l'établissement sans qu'il l'ait écrit.
+   */
+  placeholder?: string;
+}) {
   return (
     <label className="flex flex-col gap-1 text-sm font-medium">
       {label}
-      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
-function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  /** Défaut du produit, en indication de saisie — jamais en valeur. */
+  placeholder?: string;
+}) {
   return (
     <label className="flex flex-col gap-1 text-sm font-medium">
       {label}
-      <Textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Textarea rows={3} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

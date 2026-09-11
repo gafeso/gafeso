@@ -49,11 +49,52 @@ function makeCataloging(overrides: Record<string, any> = {}) {
 
 function makeService(prisma = makePrisma(), cataloging = makeCataloging()) {
   return {
-    service: new AdminService(prisma as any, jwt, cataloging as any),
+    service: new AdminService(
+      prisma as any,
+      jwt,
+      cataloging as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    ),
     prisma,
     tx: prisma._tx,
     cataloging,
   };
+}
+
+/**
+ * Doublure de `$queryRawUnsafe` qui répond au CONTENU de la requête, pas à
+ * l'ordre d'appel.
+ *
+ * ⚠ POURQUOI. La version précédente enchaînait des `mockResolvedValueOnce` : la
+ * 1re valeur pour les colonnes de `public`, la 2e pour celles du tenant, la 3e
+ * pour les index, la 4e pour les enums. Ajouter une CINQUIÈME requête à
+ * `syncTenantSchema` — l'introspection de collation — a donc rendu `undefined`
+ * à la nouvelle, et les quatre tests ont échoué sur « Cannot read properties of
+ * undefined (reading 'map') » : un message qui ne désigne ni la requête
+ * fautive, ni la cause.
+ *
+ * C'est la faute déjà payée sur les doublures de la fiche d'adhérent — une
+ * doublure qui répond à la place d'une autre fait échouer le test pour une
+ * raison qui n'est jamais celle qu'affiche le message. On dispatche donc sur un
+ * fragment DISTINCTIF de chaque requête, et toute requête inconnue le dit.
+ */
+function fauxQueryRaw(reponses: {
+  colonnesPublic?: unknown[];
+  colonnesTenant?: unknown[];
+  index?: unknown[];
+  enums?: unknown[];
+  collations?: unknown[];
+}) {
+  return vi.fn(async (sql: string) => {
+    if (sql.includes('pg_collation')) return reponses.collations ?? [];
+    if (sql.includes('pg_enum') || sql.includes('enumlabel')) return reponses.enums ?? [];
+    if (sql.includes('pg_index') || sql.includes('indexname')) return reponses.index ?? [];
+    if (sql.includes("nspname = 'public'")) return reponses.colonnesPublic ?? [];
+    if (sql.includes('nspname = ')) return reponses.colonnesTenant ?? [];
+    throw new Error(`Requête non prévue par la doublure : ${sql.slice(0, 80)}`);
+  });
 }
 
 describe('AdminService — login super-admin', () => {
@@ -189,7 +230,7 @@ describe('AdminService — provisioning', () => {
 const ALL_ENUM_ROWS = [
   ...['STUDENT', 'LIBRARIAN', 'MANAGER', 'ACQUISITIONS', 'ADMIN'].map((v) => ({ enum_name: 'UserRole', value: v })),
   ...['PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED'].map((v) => ({ enum_name: 'AccountStatus', value: v })),
-  ...['MARC21', 'UNIMARC'].map((v) => ({ enum_name: 'MarcFormat', value: v })),
+  ...['MARC21', 'UNIMARC', 'GAFESO'].map((v) => ({ enum_name: 'MarcFormat', value: v })),
   ...['AVAILABLE', 'CHECKED_OUT', 'ON_HOLD', 'IN_TRANSIT', 'DAMAGED', 'LOST', 'WITHDRAWN', 'MISSING'].map((v) => ({ enum_name: 'ItemStatus', value: v })),
   ...['PENDING', 'AVAILABLE', 'FULFILLED', 'CANCELLED', 'EXPIRED'].map((v) => ({ enum_name: 'HoldStatus', value: v })),
   ...['PDF', 'EPUB'].map((v) => ({ enum_name: 'DigitalFormat', value: v })),
@@ -202,14 +243,14 @@ describe('AdminService — sync-schema (colonnes ajoutées après coup)', () => 
     // 1er appel : colonnes de `public` (avec la nouvelle colonne "publisher") ;
     // 2e appel : colonnes de `tenant_zinda` (sans elle) ;
     // 3e appel : index existants du schéma tenant (aucun → tous à créer).
-    prisma.$queryRawUnsafe = vi
-      .fn()
-      .mockResolvedValueOnce([
+    prisma.$queryRawUnsafe = fauxQueryRaw({
+      colonnesPublic: [
         { table_name: 'biblio_records', column_name: 'publisher', type_decl: 'text', is_enum: false },
-      ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(ALL_ENUM_ROWS); // 4e appel : valeurs d'enum (toutes présentes)
+      ],
+      colonnesTenant: [],
+      index: [],
+      enums: ALL_ENUM_ROWS,
+    });; // 4e appel : valeurs d'enum (toutes présentes)
     const { service } = makeService(prisma);
 
     const result = await service.syncTenantSchema('zinda');
@@ -239,12 +280,12 @@ describe('AdminService — sync-schema (colonnes ajoutées après coup)', () => 
       { table_name: 'checkouts', columns: ['checkout_date'] },
       { table_name: 'checkouts', columns: ['return_date'] },
     ];
-    prisma.$queryRawUnsafe = vi
-      .fn()
-      .mockResolvedValueOnce(sameColumns)
-      .mockResolvedValueOnce(sameColumns)
-      .mockResolvedValueOnce(allIndexes)
-      .mockResolvedValueOnce(ALL_ENUM_ROWS); // 4e appel : valeurs d'enum (toutes présentes)
+    prisma.$queryRawUnsafe = fauxQueryRaw({
+      colonnesPublic: sameColumns,
+      colonnesTenant: sameColumns,
+      index: allIndexes,
+      enums: ALL_ENUM_ROWS,
+    });; // 4e appel : valeurs d'enum (toutes présentes)
     const { service } = makeService(prisma);
 
     await service.syncTenantSchema('zinda');
@@ -253,6 +294,56 @@ describe('AdminService — sync-schema (colonnes ajoutées après coup)', () => 
       sql.includes('ADD COLUMN') || sql.includes('CREATE INDEX'),
     );
     expect(touched).toHaveLength(0);
+  });
+
+  it('relâche le NOT NULL d’une colonne assouplie dans le gabarit public', async () => {
+    const prisma = makePrisma();
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', slug: 'zinda' });
+    // La colonne existe des deux côtés : ADD COLUMN ne la voit pas. Seule la
+    // CONTRAINTE diffère — c'est le cas réel de `marc_data` après la migration
+    // « notice Gafeso » chez une école provisionnée avant elle.
+    const publicColumns = [
+      {
+        table_name: 'biblio_records',
+        column_name: 'marc_data',
+        type_decl: 'jsonb',
+        is_enum: false,
+        not_null: false,
+        default_expr: null,
+      },
+    ];
+    const tenantColumns = [{ ...publicColumns[0], not_null: true }];
+    prisma.$queryRawUnsafe = fauxQueryRaw({
+      colonnesPublic: publicColumns,
+      colonnesTenant: tenantColumns,
+      index: [],
+      enums: ALL_ENUM_ROWS,
+    });;
+    const { service } = makeService(prisma);
+
+    await service.syncTenantSchema('zinda');
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      'ALTER TABLE "tenant_zinda"."biblio_records" ALTER COLUMN "marc_data" DROP NOT NULL',
+    );
+  });
+
+  it('ajoute MarcFormat.GAFESO à une école provisionnée avant le lot', async () => {
+    const prisma = makePrisma();
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', slug: 'zinda' });
+    prisma.$queryRawUnsafe = fauxQueryRaw({
+      colonnesPublic: [],
+      colonnesTenant: [],
+      index: [],
+      enums: ALL_ENUM_ROWS.filter((r) => r.value !== 'GAFESO'),
+    });
+    const { service } = makeService(prisma);
+
+    await service.syncTenantSchema('zinda');
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      `ALTER TYPE "tenant_zinda"."MarcFormat" ADD VALUE IF NOT EXISTS 'GAFESO'`,
+    );
   });
 
   it('école inconnue → 404', async () => {

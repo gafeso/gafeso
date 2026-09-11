@@ -26,7 +26,7 @@ import { CSV_BOM } from './csv';
 @ApiTags('stats')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+@RequiresFunctions(FONCTIONS.STATISTIQUES_VOIR)
 @Controller('stats')
 export class StatsController {
   constructor(private readonly stats: StatsService) {}

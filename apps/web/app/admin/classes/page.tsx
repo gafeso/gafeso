@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { Alert, Badge, Button, Card, Input, Select } from '@/components/ui';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
@@ -34,7 +35,11 @@ interface ClassDetail {
 }
 
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<SchoolClass[]>([]);
+  // ⚠ `null` TANT QU'ON NE SAIT PAS, jamais `[]` — un tableau vide ne distingue
+  // pas « pas encore chargé » de « il n'y en a aucun », et l'écran affirme
+  // alors le vide avant d'avoir la réponse. Même correction que
+  // /admin/catalogue le 8 septembre 2026, répliquée le 10.
+  const [classes, setClasses] = useState<SchoolClass[] | null>(null);
   const [form, setForm] = useState({ name: '', label: '', level: '' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -296,7 +301,7 @@ export default function ClassesPage() {
         </form>
       </Card>
 
-      {classes.length > 0 && (
+      {classes !== null && classes.length > 0 && (
         <Card className="mt-4">
           <h2 className="font-serif text-lg font-bold">Inscrire un étudiant</h2>
           <p className="text-sm text-muted">
@@ -325,7 +330,7 @@ export default function ClassesPage() {
                 <option value="" disabled>
                   Choisir…
                 </option>
-                {classes.map((c) => (
+                {(classes ?? []).map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.label ? `${c.label} (${c.name})` : c.name}
                   </option>
@@ -363,14 +368,21 @@ export default function ClassesPage() {
             </tr>
           </thead>
           <tbody>
-            {classes.length === 0 && (
+            {classes === null && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-muted">
+                  {LIBELLES.commun.chargement}
+                </td>
+              </tr>
+            )}
+            {classes !== null && classes.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-muted">
                   Aucune classe pour le moment.
                 </td>
               </tr>
             )}
-            {classes.map((schoolClass) => {
+            {(classes ?? []).map((schoolClass) => {
               const isEditing = editingId === schoolClass.id;
               const isOpen = openClassId === schoolClass.id;
               return (

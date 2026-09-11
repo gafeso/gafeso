@@ -37,8 +37,17 @@ function linkedContributors(data: any) {
 }
 
 let seq = 0;
+/** Domaines connus de l'école simulée — le référentiel que valide resolveCategory. */
+const CATEGORIES = [{ id: 'cat-1', name: 'droit' }, { id: 'cat-2', name: 'medecine' }];
+
 function makeDb() {
   return {
+    category: {
+      findUnique: vi.fn(async ({ where }: any) =>
+        CATEGORIES.find((c) => c.name === where.name) ?? null,
+      ),
+      findMany: vi.fn(async () => CATEGORIES),
+    },
     biblioRecord: {
       create: vi.fn(async ({ data }: any) => ({
         id: `rec-${++seq}`,
@@ -89,7 +98,7 @@ describe('CatalogingService — notices', () => {
     db = makeDb();
   });
 
-  it('createRecord normalise la catégorie et indexe le document', async () => {
+  it('createRecord normalise la catégorie connue et indexe le document', async () => {
     const record = await service.createRecord(db, 'zinda', {
       title: '  Droit foncier  ',
       category: 'Droit',
@@ -99,7 +108,7 @@ describe('CatalogingService — notices', () => {
 
     const created = db.biblioRecord.create.mock.calls[0][0].data;
     expect(created.title).toBe('Droit foncier');
-    expect(created.category).toBe('droit'); // minuscules pour la constellation
+    expect(created.category).toBe('droit'); // forme canonique du référentiel
     expect(created.language).toBe('fr');
     expect(created.recordType).toBe('book');
 
@@ -111,6 +120,45 @@ describe('CatalogingService — notices', () => {
       title: 'Droit foncier',
       category: 'droit',
     });
+  });
+
+  it('createRecord REFUSE un domaine absent du référentiel, en le nommant', async () => {
+    // Sans ce contrôle, la valeur devenait un domaine fantôme : visible dans la
+    // constellation, absent de l'écran de gestion, hors d'atteinte du
+    // renommage et de la suppression. Mesuré avant correction : 8 notices
+    // sur 12 du jeu de démonstration.
+    await expect(
+      service.createRecord(db, 'zinda', {
+        title: 'Titre',
+        category: 'domaine-qui-nexiste-pas',
+        author: 'Traoré, Awa',
+        keywords: ['a', 'b', 'c'],
+      }),
+    ).rejects.toThrow(/domaine-qui-nexiste-pas/i);
+    expect(db.biblioRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('createRecord réduit les espaces internes (les deux écritures normalisaient différemment)', async () => {
+    // « droit  public » (deux espaces) et « droit public » devenaient deux
+    // domaines distincts, dont un inatteignable par le renommage.
+    const record = await service.createRecord(db, 'zinda', {
+      title: 'Titre',
+      category: '  DROIT ',
+      author: 'Traoré, Awa',
+      keywords: ['a', 'b', 'c'],
+    });
+    expect(db.biblioRecord.create.mock.calls[0][0].data.category).toBe('droit');
+    expect(record.id).toBeTruthy();
+  });
+
+  it('createRecord accepte un domaine connu écrit avec accents (Médecine → medecine)', async () => {
+    await service.createRecord(db, 'zinda', {
+      title: 'Titre',
+      category: 'Médecine',
+      author: 'Traoré, Awa',
+      keywords: ['a', 'b', 'c'],
+    });
+    expect(db.biblioRecord.create.mock.calls[0][0].data.category).toBe('medecine');
   });
 
   it('createRecord stocke le complément de titre SÉPARÉMENT (jamais concaténé)', async () => {
@@ -282,6 +330,12 @@ describe('CatalogingService — notices', () => {
       id: 'rec-2',
       recordType: 'memoire',
       defenseUniversity: 'EXEMPLE',
+      // ⚠ P3-3, temps 1 : les champs de profil sont LUS depuis `profileData`,
+      // et il n'y a PAS de repli sur la colonne. C'est voulu : un repli
+      // masquerait un écrivain qui aurait oublié le JSON, c'est-à-dire
+      // exactement ce que le temps 1 existe pour rendre visible. Le jeu
+      // d'essai porte donc les deux, comme une ligne réelle après migration.
+      profileData: { defenseUniversity: 'EXEMPLE' },
       items: [],
       keywords: KW3,
       contributors: [
@@ -509,10 +563,45 @@ describe('CatalogingService — import MARC (fichier réel ISO 2709)', () => {
     ]);
   }
 
+  it('domaine inconnu : la notice EST importée, sa catégorie reste vide, la valeur est rapportée', async () => {
+    // Décision produit : ni créer (cela remplirait le vocabulaire de la
+    // bibliothécaire avec le 900$b de catalogues étrangers), ni rejeter (une
+    // reprise de 25 000 notices échouerait sur une question de vocabulaire).
+    const result = await service.importMarc(db, 'zinda', unimarcFile(), 'UNIMARC', 'Papyrologie');
+
+    expect(result.imported).toBe(2);
+    expect(db.biblioRecord.create.mock.calls[0][0].data.category).toBeNull();
+    // La valeur d'origine n'est pas perdue : elle reste dans marcData (I3).
+    expect(result.categories).toEqual({
+      sansValeur: 0,
+      reconnues: 0,
+      inconnues: 2,
+      valeursInconnues: [{ valeur: 'papyrologie', occurrences: 2 }],
+    });
+  });
+
+  it('compte rendu à TROIS cas : absent ≠ reconnu ≠ inconnu', async () => {
+    // Confondre « la source n'en portait pas » et « on ne l'a pas reconnu »
+    // serait le même silence sous une autre forme (I6).
+    const result = await service.importMarc(db, 'zinda', unimarcFile(), 'UNIMARC', undefined);
+
+    expect(result.categories.sansValeur).toBe(2); // aucun 900$b dans le fichier
+    expect(result.categories.reconnues).toBe(0);
+    expect(result.categories.inconnues).toBe(0);
+    expect(result.categories.valeursInconnues).toEqual([]);
+  });
+
   it('importe les notices valides, ignore celles sans titre, indexe le lot', async () => {
     const result = await service.importMarc(db, 'zinda', unimarcFile(), 'UNIMARC', 'Droit');
 
-    expect(result).toEqual({ imported: 2, skipped: 1 });
+    expect(result).toMatchObject({ imported: 2, skipped: 1 });
+    // Domaine par défaut « Droit » : connu du référentiel, donc repris.
+    expect(result.categories).toEqual({
+      sansValeur: 0,
+      reconnues: 2,
+      inconnues: 0,
+      valeursInconnues: [],
+    });
 
     const first = db.biblioRecord.create.mock.calls[0][0].data;
     expect(first.title).toBe('Droit foncier rural é'); // UTF-8 intact
@@ -520,7 +609,7 @@ describe('CatalogingService — import MARC (fichier réel ISO 2709)', () => {
     expect(first.isbn).toBe('978-2-0001');
     expect(first.publishYear).toBe(2023);
     expect(first.language).toBe('fre');
-    expect(first.category).toBe('droit'); // catégorie par défaut appliquée
+    expect(first.category).toBe('droit'); // domaine par défaut, reconnu
     expect(first.marcFormat).toBe('UNIMARC');
     expect(first.marcData.fields.length).toBeGreaterThan(0); // MARC brut conservé
     // La zone auteur du MARC devient le contributeur principal, rattaché à sa
@@ -539,7 +628,7 @@ describe('CatalogingService — exemplaires', () => {
   let db: any;
 
   beforeEach(() => {
-    service = new CatalogingService(makeSearch() as any, makeDigitalCopy() as any);
+    service = new CatalogingService(makeSearch() as any, makeDigitalCopy() as any, {} as any);
     db = makeDb();
     db.biblioRecord.findUnique.mockResolvedValue({ id: 'rec-1', items: [] });
   });

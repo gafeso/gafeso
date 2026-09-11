@@ -117,6 +117,26 @@
   height: 100%;
   object-fit: cover;
 }
+/*
+ * Repli quand l'établissement n'a NI logo NI sigle : on montre la maison-livre
+ * de Gafeso plutôt qu'une pastille de couleur vide, qui se lisait comme un
+ * logo qui n'a pas chargé (constaté sur la démonstration : cercle vert plein
+ * en en-tête, cercle doré en pied).
+ *
+ * Fond clair et non l'aplat de marque : USAGE.md n'admet sur fond coloré que
+ * la version MONOCHROME BLANCHE, et le toit vert de l'icône disparaîtrait sur
+ * le vert. Sur fond clair, l'icône couleur est lisible et reste elle-même.
+ */
+.brandMark.brandMarkGafeso {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+.brandMark.brandMarkGafeso img {
+  width: 78%;
+  height: 78%;
+  margin: auto;
+  object-fit: contain; /* la maison-livre n'est pas recadrable : USAGE.md §respiration */
+}
 .brandText {
   line-height: 1.15;
 }
@@ -182,6 +202,23 @@
 .btnClay {
   background: var(--accent);
   color: var(--surface);
+}
+/*
+ * Bouton CLAIR, pour les sections à fond sombre — le ciel de la constellation.
+ * `btnPrimary` y était un aplat de --primary posé sur un dégradé de
+ * --primary-dark : 1,5:1 de contraste, la forme du bouton disparaissait dans
+ * le fond (« vert foncé sur vert, illisible », constaté en 4G).
+ *
+ * ⚠ La couleur est reprise sous `.vitrine a.btnSurface` et non sous
+ * `.btnSurface` seul : `.vitrine a { color: inherit }` a une spécificité
+ * (0,2,0) supérieure à celle d'une classe nue (0,1,0) et gagnerait, le bouton
+ * héritant alors de la couleur de texte de sa section.
+ */
+.btnSurface {
+  background: var(--surface);
+}
+.vitrine a.btnSurface {
+  color: var(--primary);
 }
 .menuToggle {
   display: none;
@@ -297,7 +334,13 @@
   overflow: hidden;
   box-shadow: 0 30px 60px -25px rgba(34, 28, 19, 0.4);
 }
-.heroFrame img.heroPhoto {
+/* ⚠ Les DEUX formes du bandeau, encartée et pleine largeur. Le sélecteur ne
+   portait que `.heroFrame` : en mode plein, l'image restait dans le flux et
+   poussait le bloc de texte HORS DE L'ÉCRAN — invisible à 375 px, et masqué
+   par l'`overflow: hidden` du conteneur, donc sans débordement de page pour le
+   signaler. Trouvé en mesurant les rectangles, pas à l'œil. */
+.heroFrame img.heroPhoto,
+.heroPlein img.heroPhoto {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -313,6 +356,376 @@
     radial-gradient(circle at center, transparent 0 38%, var(--surface) 39% 41%, transparent 42%),
     radial-gradient(circle at center, transparent 0 38%, var(--surface) 39% 41%, transparent 42%);
 }
+/* Points de navigation du bandeau. Cibles de 24 px avec une zone tactile
+   élargie par le padding du conteneur : assez pour le doigt, discret à l'œil.
+   Ils n'apparaissent que sur grand écran, où le défilement existe. */
+.heroDots {
+  position: absolute;
+  z-index: 3;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  gap: 0;
+}
+/* La PASTILLE reste petite (12 px, discrète sur l'image) mais la CIBLE fait
+   44 px : le bouton est dimensionné à la cible et dessine la pastille par son
+   fond, technique standard pour ne pas grossir le décor en agrandissant la
+   zone touchable. */
+.heroDot {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.heroDot::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--surface);
+  border-radius: 50%;
+}
+.heroDot[data-actif='oui']::before {
+  background: var(--surface);
+}
+.heroDot:focus-visible {
+  outline: 2px solid var(--surface);
+  outline-offset: 2px;
+}
+
+.signatureGafeso {
+  font-size: 12.5px;
+  opacity: 0.75;
+}
+
+/* ══ Chiffres du fonds ═══════════════════════════════════════════════════ */
+.chiffres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.chiffre {
+  background: var(--surface);
+  padding: 26px 24px;
+  text-align: center;
+}
+.chiffre b {
+  display: block;
+  font-size: 32px;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.chiffre span {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  color: var(--muted, #5A625E);
+}
+
+/* ══ Dernières acquisitions ══════════════════════════════════════════════ */
+.grilleAcquisitions {
+  margin-top: 18px;
+  display: grid;
+  /* `auto-fit` et non `repeat(6, …)` : la grille ne RÉSERVE pas six places.
+     Trois notices remplissent la ligne au lieu de laisser trois trous. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px;
+}
+.fiche {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.fiche:hover b {
+  text-decoration: underline;
+}
+.fiche:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.ficheCouverture,
+.ficheSansCouverture {
+  width: 100%;
+  aspect-ratio: 160 / 220;
+  border-radius: 2px;
+  background: var(--primary-dark);
+  object-fit: cover;
+  display: block;
+}
+/* Repli LISIBLE : le titre tient lieu de couverture — jamais un cadre vide. */
+.ficheSansCouverture {
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+.ficheTexte {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ficheTexte b {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.ficheMeta {
+  font-size: 12.5px;
+  color: var(--muted, #5A625E);
+}
+.fichePuce {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-pale, rgba(0, 0, 0, 0.06));
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+/* ══ Quatre piliers ══════════════════════════════════════════════════════ */
+.piliers {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 26px 0;
+}
+.piliersGrille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 22px;
+}
+.pilier b {
+  display: block;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.pilier span {
+  display: block;
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--muted, #5A625E);
+  line-height: 1.5;
+}
+
+/* ══ Recherche ═══════════════════════════════════════════════════════════ */
+.rechercheCarte {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+.rechercheCarte input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.rechercheCarte select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.rechercheCarte button {
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--primary);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rechercheCarte input:focus-visible,
+.rechercheCarte select:focus-visible,
+.rechercheCarte button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Parcours des documents numériques, sous le formulaire de recherche.
+   Discret : c'est une porte de plus, pas une action concurrente du bouton
+   « Rechercher ». La zone cliquable reste haute de 44 px (doigt). */
+.rechercheParcours {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+}
+.vitrine .rechercheParcours a {
+  color: var(--primary-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.vitrine .rechercheParcours a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Bouton clair sur le voile sombre du bandeau — le contraste vient de son
+   propre fond, pas de l'image derrière. */
+.btnSurContraste {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+.vitrine a.btnSurContraste {
+  color: #fff;
+}
+.btnSurContraste:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* ══ Bandeau PLEINE LARGEUR ══════════════════════════════════════════════
+   Le texte passe par-dessus l'image. Toute la difficulté est là : du blanc
+   sur une photo est illisible dès que la photo est claire, et « ça passe »
+   à l'œil sur la photo du jour ne dit rien de la photo suivante. */
+.heroPlein {
+  position: relative;
+  width: 100%;
+  min-height: 460px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  background: var(--primary-dark);
+}
+@media (max-width: 767px) {
+  .heroPlein {
+    min-height: 380px;
+  }
+}
+/*
+ * ⚠ LE VOILE — garantie de lisibilité, pas décor.
+ *
+ * L'opacité SOUS LE TEXTE ne descend pas sous 0,70. Sur une photo BLANCHE
+ * (pire cas), du blanc sur ce composite donne 8,52:1 — au-dessus du seuil
+ * AAA de 7:1.
+ *
+ * Pourquoi AAA et non AA. Le seuil AA (4,5:1, atteint dès 0,535) suppose des
+ * conditions de lecture de bureau. Cette page est publique, consultée sur des
+ * téléphones d'entrée de gamme, souvent dehors : un écran peu lumineux en plein
+ * soleil mange la marge qu'un test en intérieur ne voit jamais. Le surcoût est
+ * une image un peu plus sombre ; le coût inverse est un titre illisible.
+ *
+ * Ne PAS l'éclaircir parce que la photo actuelle est sombre : la photo change,
+ * la garantie doit tenir sans elle. En dessous de 0,651 elle tombe.
+ */
+.heroVoile {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.78) 38%,
+    rgba(0, 0, 0, 0.7) 52%,
+    rgba(0, 0, 0, 0.22) 100%
+  );
+}
+.heroTexte {
+  position: relative;
+  z-index: 3;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 40px 24px 56px;
+  width: 100%;
+  color: #fff;
+}
+@media (min-width: 768px) {
+  .heroTexte {
+    padding: 60px 60px 64px;
+    max-width: 62ch;
+    margin: 0;
+  }
+}
+.heroSurtitre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+  opacity: 0.92;
+  margin-bottom: 10px;
+}
+.heroTitre {
+  font-family: Charter, Georgia, serif;
+  font-size: clamp(28px, 4.6vw, 46px);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.heroAccroche {
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #fff;
+  opacity: 0.94;
+  max-width: 56ch;
+}
+.heroActions {
+  margin-top: 22px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+/* Flèches : cible de 44 px, contraste tenu par leur propre fond. */
+.heroFleche {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.heroFleche:hover {
+  background: rgba(0, 0, 0, 0.68);
+}
+.heroFleche:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.heroFlecheG {
+  left: 10px;
+}
+.heroFlecheD {
+  right: 10px;
+}
+.heroPlein .heroDots {
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+}
+
 .caption {
   position: relative;
   z-index: 2;
@@ -546,7 +959,10 @@
   font-size: 13.5px;
   font-weight: 600;
   text-align: center;
-  text-transform: capitalize;
+  /* PAS de `text-transform: capitalize` : il capitalisait CHAQUE MOT et
+     produisait « Histoire Et Disciplines Auxiliaires ». La majuscule initiale
+     est posée en JS (`vedetteAffichable`, components/constellation.tsx) pour
+     que le rendu HTML et le rendu SVG de la carte soient identiques. */
 }
 .domainCircle .dcount {
   color: color-mix(in srgb, var(--surface) 72%, transparent);

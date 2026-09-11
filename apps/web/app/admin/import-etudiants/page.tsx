@@ -27,7 +27,7 @@ export default function ImportEtudiantsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Tant que les fonctions ne sont pas résolues, on n'affiche rien de sensible.
-  const allowed = functions?.includes('etudiants.importer');
+  const allowed = functions?.includes('outils.lecteurs');
 
   async function upload(file: File) {
     setResult(null);
@@ -72,7 +72,7 @@ export default function ImportEtudiantsPage() {
     return (
       <Alert tone="error">
         Vous n’avez pas la permission d’importer des étudiants (fonction
-        «&nbsp;etudiants.importer&nbsp;»).
+        «&nbsp;outils.lecteurs&nbsp;»).
       </Alert>
     );
   }

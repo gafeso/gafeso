@@ -19,7 +19,13 @@ import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
 import { PatronsService, TenantDb } from './patrons.service';
-import { CreatePatronDto, ListPatronsDto, UpdatePatronDto } from './dto/patron.dto';
+import {
+  ComptesALierDto,
+  CreatePatronDto,
+  ListPatronsDto,
+  PatronLoansDto,
+  UpdatePatronDto,
+} from './dto/patron.dto';
 
 @ApiTags('patrons')
 @ApiBearerAuth()
@@ -63,6 +69,19 @@ export class PatronsController {
     return this.patrons.listPatrons(this.db(tenant), query);
   }
 
+  /**
+   * Comptes qu'on peut lier à une carte. ⚠ Placée AVANT `@Get(':id')` : Nest
+   * résout dans l'ordre de déclaration, et `:id` capturerait « comptes-a-lier ».
+   */
+  @Get('comptes-a-lier')
+  @ApiOperation({ summary: 'Comptes actifs non encore liés à une carte' })
+  async comptesALier(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query() query: ComptesALierDto,
+  ) {
+    return this.patrons.comptesALier(this.db(tenant), query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Fiche adhérent (prêts en cours et réservations comptés)' })
   async get(
@@ -70,6 +89,28 @@ export class PatronsController {
     @Param('id') id: string,
   ) {
     return this.patrons.getPatron(this.db(tenant), id);
+  }
+
+  /**
+   * Prêts d'un adhérent : EN COURS et HISTORIQUE paginé.
+   *
+   * ⚠ Route de PERSONNEL, gardée par `adherents.gerer` au niveau du contrôleur.
+   * Elle sert la même requête que l'espace lecteur (`/reader/loans`), mais
+   * désignée par patronId au lieu du compte connecté — voir
+   * `PatronsService.loansOfPatron`. `/circulation/patrons/:id` ne rendait que
+   * les prêts EN COURS : l'historique n'était atteignable par personne.
+   */
+  @Get(':id/loans')
+  @ApiOperation({ summary: 'Prêts d’un adhérent (en cours + historique paginé)' })
+  async loans(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('id') id: string,
+    @Query() query: PatronLoansDto,
+  ) {
+    return this.patrons.loansOfPatron(this.db(tenant), id, {
+      historyPage: query.page,
+      historyLimit: query.limit,
+    });
   }
 
   @Patch(':id')

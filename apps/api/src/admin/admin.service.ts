@@ -17,6 +17,7 @@ import { RolesService } from '../roles/roles.service';
 import { EXEMPLE_HOME_CONTENT, EXEMPLE_HOME_THEME } from '../tenancy/home-seed-exemple';
 import {
   buildAddMissingColumnsStatements,
+  buildColumnConstraintStatements,
   buildColumnIntrospectionQuery,
   buildDeprovisionStatement,
   buildEnumValueIntrospectionQuery,
@@ -30,6 +31,9 @@ import {
   IntrospectedIndex,
   isValidSlug,
   tenantSchemaName,
+  buildCollationIntrospectionQuery,
+  buildCollationStatements,
+  IntrospectedCollation,
 } from '../tenancy/tenant-schema';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 
@@ -127,6 +131,20 @@ export class AdminService {
    * CategoriesService.seedDefaults — idempotent, ajout seul, comparaison sans
    * casse ni accents). Tenant-scopé : n'affecte jamais les autres écoles.
    */
+  /**
+   * Domaines orphelins d'une école : valeurs portées par des notices sans
+   * catégorie correspondante (voir CategoriesService.orphanCategories).
+   *
+   * ⚠ LECTURE SEULE par défaut. `creer` doit être demandé explicitement — une
+   * réparation qui crée le vocabulaire à la place de la bibliothécaire
+   * reproduirait la faute qu'elle corrige.
+   */
+  async orphanCategories(slug: string, creer = false) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) throw new NotFoundException('École introuvable.');
+    return this.categories.orphanCategories(this.prisma.forTenant(slug), slug, creer);
+  }
+
   async seedCategories(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
     if (!tenant) throw new NotFoundException('École introuvable.');
@@ -391,7 +409,8 @@ export class AdminService {
     }
 
     // 2) Colonnes ajoutées entre-temps sur des tables DÉJÀ existantes chez
-    // cette école — le CREATE TABLE ci-dessus ne les rattrape jamais.
+    // cette école — le CREATE TABLE ci-dessus ne les rattrape jamais. Le même
+    // passage relâche les contraintes assouplies depuis (voir plus bas).
     const { applied: columnsApplied, skippedEnumColumns } =
       await this.addMissingColumns(slug);
     applied += columnsApplied;
@@ -420,12 +439,50 @@ export class AdminService {
     applied += await this.addMissingIndexes(slug);
 
     // 5) Valeurs d'enum ajoutées au modèle après provisioning (ex.
-    // ItemStatus.MISSING pour le récolement) — CREATE TYPE (déjà existant) ne
-    // les rattrape jamais.
+    // ItemStatus.MISSING pour le récolement, MarcFormat.GAFESO pour la notice
+    // Gafeso) — CREATE TYPE (déjà existant) ne les rattrape jamais.
     applied += await this.addMissingEnumValues(slug);
 
+    // 6) COLLATION FRANÇAISE des colonnes texte (backlog n° 14).
+    //
+    // 🔴 CE GARDE INTERROGE LA BASE, PAS LE SCHÉMA, et c'est sa raison d'être :
+    // Prisma ne modélise pas la collation, donc un `ALTER COLUMN … SET DATA
+    // TYPE` futur — écrit pour une autre raison — la PERD en silence. Mesuré
+    // sur une base jetable : la migration réussit, l'ordre redevient faux, et
+    // rien ne le signale. Un test de source ne verrait que l'intention.
+    const { applied: collationsApplied, ecarts } = await this.rattraperCollations(slug);
+    applied += collationsApplied;
+    if (ecarts.length > 0) {
+      this.logger.warn(
+        `sync-schema ${slug} — collation rattrapée sur ${ecarts.length} colonne(s) : ` +
+          `${ecarts.slice(0, 6).join(', ')}${ecarts.length > 6 ? '…' : ''}`,
+      );
+    }
+
     this.logger.log(`sync-schema ${slug} : ${applied} appliqués, ${skipped} déjà présents.`);
-    return { slug, applied, skipped };
+    return { slug, applied, skipped, collationsRattrapees: ecarts };
+  }
+
+  /**
+   * Pose la collation française sur les colonnes déclarées qui ne l'ont pas.
+   *
+   * ⚠ IL RATTRAPE, IL NE SE CONTENTE PAS DE SIGNALER. Un garde qui signale sans
+   * corriger laisse l'écart en place jusqu'à ce que quelqu'un lise le journal —
+   * et un ordre alphabétique faux ne se remarque que le jour où un lecteur
+   * cherche un titre accentué. `sync-schema` existe précisément pour rattraper
+   * ce que les écoles déjà provisionnées n'ont pas reçu.
+   */
+  private async rattraperCollations(
+    slug: string,
+  ): Promise<{ applied: number; ecarts: string[] }> {
+    const presentes = await this.prisma.$queryRawUnsafe<IntrospectedCollation[]>(
+      buildCollationIntrospectionQuery(tenantSchemaName(slug)),
+    );
+    const { statements, ecarts } = buildCollationStatements(slug, presentes);
+    for (const statement of statements) {
+      await this.prisma.$executeRawUnsafe(statement);
+    }
+    return { applied: statements.length, ecarts };
   }
 
   /** Crée les index attendus (TENANT_INDEXES) absents chez l'école. */
@@ -482,6 +539,12 @@ export class AdminService {
       publicColumns,
       tenantColumns,
     );
+    // Contraintes RELÂCHÉES depuis le provisioning de l'école (NOT NULL levé,
+    // défaut ajouté). `LIKE ... INCLUDING ALL` ne les copie qu'à la création :
+    // sans ce rattrapage, une migration qui rend une colonne facultative dans
+    // `public` laisse les écoles existantes en NOT NULL. Réutilise les deux
+    // introspections ci-dessus — aucune requête supplémentaire.
+    statements.push(...buildColumnConstraintStatements(slug, publicColumns, tenantColumns));
 
     let applied = 0;
     for (const statement of statements) {

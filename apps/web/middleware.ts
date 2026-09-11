@@ -32,7 +32,23 @@ const PUBLIC_EXACT = ['/', '/login', '/inscription', '/definir-mot-de-passe'];
 // non connecté part en 307 vers /login et l'en-tête affiche une image cassée,
 // précisément sur l'OPAC, qui est public. Le symptôme ne se voit jamais en
 // développement quand on reste connecté.
-const PUBLIC_PREFIXES = ['/opac', '/e/', '/.well-known/', '/marque/'];
+// `/demo/` : illustrations de la page d'accueil (bandeau, couvertures du
+// catalogue de démonstration). CONSTATÉ le 10 septembre 2026 — elles partaient
+// en 307 vers /login pour tout visiteur non connecté, c'est-à-dire pour le seul
+// public de cette page. Le défaut a vécu plusieurs jours sans se voir : la
+// vérification se faisait EN ÉTANT CONNECTÉ, où les images se chargent, et le
+// HTML les mentionne de toute façon — la balise <img> est présente dans les
+// deux cas, seule la REQUÊTE diffère. Lire le DOM ne pouvait donc pas le
+// montrer ; seul un appel sans cookie le montre.
+const PUBLIC_PREFIXES = ['/opac', '/e/', '/.well-known/', '/marque/', '/demo/'];
+
+/**
+ * Exposé pour le test. Cette liste est la seule chose qui sépare un fichier
+ * public d'une redirection vers /login, et rien dans `public/` ne signale
+ * qu'il faut l'y inscrire.
+ */
+export const PREFIXES_PUBLICS_POUR_TEST = PUBLIC_PREFIXES;
+export const CHEMINS_PUBLICS_POUR_TEST = PUBLIC_EXACT;
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 

@@ -7,7 +7,7 @@ import { Alert, Card } from '@/components/ui';
 
 export default function InteroperabilitePage() {
   const { functions } = useMyFunctions();
-  const canView = functions?.includes('etablissement.gerer');
+  const canView = functions?.includes('diffusion.gerer');
 
   const [oaiUrl, setOaiUrl] = useState('');
   const [copied, setCopied] = useState(false);
@@ -31,8 +31,8 @@ export default function InteroperabilitePage() {
   if (functions && !canView) {
     return (
       <Alert tone="error">
-        Vous n’avez pas la permission de gérer l’établissement (fonction
-        «&nbsp;etablissement.gerer&nbsp;»).
+        Vous n’avez pas la permission de gérer la diffusion (fonction
+        «&nbsp;diffusion.gerer&nbsp;»).
       </Alert>
     );
   }
@@ -82,9 +82,11 @@ export default function InteroperabilitePage() {
 
         <p className="mt-3 text-xs text-muted">
           Formats exposés : <strong>oai_dc</strong> (Dublin Core) et{' '}
-          <strong>marcxml</strong>. Seules les métadonnées bibliographiques sont
+          <strong>marcxchange</strong> (norme <strong>ISO 25577</strong>), où chaque
+          notice déclare son dialecte : <strong>UNIMARC</strong>, et non MARC21.
+          Seules les métadonnées bibliographiques sont
           diffusées — jamais les fichiers numériques. Le moissonnage se fait par
-          catégorie (<em>sets</em>) et de façon incrémentale (dates de
+          domaine (<em>sets</em>) et de façon incrémentale (dates de
           modification).
         </p>
       </Card>
@@ -94,7 +96,7 @@ export default function InteroperabilitePage() {
         <p className="mt-2 text-sm text-muted">
           Pour un échange ponctuel (migration, dépôt légal, partage avec une autre
           bibliothèque), exportez une notice ou tout le catalogue en{' '}
-          <strong>ISO&nbsp;2709</strong> ou <strong>MARCXML</strong> depuis le{' '}
+          <strong>ISO&nbsp;2709</strong> ou <strong>MarcXchange</strong> depuis le{' '}
           <Link href="/admin/catalogue" className="text-ocre underline">
             catalogue
           </Link>

@@ -18,6 +18,7 @@ import {
 } from './circulation-rules';
 import { CheckoutDto, CreateRuleDto, PlaceHoldDto, UpdateRuleDto } from './dto/circulation.dto';
 import { DEFAULT_DUE_TIME, DEFAULT_TIMEZONE, computeDueAt } from './due-time';
+import { nomsDivergents } from '../patrons/noms-divergents';
 
 /**
  * Réglages d'échéance de l'établissement. Passés par l'appelant, qui les lit
@@ -27,6 +28,33 @@ import { DEFAULT_DUE_TIME, DEFAULT_TIMEZONE, computeDueAt } from './due-time';
 export interface DueSettings {
   loanDueTime?: string | null;
   timezone?: string | null;
+  /**
+   * Le module `amendes` est-il actif pour cet établissement ? (P4-3)
+   *
+   * ⚠ `undefined` VAUT ACTIF, délibérément : un module absent du registre est
+   * actif (décision 8), donc un appelant qui omettrait ce réglage garde le
+   * comportement d'avant. Aucune école ne voit ses amendes s'éteindre par un
+   * oubli de câblage — le sens inverse serait catastrophique et silencieux.
+   *
+   * ⚠ ET CE N'EST PAS UNE GARDE DE ROUTE. Rendre un document appartient à la
+   * CIRCULATION, qui est du noyau : `POST /circulation/return` doit fonctionner
+   * dans une école qui a éteint les amendes. L'extinction agit par une BRANCHE
+   * — le tarif vaut zéro — et non par un refus.
+   */
+  amendesActives?: boolean;
+}
+
+/**
+ * Tarif applicable, module `amendes` compris.
+ *
+ * ⚠ TROIS SITES DE CALCUL, PAS DEUX. Un premier relevé n'en avait vu que deux
+ * (`grep` sur une fenêtre trop courte) : le troisième aurait continué
+ * d'accumuler des amendes dans une école qui les a éteintes, et rien ne
+ * l'aurait signalé. D'où cette fonction — un seul endroit à lire, et un test
+ * qui compte les appels.
+ */
+export function tarifApplicable(finePerDay: number, settings?: DueSettings): number {
+  return settings?.amendesActives === false ? 0 : finePerDay;
 }
 
 function dueAt(borrowedAt: Date, days: number, settings?: DueSettings): Date {
@@ -165,7 +193,12 @@ export class CirculationService {
       where: { patronCategory: checkout.patron.category },
     });
     const rule = resolveRule(rules, checkout.patron.category, checkout.item.itemType);
-    const fine = computeFine(checkout.dueDate, now, rule.finePerDay, settings?.timezone ?? DEFAULT_TIMEZONE);
+    const fine = computeFine(
+        checkout.dueDate,
+        now,
+        tarifApplicable(rule.finePerDay, settings),
+        settings?.timezone ?? DEFAULT_TIMEZONE,
+      );
 
     // Prochaine réservation en attente sur cette notice ?
     const nextHold = await db.hold.findFirst({
@@ -436,7 +469,11 @@ export class CirculationService {
     const overdue = await db.checkout.findMany({
       where: { returnDate: null, dueDate: { lt: now } },
       include: {
-        item: { include: { record: { select: { title: true } } } },
+        // `id` en plus du titre : sans lui, l'écran des retards affiche des
+        // titres sur lesquels on ne peut pas cliquer. Même défaut que
+        // patronSituation ci-dessous — corrigé aux DEUX endroits, un tiers de
+        // correctif laisse revenir le défaut.
+        item: { include: { record: { select: { id: true, title: true } } } },
         patron: { select: { id: true, barcode: true, category: true } },
       },
       orderBy: { dueDate: 'asc' },
@@ -445,9 +482,15 @@ export class CirculationService {
     const rules = await db.circulationRule.findMany();
     return overdue.map((checkout) => {
       const rule = resolveRule(rules, checkout.patron.category, checkout.item.itemType);
-      const fine = computeFine(checkout.dueDate, now, rule.finePerDay, settings?.timezone ?? DEFAULT_TIMEZONE);
+      const fine = computeFine(
+        checkout.dueDate,
+        now,
+        tarifApplicable(rule.finePerDay, settings),
+        settings?.timezone ?? DEFAULT_TIMEZONE,
+      );
       return {
         checkoutId: checkout.id,
+        recordId: checkout.item.record.id,
         title: checkout.item.record.title,
         itemBarcode: checkout.item.barcode,
         patron: checkout.patron,
@@ -474,12 +517,14 @@ export class CirculationService {
     const [openCheckouts, holds, recordedFines, rules] = await Promise.all([
       db.checkout.findMany({
         where: { patronId, returnDate: null },
-        include: { item: { include: { record: { select: { title: true } } } } },
+        include: { item: { include: { record: { select: { id: true, title: true } } } } },
         orderBy: { dueDate: 'asc' },
       }),
       db.hold.findMany({
         where: { patronId, status: { in: ACTIVE_HOLD_STATUSES } },
-        include: { record: { select: { title: true } } },
+        // Les réservations sont rendues TELLES QUELLES : ajouter `id` ici
+        // l'expose directement, sans projection à modifier.
+        include: { record: { select: { id: true, title: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       db.checkout.aggregate({
@@ -492,10 +537,16 @@ export class CirculationService {
     let accruing = 0;
     const checkouts = openCheckouts.map((checkout) => {
       const rule = resolveRule(rules, patron.category, checkout.item.itemType);
-      const fine = computeFine(checkout.dueDate, now, rule.finePerDay, settings?.timezone ?? DEFAULT_TIMEZONE);
+      const fine = computeFine(
+        checkout.dueDate,
+        now,
+        tarifApplicable(rule.finePerDay, settings),
+        settings?.timezone ?? DEFAULT_TIMEZONE,
+      );
       accruing += fine.amountXof;
       return {
         checkoutId: checkout.id,
+        recordId: checkout.item.record.id,
         title: checkout.item.record.title,
         itemBarcode: checkout.item.barcode,
         dueDate: checkout.dueDate,
@@ -507,7 +558,10 @@ export class CirculationService {
 
     const recorded = recordedFines._sum.fineAmount ?? 0;
     return {
-      patron,
+      // Le nom de l'adhérent fait foi ; celui du compte reste visible dans
+      // `patron.user`, et `nomsDivergents` dit s'ils se sont désaccordés.
+      // Voir patrons/noms-divergents.ts — le signal informe, il ne décide rien.
+      patron: { ...patron, nomsDivergents: nomsDivergents(patron) },
       checkouts,
       holds,
       fines: {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAddMissingColumnsStatements,
+  buildColumnConstraintStatements,
   buildColumnIntrospectionQuery,
   buildDeprovisionStatement,
   buildIndexIntrospectionQuery,
@@ -165,6 +166,48 @@ describe('tenant-schema — introspection et rattrapage de colonnes', () => {
     expect(skippedEnumColumns).toEqual([]);
   });
 
+  it('ajoute une colonne à DÉFAUT en NOT NULL (Postgres remplit les lignes existantes)', () => {
+    const { statements } = buildAddMissingColumnsStatements(
+      'zinda',
+      [
+        {
+          table_name: 'biblio_records',
+          column_name: 'profile',
+          type_decl: 'text',
+          is_enum: false,
+          not_null: true,
+          default_expr: `'bibliographique'::text`,
+        },
+      ],
+      [],
+    );
+    // Sans le défaut, les notices existantes de l'école auraient `profile` NULL
+    // là où le gabarit public les a backfillées à « bibliographique ».
+    expect(statements).toEqual([
+      `ALTER TABLE "tenant_zinda"."biblio_records" ADD COLUMN "profile" text DEFAULT 'bibliographique'::text NOT NULL`,
+    ]);
+  });
+
+  it('laisse nullable une colonne SANS défaut (jamais de NOT NULL sec sur une table pleine)', () => {
+    const { statements } = buildAddMissingColumnsStatements(
+      'zinda',
+      [
+        {
+          table_name: 'biblio_records',
+          column_name: 'publisher',
+          type_decl: 'text',
+          is_enum: false,
+          not_null: true,
+          default_expr: null,
+        },
+      ],
+      [],
+    );
+    expect(statements).toEqual([
+      'ALTER TABLE "tenant_zinda"."biblio_records" ADD COLUMN "publisher" text',
+    ]);
+  });
+
   it('ne génère rien si toutes les colonnes sont déjà présentes', () => {
     const columns = [
       { table_name: 'biblio_records', column_name: 'title', type_decl: 'text', is_enum: false },
@@ -243,7 +286,9 @@ describe('tenant-schema — synchro des valeurs d’enum', () => {
   const ALL_ENUM_ROWS = [
     ...['STUDENT', 'LIBRARIAN', 'MANAGER', 'ACQUISITIONS', 'ADMIN'].map((value) => ({ enum_name: 'UserRole', value })),
     ...['PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED'].map((value) => ({ enum_name: 'AccountStatus', value })),
-    ...['MARC21', 'UNIMARC'].map((value) => ({ enum_name: 'MarcFormat', value })),
+    // DUBLIN_CORE ajouté au vocabulaire en P3-1 (couche 3) : ce fixture décrit
+    // une école qui a TOUT, il doit donc le porter aussi.
+    ...['MARC21', 'UNIMARC', 'GAFESO', 'DUBLIN_CORE'].map((value) => ({ enum_name: 'MarcFormat', value })),
     ...['AVAILABLE', 'CHECKED_OUT', 'ON_HOLD', 'IN_TRANSIT', 'DAMAGED', 'LOST', 'WITHDRAWN', 'MISSING'].map((value) => ({ enum_name: 'ItemStatus', value })),
     ...['PENDING', 'AVAILABLE', 'FULFILLED', 'CANCELLED', 'EXPIRED'].map((value) => ({ enum_name: 'HoldStatus', value })),
     ...['PDF', 'EPUB'].map((value) => ({ enum_name: 'DigitalFormat', value })),
@@ -260,7 +305,85 @@ describe('tenant-schema — synchro des valeurs d’enum', () => {
     ]);
   });
 
+  it('ajoute MarcFormat.GAFESO chez une école provisionnée avant la notice Gafeso', () => {
+    const existing = ALL_ENUM_ROWS.filter((r) => r.value !== 'GAFESO');
+
+    expect(buildMissingEnumValueStatements('zinda', existing)).toEqual([
+      `ALTER TYPE "tenant_zinda"."MarcFormat" ADD VALUE IF NOT EXISTS 'GAFESO'`,
+    ]);
+  });
+
+  it('⚠ ajoute MarcFormat.DUBLIN_CORE chez une école provisionnée avant la couche 3', () => {
+    // C'est la propagation dont P3-1 dépend. Le vocabulaire vit à trois
+    // endroits — schema.prisma, TENANT_ENUMS, et le type local de chaque école
+    // — et c'est CE générateur, piloté par TENANT_ENUMS, qui rattrape le
+    // troisième. J'avais d'abord conclu que sync-schema ne propageait pas les
+    // enums : c'était faux, il ne propageait rien parce que TENANT_ENUMS
+    // n'était pas encore à jour.
+    const existing = ALL_ENUM_ROWS.filter((r) => r.value !== 'DUBLIN_CORE');
+    expect(buildMissingEnumValueStatements('zinda', existing)).toEqual([
+      `ALTER TYPE "tenant_zinda"."MarcFormat" ADD VALUE IF NOT EXISTS 'DUBLIN_CORE'`,
+    ]);
+  });
+
   it('ne génère rien quand toutes les valeurs sont déjà présentes', () => {
     expect(buildMissingEnumValueStatements('zinda', ALL_ENUM_ROWS)).toEqual([]);
+  });
+});
+
+/**
+ * Recette du lot « notice Gafeso » côté schémas tenant.
+ *
+ * Le contrôle négatif de chaque cas est le test jumeau « ne génère rien » :
+ * si l'on retire la comparaison de contrainte dans
+ * `buildColumnConstraintStatements`, les tests de rattrapage échouent ; si l'on
+ * produit l'ALTER inconditionnellement, ce sont les tests « ne génère rien »
+ * qui échouent. Aucun des deux ne passe seul.
+ */
+describe('tenant-schema — rattrapage des contraintes de colonnes', () => {
+  const publicMarcData = {
+    table_name: 'biblio_records',
+    column_name: 'marc_data',
+    type_decl: 'jsonb',
+    is_enum: false,
+    not_null: false, // le gabarit a été assoupli par la migration
+    default_expr: null,
+  };
+  const tenantMarcData = { ...publicMarcData, not_null: true }; // l'école, elle, est restée NOT NULL
+
+  it('lève le NOT NULL resté sur une école provisionnée avant la migration', () => {
+    expect(buildColumnConstraintStatements('zinda', [publicMarcData], [tenantMarcData])).toEqual([
+      'ALTER TABLE "tenant_zinda"."biblio_records" ALTER COLUMN "marc_data" DROP NOT NULL',
+    ]);
+  });
+
+  it('ne génère rien quand l’école a déjà la même contrainte', () => {
+    expect(buildColumnConstraintStatements('zinda', [publicMarcData], [publicMarcData])).toEqual([]);
+  });
+
+  it('ne DURCIT jamais une contrainte (SET NOT NULL échouerait sur une donnée nulle)', () => {
+    // Sens inverse : le gabarit est NOT NULL, l'école est nullable.
+    const strictPublic = { ...publicMarcData, not_null: true };
+    expect(buildColumnConstraintStatements('zinda', [strictPublic], [publicMarcData])).toEqual([]);
+  });
+
+  it('pose le défaut manquant sur une colonne déjà présente chez l’école', () => {
+    const publicProfile = {
+      table_name: 'biblio_records',
+      column_name: 'profile',
+      type_decl: 'text',
+      is_enum: false,
+      not_null: true,
+      default_expr: `'bibliographique'::text`,
+    };
+    const tenantProfile = { ...publicProfile, not_null: false, default_expr: null };
+
+    expect(buildColumnConstraintStatements('zinda', [publicProfile], [tenantProfile])).toEqual([
+      `ALTER TABLE "tenant_zinda"."biblio_records" ALTER COLUMN "profile" SET DEFAULT 'bibliographique'::text`,
+    ]);
+  });
+
+  it('ignore une colonne absente chez l’école (c’est ADD COLUMN qui la traite)', () => {
+    expect(buildColumnConstraintStatements('zinda', [publicMarcData], [])).toEqual([]);
   });
 });

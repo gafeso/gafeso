@@ -49,7 +49,7 @@ function requireEnv(name) {
   return value;
 }
 
-const API = process.env.SEED_API_URL ?? 'http://localhost:4000';
+const API = process.env.SEED_API_URL || 'http://localhost:4000';
 const ADMIN_KEY = requireEnv('ADMIN_API_KEY');
 const APP_URL = requireEnv('APP_URL'); // ex. https://bibliotheque.exemple.bf
 
@@ -57,18 +57,18 @@ const APP_URL = requireEnv('APP_URL'); // ex. https://bibliotheque.exemple.bf
 // port (TenancyService.resolveByHost) — un domaine « localhost:8080 » ne
 // résoudrait jamais. En prod le domaine n'a pas de port → aucune différence.
 const DOMAIN = new URL(APP_URL).hostname;
-const SLUG = process.env.PROVISION_SLUG ?? 'bibliotheque';
-const SCHOOL = process.env.PROVISION_SCHOOL_NAME ?? 'Bibliothèque';
+const SLUG = process.env.PROVISION_SLUG || 'bibliotheque';
+const SCHOOL = process.env.PROVISION_SCHOOL_NAME || 'Bibliothèque';
 // Domaine des adresses générées. `localhost` — ou tout hôte SANS point — n'est
 // pas un domaine d'email valide : le DTO de connexion (@IsEmail) le refuse.
 // Le compte administrateur était donc créé puis REJETÉ à la connexion, avec
 // « email must be an email » — impossible d'entrer dans une install d'essai.
 // On bascule sur un domaine de repli valide quand l'hôte n'en est pas un.
 const MAIL_DOMAIN = DOMAIN.includes('.') ? DOMAIN : 'gafeso.local';
-const SUPERADMIN_EMAIL = process.env.PROVISION_SUPERADMIN_EMAIL ?? `superadmin@${MAIL_DOMAIN}`;
-const ADMIN_EMAIL = process.env.PROVISION_ADMIN_EMAIL ?? `admin@${MAIL_DOMAIN}`;
-const ADMIN_FIRSTNAME = process.env.PROVISION_ADMIN_FIRSTNAME ?? 'Administrateur';
-const ADMIN_LASTNAME = process.env.PROVISION_ADMIN_LASTNAME ?? SCHOOL;
+const SUPERADMIN_EMAIL = process.env.PROVISION_SUPERADMIN_EMAIL || `superadmin@${MAIL_DOMAIN}`;
+const ADMIN_EMAIL = process.env.PROVISION_ADMIN_EMAIL || `admin@${MAIL_DOMAIN}`;
+const ADMIN_FIRSTNAME = process.env.PROVISION_ADMIN_FIRSTNAME || 'Administrateur';
+const ADMIN_LASTNAME = process.env.PROVISION_ADMIN_LASTNAME || SCHOOL;
 // Couleur primaire de l'école (hex #RRGGBB) — optionnelle, posée par install.sh.
 const PRIMARY_COLOR = process.env.PROVISION_PRIMARY_COLOR;
 

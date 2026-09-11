@@ -102,7 +102,7 @@ describe('DigitalCopyService — upload (stockage)', () => {
     storage = makeStorage();
     extraction = makeExtraction();
     search = makeSearch();
-    service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     db = makeDb();
   });
 
@@ -225,7 +225,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
       publisher: 'Éditeur du fichier',
       publishYear: 2021,
     });
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb();
 
     const result = await service.upload(db, 'zinda', 'rec-1', pdfFile());
@@ -243,7 +243,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
 
   it('NE remplace PAS un champ déjà renseigné par le bibliothécaire', async () => {
     const extraction = makeExtraction({ author: 'Auteur du fichier', publishYear: 2021 });
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb({ author: 'Auteur déjà saisi', publishYear: 1999 });
 
     await service.upload(db, 'zinda', 'rec-1', pdfFile());
@@ -256,7 +256,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
     const extraction = makeExtraction({
       cover: { buffer: Buffer.from([1, 2, 3]), mimeType: 'image/jpeg' },
     });
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb();
 
     const result = await service.upload(db, 'zinda', 'rec-1', pdfFile());
@@ -273,7 +273,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
     const extraction = makeExtraction({
       cover: { buffer: Buffer.from([1, 2, 3]), mimeType: 'image/jpeg' },
     });
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb({ coverUrl: 'https://deja-la.jpg' });
 
     await service.upload(db, 'zinda', 'rec-1', pdfFile());
@@ -283,7 +283,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
 
   it('un échec inattendu de l’extraction ne fait jamais échouer l’upload (défense en profondeur)', async () => {
     const extraction = { extract: vi.fn().mockRejectedValue(new Error('fichier corrompu')) };
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb();
 
     const result = await service.upload(db, 'zinda', 'rec-1', pdfFile());
@@ -296,7 +296,7 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
 
   it('un échec inattendu de l’écriture du patch (ex. valeur rejetée par PostgreSQL) ne fait jamais échouer l’upload', async () => {
     const extraction = makeExtraction({ author: 'Auteur du fichier' });
-    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any);
+    const service = new DigitalCopyService(storage as any, extraction as any, search as any, makeIngestion() as any, {} as never);
     const db = makeDb();
     db.biblioRecord.update.mockRejectedValue(
       new Error('invalid byte sequence for encoding "UTF8": 0x00'),
@@ -318,7 +318,7 @@ describe('DigitalCopyService — métadonnées et téléchargement', () => {
 
   beforeEach(() => {
     storage = makeStorage();
-    service = new DigitalCopyService(storage as any, makeExtraction() as any, makeSearch() as any, makeIngestion() as any);
+    service = new DigitalCopyService(storage as any, makeExtraction() as any, makeSearch() as any, makeIngestion() as any, {} as never);
     db = makeDb();
   });
 

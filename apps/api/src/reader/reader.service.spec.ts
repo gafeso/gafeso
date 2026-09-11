@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ReaderService } from './reader.service';
+import { PatronsService } from '../patrons/patrons.service';
 
 const day = (iso: string) => new Date(`${iso}T12:00:00.000Z`);
 
 /** ReaderService avec un PrismaService simulé (tenant_settings). */
 function svc(settings: Record<string, unknown> | null = null) {
   const prisma = { tenantSettings: { findUnique: vi.fn().mockResolvedValue(settings) } };
-  return new ReaderService(prisma as any);
+  return new ReaderService(prisma as any, new PatronsService());
 }
 
 function loan(over: Partial<any> = {}) {

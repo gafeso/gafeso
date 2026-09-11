@@ -126,6 +126,7 @@ export default function LoginPage() {
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Adresse email
                   <Input
+                    className="min-h-11"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -137,6 +138,7 @@ export default function LoginPage() {
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Mot de passe
                   <Input
+                    className="min-h-11"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -149,13 +151,13 @@ export default function LoginPage() {
                     {error}
                   </p>
                 )}
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" className="min-h-11" disabled={loading}>
                   {loading ? 'Connexion…' : 'Se connecter'}
                 </Button>
               </form>
               <p className="mt-4 text-center text-sm text-muted">
                 Pas encore de compte ?{' '}
-                <Link href="/inscription" className="font-semibold text-ocre underline">
+                <Link href="/inscription" className="inline-flex min-h-11 items-center font-semibold text-ocre underline">
                   Créer un compte étudiant
                 </Link>
               </p>
@@ -171,6 +173,7 @@ export default function LoginPage() {
               <label className="flex flex-col gap-1.5 text-sm font-medium">
                 Code de vérification
                 <Input
+                  className="min-h-11"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   inputMode="text"
@@ -185,7 +188,7 @@ export default function LoginPage() {
                   {error}
                 </p>
               )}
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" className="min-h-11" disabled={loading}>
                 {loading ? 'Vérification…' : 'Valider'}
               </Button>
               {methods.includes('email') && (

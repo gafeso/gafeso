@@ -228,7 +228,7 @@ export function Donut({ rows }: { rows: { label: string; count: number }[] }) {
   });
   return (
     <div className="flex flex-wrap items-center gap-6">
-      <svg viewBox="0 0 140 140" className="h-36 w-36 shrink-0" role="img" aria-label="Répartition du fonds par catégorie">
+      <svg viewBox="0 0 140 140" className="h-36 w-36 shrink-0" role="img" aria-label="Répartition du fonds par domaine">
         {arcs.map((a, i) => (
           <path key={i} d={a.d} className={a.cls}>
             <title>{`${a.row.label} : ${a.row.count} (${a.pct}%)`}</title>

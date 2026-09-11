@@ -18,7 +18,7 @@ import { AuditQueryDto } from './dto/audit-query.dto';
 @ApiTags('audit')
 @Controller('audit')
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+@RequiresFunctions(FONCTIONS.SECURITE_AUDIT)
 @ApiBearerAuth()
 export class AuditController {
   constructor(private readonly audit: AuditService) {}

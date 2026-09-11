@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { ModulesModule } from '../modules/modules.module';
 import { RemindersService } from './reminders.service';
 import { RemindersScheduler } from './reminders.scheduler';
 import { RemindersController } from './reminders.controller';
@@ -12,7 +13,7 @@ import { RemindersController } from './reminders.controller';
  *   FunctionsGuard). PrismaService et MailService sont globaux.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ModulesModule],
   controllers: [RemindersController],
   providers: [RemindersService, RemindersScheduler],
   exports: [RemindersService],

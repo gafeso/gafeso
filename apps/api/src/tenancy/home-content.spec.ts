@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_HOME_CONTENT, normalizeHomeContent, sanitizeHomeContentInput } from './home-content';
+import {
+  EMPTY_HOME_CONTENT,
+  MAX_HERO_SLIDES,
+  heroSlidesEffectives,
+  normalizeHomeContent,
+  sanitizeHomeContentInput,
+} from './home-content';
+import { BandeauAccueilValide, raisonDeRefusDuBandeau } from './dto/hero-slides.validator';
 import { EXEMPLE_HOME_CONTENT } from './home-seed-exemple';
 
 describe('home-content — normalizeHomeContent', () => {
@@ -104,7 +111,7 @@ describe('home-content — sanitizeHomeContentInput (écriture)', () => {
       identity: { fullName: 'BUC', evil: '<script>' },
       // Section inconnue → absente du résultat.
       hackers: [{ x: 1 }],
-    }) as Record<string, unknown>;
+    }) as unknown as Record<string, unknown>;
     expect((clean.identity as Record<string, unknown>).evil).toBeUndefined();
     expect(clean.hackers).toBeUndefined();
     // Les sections connues restent présentes (forme complète).
@@ -119,5 +126,161 @@ describe('home-content — seed EXEMPLE', () => {
     expect(EXEMPLE_HOME_CONTENT.espaces).toHaveLength(7);
     expect(EXEMPLE_HOME_CONTENT.stats).toHaveLength(4);
     expect(EXEMPLE_HOME_CONTENT.services).toHaveLength(5);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Bandeau d'accueil à plusieurs diapositives (`identity.heroSlides`).
+//
+// La voie retenue est « lire les deux » : on ne migre RIEN, la base garde ce
+// que l'établissement a saisi, et le bandeau d'une école configurée avant ce
+// champ est reconstruit à la LECTURE. Cette voie n'a d'intérêt que si elle
+// n'écrit rien — d'où le test de garantie plus bas, qui exerce le cas dégradé
+// (école historique + enregistrement d'un champ SANS RAPPORT) et non le cas
+// nominal.
+// ════════════════════════════════════════════════════════════════════════════
+describe('home-content — heroSlides : compatibilité ascendante SANS écriture', () => {
+  const HISTORIQUE = {
+    identity: {
+      heroImageUrl: '/covers/hero.jpg',
+      heroImageKicker: 'Depuis 1965',
+      heroImageCaption: 'La salle de lecture',
+    },
+  };
+
+  it('une école historique voit son bandeau reconstruit, en correspondance LITTÉRALE', () => {
+    const { identity } = normalizeHomeContent(HISTORIQUE);
+    expect(heroSlidesEffectives(identity)).toEqual([
+      {
+        imageUrl: '/covers/hero.jpg',
+        // caption = le texte mis en avant ; kicker = le SURTITRE. C'est
+        // l'inverse du mapping de apps/web/lib/hero-slides.ts, qui appelait le
+        // kicker « legende » — abus de langage que ce contrat ne reprend pas.
+        titre: 'La salle de lecture',
+        surtitre: 'Depuis 1965',
+      },
+    ]);
+  });
+
+  it('⚠ GARANTIE — aucune dérivation ne fuit dans le chemin d’ÉCRITURE', () => {
+    // LE test du lot. sanitizeHomeContentInput EST normalizeHomeContent, et
+    // l'écriture remplace le blob ENTIER : si la dérivation vivait dans le
+    // normaliseur, enregistrer un horaire suffirait à écrire le bandeau
+    // reconstruit dans les données du client. Ici on enregistre un champ sans
+    // aucun rapport, sur une école historique.
+    const ecrit = sanitizeHomeContentInput({
+      ...HISTORIQUE,
+      hours: { note: 'Fermé le samedi', lines: [] },
+    });
+    // Ce qui part en base ne contient AUCUNE diapositive…
+    expect(ecrit.identity.heroSlides).toEqual([]);
+    // …alors que la lecture, elle, en montre bien une.
+    expect(heroSlidesEffectives(ecrit.identity)).toHaveLength(1);
+    // Et les trois champs historiques sont intacts : rien n'a été migré.
+    expect(ecrit.identity.heroImageUrl).toBe('/covers/hero.jpg');
+    expect(ecrit.identity.heroImageKicker).toBe('Depuis 1965');
+  });
+
+  it('une liste saisie fait foi : les champs historiques ne la complètent jamais', () => {
+    const { identity } = normalizeHomeContent({
+      identity: {
+        ...HISTORIQUE.identity,
+        heroSlides: [{ imageUrl: '/covers/a.jpg', titre: 'A', surtitre: 'un' }],
+      },
+    });
+    // L'ancienne image ne réapparaît pas derrière la nouvelle liste.
+    expect(heroSlidesEffectives(identity)).toEqual([
+      { imageUrl: '/covers/a.jpg', titre: 'A', surtitre: 'un' },
+    ]);
+  });
+
+  it('sans image et sans liste, il n’y a pas de bandeau du tout', () => {
+    const { identity } = normalizeHomeContent({ identity: { heroImageKicker: 'orphelin' } });
+    expect(heroSlidesEffectives(identity)).toEqual([]);
+  });
+});
+
+describe('home-content — heroSlides : la LECTURE tronque, elle ne lève pas', () => {
+  it('borne à MAX_HERO_SLIDES un blob déjà en base qui dépasse', () => {
+    const trop = Array.from({ length: 7 }, (_, i) => ({
+      imageUrl: `/covers/${i}.jpg`,
+      titre: `T${i}`,
+      surtitre: '',
+    }));
+    const { identity } = normalizeHomeContent({ identity: { heroSlides: trop } });
+    expect(identity.heroSlides).toHaveLength(MAX_HERO_SLIDES);
+    // L'ordre est significatif : la première reste la première (celle du mobile).
+    expect(identity.heroSlides[0].imageUrl).toBe('/covers/0.jpg');
+  });
+
+  it('écarte les diapositives sans image utilisable, y compris les URL dangereuses', () => {
+    const { identity } = normalizeHomeContent({
+      identity: {
+        heroSlides: [
+          { imageUrl: 'javascript:alert(1)', titre: 'XSS' },
+          { imageUrl: '', titre: 'vide' },
+          { imageUrl: '//evil.com/x.jpg', titre: 'proto-relative' },
+          { imageUrl: 'https://ok.example/x.jpg', titre: 'bonne' },
+        ],
+      },
+    });
+    expect(identity.heroSlides).toEqual([
+      { imageUrl: 'https://ok.example/x.jpg', titre: 'bonne', surtitre: '' },
+    ]);
+  });
+
+  it('⚠ écarte AVANT de borner : une entrée invalide ne coûte pas une diapositive valide', () => {
+    // Borner d'abord ne laisserait que 4 diapositives valides sur 5 possibles.
+    // C'est l'inverse du piège du bandeau front (une image qui échoue au
+    // CHARGEMENT ne doit pas faire glisser l'affichage) : ici on décide ce qui
+    // EXISTE, pas ce qu'on montre quand le réseau lâche.
+    const liste = [
+      { imageUrl: 'javascript:alert(1)', titre: 'invalide' },
+      ...Array.from({ length: 5 }, (_, i) => ({ imageUrl: `/covers/${i}.jpg`, titre: `T${i}` })),
+    ];
+    const { identity } = normalizeHomeContent({ identity: { heroSlides: liste } });
+    expect(identity.heroSlides).toHaveLength(MAX_HERO_SLIDES);
+    expect(identity.heroSlides.map((d) => d.titre)).toEqual(['T0', 'T1', 'T2', 'T3', 'T4']);
+  });
+});
+
+describe('home-content — heroSlides : l’ÉCRITURE refuse explicitement', () => {
+  const slide = (i: number) => ({ imageUrl: `/covers/${i}.jpg`, titre: `T${i}`, surtitre: '' });
+
+  it('accepte l’absence de bandeau — c’est le cas de toutes les écoles historiques', () => {
+    expect(raisonDeRefusDuBandeau({ identity: { heroImageUrl: '/covers/hero.jpg' } })).toBeNull();
+    expect(raisonDeRefusDuBandeau({ identity: {} })).toBeNull();
+    expect(raisonDeRefusDuBandeau(undefined)).toBeNull();
+  });
+
+  it('accepte une liste conforme, jusqu’à la limite incluse', () => {
+    const liste = Array.from({ length: MAX_HERO_SLIDES }, (_, i) => slide(i));
+    expect(raisonDeRefusDuBandeau({ identity: { heroSlides: liste } })).toBeNull();
+  });
+
+  it('refuse au-delà de la limite, en la NOMMANT et en disant ce qui a été reçu', () => {
+    const liste = Array.from({ length: 6 }, (_, i) => slide(i));
+    const raison = raisonDeRefusDuBandeau({ identity: { heroSlides: liste } });
+    expect(raison).toContain(String(MAX_HERO_SLIDES));
+    expect(raison).toContain('6');
+  });
+
+  it('refuse une diapositive sans image utilisable, en donnant son RANG', () => {
+    const raison = raisonDeRefusDuBandeau({
+      identity: { heroSlides: [slide(0), { imageUrl: 'javascript:alert(1)', titre: 'x' }] },
+    });
+    // Rang humain (2), pas l'indice (1) : le message s'adresse à qui saisit.
+    expect(raison).toContain('n° 2');
+  });
+
+  it('le refus ne garde AUCUN état entre deux appels', () => {
+    // class-validator réutilise une seule instance de contrainte : une raison
+    // mémorisée fuiterait d'une requête à l'autre sous charge.
+    const mauvais = { identity: { heroSlides: Array.from({ length: 9 }, (_, i) => slide(i)) } };
+    const bon = { identity: { heroSlides: [slide(0)] } };
+    const c = new BandeauAccueilValide();
+    expect(c.validate(mauvais)).toBe(false);
+    expect(c.validate(bon)).toBe(true);
+    expect(c.defaultMessage({ value: bon } as never)).toBe('Bandeau d’accueil invalide.');
   });
 });

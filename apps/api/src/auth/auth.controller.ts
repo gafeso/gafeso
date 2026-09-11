@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  Patch,
   Post,
   Res,
   UnauthorizedException,
@@ -19,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { FONCTIONS } from './functions';
+import { DECOUPAGE } from './decoupage-permissions';
 import { AuthService, TenantDb } from './auth.service';
 import { AuthzService } from './authz.service';
 import { TwoFactorService } from './two-factor.service';
@@ -27,6 +29,9 @@ import { CurrentUser } from './current-user.decorator';
 import { JwtPayload } from './jwt.strategy';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateAuthenticationPolicyDto } from './dto/authentication-policy.dto';
+import { FunctionsGuard } from './functions.guard';
+import { RequiresFunctions } from './functions.decorator';
 import {
   TwoFactorBackupCodesDto,
   TwoFactorDisableDto,
@@ -100,11 +105,20 @@ export class AuthController {
       select: { require2fa: true },
     });
     if (!settings?.require2fa) return false;
-    const [manageAccounts, manageEstablishment] = await Promise.all([
-      this.authz.hasFunction(db, userId, FONCTIONS.COMPTES_GERER),
-      this.authz.hasFunction(db, userId, FONCTIONS.ETABLISSEMENT_GERER),
-    ]);
-    return manageAccounts || manageEstablishment;
+    // ⚠ MÊME POPULATION QU'AVANT LE DÉCOUPAGE. La 2FA était exigée de qui
+    // portait `comptes.gerer` OU `etablissement.gerer`. Cette dernière a été
+    // éclatée en six : exiger la 2FA dès QU'UNE de ses héritières est portée
+    // couvre exactement les mêmes personnes — ni plus, ni moins. Ne réduire
+    // cette liste qu'aux « sensibles » relâcherait la 2FA pour des comptes qui
+    // l'avaient, sans que personne ne l'ait décidé.
+    const sensibles = [
+      FONCTIONS.COMPTES_GERER,
+      ...DECOUPAGE['etablissement.gerer'],
+    ];
+    const portees = await Promise.all(
+      sensibles.map((f) => this.authz.hasFunction(db, userId, f)),
+    );
+    return portees.some(Boolean);
   }
 
   /** Termine la connexion : pose le cookie de session + journalise le succès. */
@@ -497,4 +511,54 @@ export class AuthController {
     });
     return { disabled: true };
   }
+  /**
+   * Politique d'authentification de l'établissement — aujourd'hui la seule
+   * décision qu'elle porte est « la 2FA est-elle obligatoire ».
+   *
+   * ⚠ ELLE VIT DANS LE MODULE `auth`, ET NON DANS `tenancy`. Le réglage est
+   * stocké dans `tenant_settings`, donc `tenancy` aurait pu l'écrire — c'est
+   * exactement ce qu'il faisait, et c'est ce qui l'a mis derrière la permission
+   * des couleurs. L'idiome du dépôt est que chaque module écrit les champs
+   * qu'il POSSÈDE : les rappels écrivent les leurs, la politique de prêt les
+   * siens. Ce réglage est lu ici (`enrollmentRequired`), il s'écrit ici.
+   */
+  @Patch('policy')
+  @UseGuards(JwtAuthGuard, FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.SECURITE_AUTHENTIFICATION)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Politique d’authentification de l’établissement (2FA obligatoire)',
+  })
+  async updateAuthenticationPolicy(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateAuthenticationPolicyDto,
+    @ClientIp() ip?: string,
+  ) {
+    if (!tenant) {
+      throw new BadRequestException(
+        'Tenant non résolu : domaine inconnu ou école non provisionnée.',
+      );
+    }
+    await this.prisma.tenantSettings.upsert({
+      where: { tenantId: tenant.id },
+      update: { require2fa: dto.require2fa },
+      create: { tenantId: tenant.id, require2fa: dto.require2fa },
+    });
+    void this.audit.log({
+      tenantId: tenant.id,
+      actorId: user.sub,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: AUDIT_ACTIONS.TENANT_2FA_POLICY_UPDATE,
+      targetType: 'tenant',
+      targetId: tenant.id,
+      // La VALEUR, pas seulement le fait : savoir que la politique a bougé ne
+      // dit pas dans quel sens, et c'est le sens qui compte.
+      metadata: { require2fa: dto.require2fa },
+      ip,
+    });
+    return { require2fa: dto.require2fa };
+  }
+
 }

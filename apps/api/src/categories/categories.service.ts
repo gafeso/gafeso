@@ -5,6 +5,7 @@ import { SearchService } from '../search/search.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { DEFAULT_CATEGORIES } from './default-categories';
+import { foldCategoryName, normalizeCategoryName } from './category-name';
 
 /** Client Prisma lié au schéma d'un tenant (obtenu via PrismaService.forTenant). */
 export type TenantDb = PrismaClient;
@@ -28,13 +29,13 @@ export class CategoriesService {
    */
   async seedDefaults(db: TenantDb) {
     const existing = await db.category.findMany();
-    const existingFolded = new Set(existing.map((c) => fold(c.name)));
+    const existingFolded = new Set(existing.map((c) => foldCategoryName(c.name)));
 
     let created = 0;
     for (const label of DEFAULT_CATEGORIES) {
-      if (existingFolded.has(fold(label))) continue;
-      await db.category.create({ data: { name: normalize(label) } });
-      existingFolded.add(fold(label)); // protège aussi des doublons internes à la liste
+      if (existingFolded.has(foldCategoryName(label))) continue;
+      await db.category.create({ data: { name: normalizeCategoryName(label) } });
+      existingFolded.add(foldCategoryName(label)); // protège aussi des doublons internes à la liste
       created++;
     }
 
@@ -48,7 +49,7 @@ export class CategoriesService {
   }
 
   async create(db: TenantDb, dto: CreateCategoryDto) {
-    const name = normalize(dto.name);
+    const name = normalizeCategoryName(dto.name);
     const existing = await db.category.findUnique({ where: { name } });
     if (existing) {
       throw new ConflictException('Cette catégorie existe déjà.');
@@ -66,7 +67,7 @@ export class CategoriesService {
     const category = await this.require(db, id);
     if (!dto.name) return category;
 
-    const name = normalize(dto.name);
+    const name = normalizeCategoryName(dto.name);
     if (name === category.name) return category;
 
     const clash = await db.category.findUnique({ where: { name } });
@@ -114,21 +115,64 @@ export class CategoriesService {
     return { removed: true };
   }
 
+  /**
+   * Domaines ORPHELINS : valeurs portées par des notices sans ligne
+   * `categories` correspondante.
+   *
+   * `biblio_records.category` est comparée par chaîne au nom de la catégorie
+   * (choix assumé, voir `schema.prisma`). Une valeur sans ligne correspondante
+   * est un domaine fantôme : visible dans la constellation (facette alimentée
+   * par la notice), absent de l'écran de gestion, et hors d'atteinte du
+   * renommage comme de la suppression — les deux cherchent le nom exact d'une
+   * catégorie existante. Depuis `CatalogingService.resolveCategory`, plus
+   * aucune écriture n'en produit ; cette commande traite l'existant.
+   *
+   * ⚠ Par défaut elle LISTE et ne crée rien. Une commande de réparation qui
+   * déciderait à la place de la bibliothécaire reproduirait la faute qu'elle
+   * corrige : le vocabulaire des domaines lui appartient. La création se
+   * demande explicitement (`creer: true`), et rattacher à un domaine existant
+   * reste un renommage de notices qu'elle pilote.
+   */
+  async orphanCategories(db: TenantDb, slug: string, creer = false) {
+    const [categories, groupes] = await Promise.all([
+      db.category.findMany(),
+      db.biblioRecord.groupBy({
+        by: ['category'],
+        where: { category: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const connues = new Set(categories.map((c) => foldCategoryName(c.name)));
+
+    const orphelines = groupes
+      .filter((g) => g.category && !connues.has(foldCategoryName(g.category)))
+      .map((g) => ({ valeur: g.category as string, occurrences: g._count._all }))
+      .sort((a, b) => b.occurrences - a.occurrences || a.valeur.localeCompare(b.valeur));
+
+    if (!creer) {
+      this.logger.log(
+        `Domaines orphelins (${slug}) : ${orphelines.length} valeur(s) — rien créé (lecture seule).`,
+      );
+      return { slug, orphelines, creees: 0, lectureSeule: true };
+    }
+
+    // Création DEMANDÉE explicitement. Idempotente : une valeur déjà devenue
+    // connue entre-temps n'est pas recréée.
+    let creees = 0;
+    for (const { valeur } of orphelines) {
+      const name = normalizeCategoryName(valeur);
+      if (connues.has(foldCategoryName(name))) continue;
+      await db.category.create({ data: { name } });
+      connues.add(foldCategoryName(name));
+      creees++;
+    }
+    this.logger.log(`Domaines orphelins (${slug}) : ${creees} catégorie(s) créée(s) sur demande.`);
+    return { slug, orphelines, creees, lectureSeule: false };
+  }
+
   private async require(db: TenantDb, id: string): Promise<Category> {
     const category = await db.category.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Catégorie introuvable.');
     return category;
   }
-}
-
-/** Espaces superflus réduits, casse ignorée — la même valeur, peu importe qui la saisit. */
-function normalize(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-/** Clé de comparaison du seed : normalisée PUIS débarrassée des accents. */
-function fold(name: string): string {
-  return normalize(name)
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
 }

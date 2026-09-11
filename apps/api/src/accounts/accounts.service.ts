@@ -233,7 +233,7 @@ export class AccountsService {
           createdAt: true,
           activatedAt: true,
         },
-        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),

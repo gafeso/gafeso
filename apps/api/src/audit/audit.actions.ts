@@ -28,6 +28,12 @@ export const AUDIT_ACTIONS = {
   REMINDER_CONFIG_UPDATE: 'reminder.config.update',
   LOAN_RENEW_ONLINE: 'loan.renew.online',
   CIRCULATION_POLICY_UPDATE: 'circulation.policy.update',
+  // ⚠ POLITIQUE DE L'ÉCOLE, pas enrôlement d'un compte. Les trois actions
+  // `account.2fa.*` ci-dessous tracent ce qu'UN utilisateur fait de SA propre
+  // double authentification. Celle-ci trace le réglage qui l'IMPOSE à tous les
+  // comptes privilégiés de l'établissement — un autre métier, et un autre
+  // niveau de gravité : la désactiver retire la 2FA à tous d'un coup.
+  TENANT_2FA_POLICY_UPDATE: 'tenant.2fa_policy.update',
   TWO_FACTOR_ENABLE: 'account.2fa.enable',
   TWO_FACTOR_DISABLE: 'account.2fa.disable',
   TWO_FACTOR_BACKUP_REGEN: 'account.2fa.backup_regenerate',
@@ -65,6 +71,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   [AUDIT_ACTIONS.REMINDER_CONFIG_UPDATE]: 'Modification des notifications de circulation',
   [AUDIT_ACTIONS.LOAN_RENEW_ONLINE]: 'Renouvellement en ligne d’un prêt',
   [AUDIT_ACTIONS.CIRCULATION_POLICY_UPDATE]: 'Modification de la politique de circulation en ligne',
+  [AUDIT_ACTIONS.TENANT_2FA_POLICY_UPDATE]:
+    'Modification de la politique de double authentification de l’école',
   [AUDIT_ACTIONS.TWO_FACTOR_ENABLE]: 'Activation de la double authentification',
   [AUDIT_ACTIONS.TWO_FACTOR_DISABLE]: 'Désactivation de la double authentification',
   [AUDIT_ACTIONS.TWO_FACTOR_BACKUP_REGEN]: 'Régénération des codes de secours',

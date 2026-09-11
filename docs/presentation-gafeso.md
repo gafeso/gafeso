@@ -75,7 +75,7 @@ Le détail exhaustif est dans **[fonctionnalites.md](fonctionnalites.md)**.
                           └─┬────┬─┘
                  ┌──────────┘    └───────────┐
              ┌───▼────┐                  ┌───▼─────┐
-             │  web   │  Next.js 14      │  minio  │  fichiers/couvertures
+             │  web   │  Next.js 15      │  minio  │  fichiers/couvertures
              │ (SSR)  │  (vitrine, OPAC, └─────────┘
              └───┬────┘   back-office)
                  │ /api/* (interne)
@@ -99,7 +99,7 @@ Le détail exhaustif est dans **[fonctionnalites.md](fonctionnalites.md)**.
 
 | Couche | Technologie |
 |---|---|
-| Frontend | **Next.js 14** (App Router, SSR) + React 18 + Tailwind CSS |
+| Frontend | **Next.js 15** (App Router, SSR) + React 18 + Tailwind CSS |
 | Backend | **NestJS 10** (TypeScript), monolithe modulaire |
 | Base de données | **PostgreSQL 16**, multi-schéma (un schéma par école) |
 | ORM | **Prisma 5** |

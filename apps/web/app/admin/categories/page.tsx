@@ -61,10 +61,10 @@ export default function CategoriesPage() {
       const body = JSON.stringify({ name: form.name });
       if (form.id) {
         await api(`/categories/${form.id}`, { method: 'PATCH', body }, getToken());
-        setNotice(`Catégorie « ${form.name} » mise à jour.`);
+        setNotice(`Domaine « ${form.name} » mis à jour.`);
       } else {
         await api('/categories', { method: 'POST', body }, getToken());
-        setNotice(`Catégorie « ${form.name} » créée.`);
+        setNotice(`Domaine « ${form.name} » créé.`);
       }
       setForm(null);
       await load();
@@ -80,7 +80,7 @@ export default function CategoriesPage() {
     setError(null);
     try {
       await api(`/categories/${category.id}`, { method: 'DELETE' }, getToken());
-      setNotice(`Catégorie « ${category.name} » supprimée.`);
+      setNotice(`Domaine « ${category.name} » supprimé.`);
       setConfirmDelete(null);
       await load();
     } catch (err) {
@@ -92,7 +92,7 @@ export default function CategoriesPage() {
   if (myFunctions && !canManage) {
     return (
       <Alert tone="error">
-        Vous n’avez pas la permission de gérer les catégories (fonction
+        Vous n’avez pas la permission de gérer les domaines (fonction
         «&nbsp;catalogue.gerer&nbsp;»).
       </Alert>
     );
@@ -101,8 +101,8 @@ export default function CategoriesPage() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-3xl font-bold">Catégories</h1>
-        {!form && <Button onClick={startCreate}>Créer une catégorie</Button>}
+        <h1 className="font-serif text-3xl font-bold">Domaines</h1>
+        {!form && <Button onClick={startCreate}>Créer un domaine</Button>}
       </div>
       <p className="mt-1 text-sm text-muted">
         Les domaines proposés à la création d’une notice et regroupés sur la page
@@ -116,7 +116,7 @@ export default function CategoriesPage() {
       {form && (
         <Card className="mt-4">
           <h2 className="font-serif text-lg font-bold">
-            {form.id ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
+            {form.id ? 'Modifier le domaine' : 'Nouveau domaine'}
           </h2>
           <form onSubmit={save} className="mt-3 flex flex-wrap items-end gap-3">
             <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
@@ -142,7 +142,7 @@ export default function CategoriesPage() {
         {categories === null && <p className="text-sm text-muted">Chargement…</p>}
         {categories?.length === 0 && (
           <p className="text-sm text-muted">
-            Aucune catégorie. Créez-en une pour commencer à classer le catalogue.
+            Aucun domaine. Créez-en un pour commencer à classer le catalogue.
           </p>
         )}
         {categories?.map((category) => (

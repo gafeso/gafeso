@@ -37,6 +37,13 @@ import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { ClientIp } from '../audit/client-ip.decorator';
 import { CatalogingService, TenantDb } from './cataloging.service';
 import { recordToIso2709, recordToMarcxmlElement } from './marc-export';
+import {
+  ANCIEN_PREFIX_MARCXML,
+  MARCXCHANGE_NAMESPACE,
+  MARCXCHANGE_PREFIX,
+  messageAncienPrefixe,
+  versMarcxchange,
+} from './unimarc-xml';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
 import { CreateItemDto, UpdateItemDto } from './dto/item.dto';
@@ -83,7 +90,7 @@ export class CatalogingController {
   }
 
   @Post('records/import-marc')
-  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+  @RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Importer un fichier MARC (ISO 2709)',
@@ -124,8 +131,11 @@ export class CatalogingController {
   @ApiOperation({
     summary: 'Export MARC (UNIMARC) — notice, sélection ou catalogue complet',
     description:
-      'format=iso2709 (.mrc) ou marcxml (.xml). ids=a,b,c pour une sélection ' +
-      '(ou une notice) ; sans ids, tout le catalogue. Généré en streaming.',
+      'format=iso2709 (.mrc) ou marcxchange (.xml, ISO 25577, notices ' +
+      'déclarées format="UNIMARC"). ids=a,b,c pour une sélection ' +
+      '(ou une notice) ; sans ids, tout le catalogue. Généré en streaming. ' +
+      'L\'ancienne valeur « marcxml » est refusée : elle annonçait du MARC21 ' +
+      'alors que les notices sont en UNIMARC.',
   })
   async export(
     @CurrentTenant() tenant: ResolvedTenant | null,
@@ -135,16 +145,21 @@ export class CatalogingController {
   ) {
     const { db } = this.ctx(tenant);
     const idList = ids ? ids.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
-    const marcxml = format === 'marcxml';
+    // Même refus explicite que l'entrepôt OAI : l'ancienne valeur est nommée,
+    // son remplaçant aussi. Aucune donnée n'est servie sous un format faux.
+    if (format === ANCIEN_PREFIX_MARCXML) {
+      throw new BadRequestException(messageAncienPrefixe());
+    }
+    const marcxchange = format === MARCXCHANGE_PREFIX;
     const base = idList && idList.length === 1 ? `notice-${idList[0]}` : 'catalogue';
 
-    if (marcxml) {
+    if (marcxchange) {
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${base}.marcxml"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${base}.marcxchange.xml"`);
       res.write('<?xml version="1.0" encoding="UTF-8"?>\n');
-      res.write('<collection xmlns="http://www.loc.gov/MARC21/slim">\n');
+      res.write(`<collection xmlns="${MARCXCHANGE_NAMESPACE}">\n`);
       for await (const batch of this.cataloging.exportRecordsBatched(db, idList)) {
-        for (const rec of batch) res.write(recordToMarcxmlElement(rec) + '\n');
+        for (const rec of batch) res.write(versMarcxchange(recordToMarcxmlElement(rec), false) + '\n');
       }
       res.write('</collection>\n');
     } else {
@@ -157,7 +172,21 @@ export class CatalogingController {
     res.end();
   }
 
+  // ⚠ FUITE DE DONNÉES CORRIGÉE LE 11 SEPTEMBRE 2026. Ces trois routes de
+  // LECTURE ne déclaraient aucune fonction. Or `FunctionsGuard` rend `true`
+  // quand rien n'est exigé (functions.guard.ts) : le `@UseGuards` de classe
+  // les faisait PARAÎTRE gardées, et tout compte authentifié — un étudiant —
+  // lisait le registre professionnel entier, `marcData` et exemplaires
+  // compris, SANS passer par access-control : donc sans les règles de
+  // collection par classe et par abonnement, et sans `membersOnly`, que l'OPAC
+  // applique.
+  //
+  // `catalogue.gerer` et non une fonction de lecture nouvelle : c'est la
+  // population exacte qui lit ce registre aujourd'hui (Bibliothécaire,
+  // Administrateur). Créer `catalogue.voir` pour l'occasion ajouterait une
+  // fonction que personne ne porte — voir le compte rendu du lot.
   @Get('keywords')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({
     summary: 'Mots-clés du tenant (autocomplétion du champ tags)',
     description:
@@ -172,6 +201,7 @@ export class CatalogingController {
   }
 
   @Get('records')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Registre des notices (paginé, filtre par catégorie)' })
   async listRecords(
     @CurrentTenant() tenant: ResolvedTenant | null,
@@ -182,6 +212,7 @@ export class CatalogingController {
   }
 
   @Get('records/:id')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Détail d’une notice (avec exemplaires)' })
   async getRecord(
     @CurrentTenant() tenant: ResolvedTenant | null,

@@ -31,7 +31,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 @ApiTags('roles')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.ROLES_GERER)
+@RequiresFunctions(FONCTIONS.SECURITE_ROLES)
 @Controller('roles')
 export class RolesController {
   constructor(

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { Alert, Button, Card, Input, Select } from '@/components/ui';
@@ -17,7 +18,13 @@ export default function AdminAuthorsPage() {
   const { functions } = useMyFunctions();
   const canManage = functions?.includes('catalogue.gerer');
 
-  const [authors, setAuthors] = useState<AuthorRow[]>([]);
+  // ⚠ `null` TANT QU'ON NE SAIT PAS, jamais `[]`. Un tableau vide ne distingue
+  // pas « pas encore chargé » de « aucun auteur », et l'écran affirmait donc
+  // « Aucun auteur. » avant d'avoir la réponse — alors que le fichier
+  // d'autorités en contient 278. Mesuré le 10 septembre 2026 : vrai à
+  // l'instant du rendu, faux 250 ms plus tard. En local c'est un battement de
+  // cil ; sur le réseau d'un campus, ça se lit.
+  const [authors, setAuthors] = useState<AuthorRow[] | null>(null);
   const [q, setQ] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -117,7 +124,7 @@ export default function AdminAuthorsPage() {
               </tr>
             </thead>
             <tbody>
-              {authors.map((a) => (
+              {(authors ?? []).map((a) => (
                 <tr key={a.id} className="border-b border-line/60 align-top">
                   <td className="py-2 pr-3">
                     {renamingId === a.id ? (
@@ -137,7 +144,7 @@ export default function AdminAuthorsPage() {
                         <div className="min-w-[14rem]">
                           <Select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
                             <option value="">Choisir une fiche…</option>
-                            {authors
+                            {(authors ?? [])
                               .filter((o) => o.id !== a.id)
                               .map((o) => (
                                 <option key={o.id} value={o.id}>
@@ -185,7 +192,14 @@ export default function AdminAuthorsPage() {
                   </td>
                 </tr>
               ))}
-              {authors.length === 0 && (
+              {authors === null && (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-muted">
+                    {LIBELLES.commun.chargement}
+                  </td>
+                </tr>
+              )}
+              {authors !== null && authors.length === 0 && (
                 <tr>
                   <td colSpan={3} className="py-6 text-center text-muted">
                     Aucun auteur.

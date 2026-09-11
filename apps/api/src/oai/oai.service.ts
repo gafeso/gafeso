@@ -1,6 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { recordToMarcxmlElement } from '../cataloging/marc-export';
+import { lireChampsDeProfil } from '../cataloging/champs-de-profil';
+import {
+  ANCIEN_PREFIX_MARCXML,
+  MARCXCHANGE_NAMESPACE,
+  MARCXCHANGE_PREFIX,
+  MARCXCHANGE_SCHEMA_URL,
+  messageAncienPrefixe,
+  versMarcxchange,
+} from '../cataloging/unimarc-xml';
 import { oaiDatestamp, oaiEnvelope, oaiError, tag, xmlEscape } from './oai-xml';
 
 export type TenantDb = PrismaClient;
@@ -14,7 +23,7 @@ export interface OaiTenant {
 }
 
 const PAGE_SIZE = 100;
-const FORMATS = ['oai_dc', 'marcxml'];
+const FORMATS = ['oai_dc', MARCXCHANGE_PREFIX];
 
 /** Erreur de protocole OAI (rendue en <error code=…>). */
 class OaiProtocolError extends Error {
@@ -32,9 +41,10 @@ type OaiRecord = {
   publishYear: number | null;
   language: string;
   publisher: string | null;
-  publicationCity: string | null;
-  defenseUniversity: string | null;
-  defensePlace: string | null;
+  // ⚠ P3-3 : les trois champs de profil ne sont plus des colonnes lues mais des
+  // clés de `profileData`. Le type suit la LECTURE, pas la réponse — les trois
+  // valeurs continuent de sortir à plat dans le MarcXchange.
+  profileData: unknown;
   category: string | null;
   recordType: string;
   contributors: { name: string; role: string; position: number }[];
@@ -50,9 +60,10 @@ const RECORD_SELECT = {
   publishYear: true,
   language: true,
   publisher: true,
-  publicationCity: true,
-  defenseUniversity: true,
-  defensePlace: true,
+  // ⚠ P3-3 : les trois champs de profil viennent de `profileData`. Les
+  // colonnes existent encore (temps 1) mais ne sont plus LUES : c'est ce qui
+  // prouve que leur suppression sera sans effet sur l'entrepôt OAI.
+  profileData: true,
   category: true,
   recordType: true,
   contributors: { orderBy: { position: 'asc' as const }, select: { name: true, role: true, position: true } },
@@ -127,15 +138,17 @@ export class OaiService {
   private listMetadataFormats(tenant: OaiTenant, params: Record<string, string | undefined>, baseUrl: string, now: Date) {
     // identifier optionnel : la même liste s'applique à toutes les notices.
     this.rejectExtraArgs(params, ['identifier']);
+    // Le schéma est celui de la norme, chez son mainteneur — on ne sert pas sa
+    // copie : le schéma d'une norme appartient à la norme.
     const formats = `    <metadataFormat>
       <metadataPrefix>oai_dc</metadataPrefix>
       <schema>http://www.openarchives.org/OAI/2.0/oai_dc.xsd</schema>
       <metadataNamespace>http://www.openarchives.org/OAI/2.0/oai_dc/</metadataNamespace>
     </metadataFormat>
     <metadataFormat>
-      <metadataPrefix>marcxml</metadataPrefix>
-      <schema>http://www.loc.gov/standards/marcxml/schema/MARC21slim.xsd</schema>
-      <metadataNamespace>http://www.loc.gov/MARC21/slim</metadataNamespace>
+      <metadataPrefix>${MARCXCHANGE_PREFIX}</metadataPrefix>
+      <schema>${MARCXCHANGE_SCHEMA_URL}</schema>
+      <metadataNamespace>${MARCXCHANGE_NAMESPACE}</metadataNamespace>
     </metadataFormat>`;
     return oaiEnvelope(now, baseUrl, { verb: 'ListMetadataFormats', identifier: params.identifier }, `  <ListMetadataFormats>\n${formats}\n  </ListMetadataFormats>`);
   }
@@ -218,12 +231,17 @@ export class OaiService {
 
   private recordXml(r: OaiRecord, tenant: OaiTenant, prefix: string, indentedForGetRecord: boolean): string {
     const pad = indentedForGetRecord ? '  ' : '  ';
-    const meta = prefix === 'marcxml' ? this.marcxmlMetadata(r) : this.oaiDcMetadata(r, tenant);
+    const meta =
+      prefix === MARCXCHANGE_PREFIX ? this.marcxchangeMetadata(r) : this.oaiDcMetadata(r, tenant);
     return `${pad}  <record>\n    ${this.headerXml(r, tenant)}\n      <metadata>\n${meta}\n      </metadata>\n${pad}  </record>`;
   }
 
-  /** MARCXML — RÉUTILISE le mapping du bloc 1. JAMAIS d'exemplaire ni de fichier. */
-  private marcxmlMetadata(r: OaiRecord): string {
+  /**
+   * MarcXchange (ISO 25577) — RÉUTILISE le mapping du bloc 1. JAMAIS
+   * d'exemplaire ni de fichier. La notice DÉCLARE son dialecte
+   * (`format="UNIMARC"`) au lieu de le laisser deviner (invariant I4).
+   */
+  private marcxchangeMetadata(r: OaiRecord): string {
     const el = recordToMarcxmlElement({
       id: r.id,
       title: r.title,
@@ -232,16 +250,14 @@ export class OaiService {
       publishYear: r.publishYear,
       language: r.language,
       publisher: r.publisher,
-      publicationCity: r.publicationCity,
-      defenseUniversity: r.defenseUniversity,
-      defensePlace: r.defensePlace,
+      ...lireChampsDeProfil(r.profileData),
       category: r.category,
       recordType: r.recordType,
       contributors: r.contributors,
       keywords: r.keywords.map((k) => k.keyword.name),
       items: [], // OAI = métadonnées seules
     });
-    return el.replace('<record>', '<record xmlns="http://www.loc.gov/MARC21/slim">');
+    return versMarcxchange(el, true);
   }
 
   /** Dublin Core simple (oai_dc) — obligatoire du standard. */
@@ -275,8 +291,17 @@ export class OaiService {
   // ── Utilitaires ───────────────────────────────────────────────────────────
   private checkFormat(prefix: string | undefined) {
     if (!prefix) throw new OaiProtocolError('badArgument', 'metadataPrefix est requis.');
+    // L'ancien préfixe est REFUSÉ EN NOMMANT son remplaçant. Le retirer en
+    // silence laisserait un moissonneur en échec sans lui dire quoi demander ;
+    // le servir encore le laisserait lire du faux MARC21 (invariant I4).
+    if (prefix === ANCIEN_PREFIX_MARCXML) {
+      throw new OaiProtocolError('cannotDisseminateFormat', messageAncienPrefixe());
+    }
     if (!FORMATS.includes(prefix)) {
-      throw new OaiProtocolError('cannotDisseminateFormat', `Format « ${prefix} » non supporté (oai_dc, marcxml).`);
+      throw new OaiProtocolError(
+        'cannotDisseminateFormat',
+        `Format « ${prefix} » non supporté (oai_dc, ${MARCXCHANGE_PREFIX}).`,
+      );
     }
   }
 

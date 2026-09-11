@@ -383,12 +383,12 @@ export default function AdminRecordPage() {
               MARC
             </a>
             <a
-              href={`/api/cataloging/export?format=marcxml&ids=${id}`}
+              href={`/api/cataloging/export?format=marcxchange&ids=${id}`}
               download
               className="inline-flex items-center rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-line/40"
-              title="Exporter cette notice en MARCXML"
+              title="Exporter cette notice en MarcXchange (ISO 25577, UNIMARC)"
             >
-              MARCXML
+              MarcXchange
             </a>
             <a
               href={`/api/cataloging/labels?recordIds=${id}`}
@@ -449,19 +449,19 @@ export default function AdminRecordPage() {
               />
             </label>
             <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Catégorie (domaine)
+              Domaine
               <Select
                 value={recordForm.category}
                 onChange={(e) => setRecordForm({ ...recordForm, category: e.target.value })}
               >
-                <option value="">Sans catégorie</option>
+                <option value="">Sans domaine</option>
                 {/* Notice antérieure à la liste fermée de catégories (créée avant
                     /admin/categories) : affichée telle quelle plutôt que de
                     paraître effacée, sans pour autant l'ajouter à la liste. */}
                 {recordForm.category &&
                   !categories.some((c) => c.name === recordForm.category) && (
                     <option value={recordForm.category} className="capitalize">
-                      {recordForm.category} (à créer dans Catégories si besoin)
+                      {recordForm.category} (à créer dans Domaines si besoin)
                     </option>
                   )}
                 {categories.map((c) => (

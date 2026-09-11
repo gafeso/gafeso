@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="img" aria-label="Salle de lecture">
+  <!-- Panneau de DÉMONSTRATION, charte Gafeso. Composition en arcades : la
+       travée d'une salle de lecture. L'intérêt visuel est dans la moitié
+       HAUTE, là où le voile du bandeau s'éclaircit à 0,22 ; le bas reste sobre
+       car il passe sous un voile à 0,70. -->
+  <defs>
+    <linearGradient id="ciel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E7D57"/>
+      <stop offset="1" stop-color="#0E3F28"/>
+    </linearGradient>
+    <linearGradient id="lueur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E07A2B" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#E07A2B" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#ciel)"/>
+  <g fill="none" stroke="#FBF6EA" stroke-opacity=".26" stroke-width="6">
+    <path d="M170 640V330a130 130 0 0 1 260 0v310"/>
+    <path d="M530 640V300a130 130 0 0 1 260 0v340"/>
+    <path d="M890 640V300a130 130 0 0 1 260 0v340"/>
+    <path d="M1250 640V330a130 130 0 0 1 260 0v310"/>
+  </g>
+  <g fill="url(#lueur)">
+    <rect x="590" y="230" width="140" height="330" rx="70"/>
+    <rect x="950" y="230" width="140" height="330" rx="70"/>
+  </g>
+  <g fill="#FBF6EA" fill-opacity=".14">
+    <rect x="180" y="690" width="1240" height="10" rx="5"/>
+    <rect x="300" y="726" width="1000" height="8" rx="4"/>
+  </g>
+</svg>

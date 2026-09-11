@@ -2,16 +2,26 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getUser } from '@/lib/session';
+import { useMyFunctions } from '@/lib/functions';
+import { premiereEntreeAccessible } from '@/lib/navigation';
 
-// Redirige vers la première section accessible selon le rôle.
+/**
+ * Porte d'entrée de l'espace professionnel : redirige vers la première
+ * section réellement accessible.
+ *
+ * Déduite de la navigation (même filtre, mêmes fonctions) plutôt que d'une
+ * liste de rôles écrite à part : les deux ne peuvent plus diverger. L'ancienne
+ * version envoyait un MANAGER sur /admin/comptes et un LIBRARIAN sur
+ * /admin/catalogue — deux vérités de plus à tenir à jour.
+ */
 export default function AdminHome() {
   const router = useRouter();
+  const { functions } = useMyFunctions();
+
   useEffect(() => {
-    const role = getUser()?.role;
-    if (role === 'MANAGER' || role === 'ADMIN') router.replace('/admin/comptes');
-    else if (role === 'LIBRARIAN') router.replace('/admin/catalogue');
-    else router.replace('/');
-  }, [router]);
+    if (!functions) return;
+    router.replace(premiereEntreeAccessible(functions) ?? '/');
+  }, [functions, router]);
+
   return null;
 }

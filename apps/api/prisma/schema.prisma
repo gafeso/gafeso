@@ -45,6 +45,20 @@ model Domain {
 model TenantSettings {
   id                         String  @id @default(uuid())
   tenantId                   String  @unique @map("tenant_id")
+  /// Modules DÉSACTIVÉS pour cet établissement — P4-1.
+  ///
+  /// ⚠ ON STOCKE LES DÉSACTIVATIONS, PAS LES ACTIVATIONS. Absent = actif. La
+  /// décision 8 du brief (« tout module est actif par défaut, une migration ne
+  /// retire rien à personne ») devient vraie PAR CONSTRUCTION : une école
+  /// existante n'a aucune ligne à écrire, et un module ajouté demain est actif
+  /// partout sans migration. L'encodage inverse aurait exigé d'énumérer, pour
+  /// chaque école, la liste des modules connus au moment de la migration — et
+  /// un module ajouté ensuite serait né éteint chez tout le monde.
+  ///
+  /// ⚠ ET C'EST BIEN « PAR ÉTABLISSEMENT » (décision 7) malgré le schéma
+  /// `public` : cette table est clé par `tenant_id`. Elle évite au passage le
+  /// piège du `LIKE INCLUDING ALL` — il n'y a pas de table tenant à rattraper.
+  modulesDesactives          Json    @default("[]") @map("modules_desactives")
   logoUrl                    String? @map("logo_url")
   primaryColor               String  @default("#0F2B46") @map("primary_color")
   secondaryColor             String  @default("#D97B2B") @map("secondary_color")
@@ -502,9 +516,52 @@ model Category {
 }
 
 model BiblioRecord {
+  // ⚠ IDENTIFIANT IMMUABLE — voir docs/architecture-notice.md. Cet uuid est le
+  // `docId` inscrit dans les licences hors-ligne SIGNÉES déployées sur les
+  // téléphones : le changer invaliderait des licences déjà émises, hors de
+  // portée du serveur. Aucune phase d'architecture ne le régénère, ne le
+  // renumérote, ni ne le remplace par un identifiant « métier ».
   id                String              @id @default(uuid())
-  marcData          Json                @map("marc_data")
+  // Métadonnées natives (couche 3) : le MARC d'origine, conservé BRUT, tel
+  // qu'il est arrivé par import. NULL pour une notice saisie dans Gafeso —
+  // elle n'a jamais eu de source MARC, et `{ fields: [] }` la faisait passer
+  // pour une notice MARC vide. Ce n'est PAS ce que lit l'application : voir
+  // `marcFormat` et docs/architecture-notice.md.
+  marcData          Json?               @map("marc_data")
+  // Format NATIF de la notice — d'où viennent ses métadonnées, pas comment on
+  // les réexpose. `GAFESO` = notice Gafeso, le modèle plat propriétaire décrit
+  // par les colonnes ci-dessous ; MARC21/UNIMARC = notice importée, dont
+  // `marcData` garde l'original.
   marcFormat        MarcFormat          @default(UNIMARC) @map("marc_format")
+  // Profil de description (couche 2) : quelles cases la notice a le droit de
+  // remplir et selon quel écran de saisie. `bibliographique` (fonds classique)
+  // ou `academique` (thèses, mémoires, rapports) — valeurs dans
+  // cataloging/description-profiles.ts. String et NON enum Postgres, même
+  // idiome que `recordType` : extensible sans migration, et le sync-schema
+  // tenant ne rattrape pas les colonnes enum (tenant-schema.ts,
+  // buildAddMissingColumnsStatements). Ne pilote encore AUCUN comportement —
+  // posé maintenant pour ne pas migrer deux fois la table des notices.
+  profile           String              @default("bibliographique")
+  // Champs PROPRES au profil (couche 2) — P3-3, temps 1.
+  //
+  // ⚠ POURQUOI UNE COLONNE JSON ET NON DES COLONNES. L'invariant I2 dit que le
+  // noyau ne grossit jamais. Chaque champ de profil ajouté en colonne le fait
+  // grossir, et coûte une migration multi-établissements. Ici, un profil
+  // nouveau (`archives`, `iconographique`) n'en coûte aucune.
+  //
+  // ⚠ CE QU'ELLE NE CHANGE PAS. Sortir un champ du noyau ne le retire PAS de
+  // la recherche : `defenseUniversity` reste un attribut cherchable pondéré
+  // (SEARCHABLE_ATTRIBUTES), et le document d'indexation continue de le porter
+  // AU PREMIER NIVEAU, avec la même valeur. C'est ce qui rend la réindexation
+  // NON DUE — mesuré avant le lot, pas supposé.
+  //
+  // ⚠ TEMPS 1 D'UN LOT EN DEUX TEMPS. Les trois colonnes
+  // (`publication_city`, `defense_university`, `defense_place`) RESTENT, et les
+  // écritures alimentent les deux endroits. Les lectures passent par ici. Le
+  // temps 2 retirera les colonnes — et lui seul est irréversible, ce qui est la
+  // raison du découpage : 61 points de code à reprendre, un consommateur
+  // manqué doit pouvoir être rattrapé.
+  profileData       Json                @default("{}") @map("profile_data")
   recordType        String              @map("record_type")
   title             String
   // Complément / sous-titre (cahier des charges fiche de saisie §2.1). Affiché
@@ -582,7 +639,12 @@ model RecordContributor {
   // RESTRICT → un auteur rattaché à des œuvres ne peut pas être supprimé.
   authorId String?      @map("author_id")
   record   BiblioRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
-  author   Author?      @relation(fields: [authorId], references: [id])
+  // onDelete EXPLICITE. Sans lui, Prisma déduit `SetNull` pour une relation
+  // optionnelle — or l'historique de migrations, le rattrapage tenant
+  // (TENANT_FOREIGN_KEYS) et le commentaire ci-dessus disent tous RESTRICT.
+  // Trois sources sur quatre disaient la même chose ; celle que lit un
+  // développeur était la quatrième. Écrire la règle ici la rend vraie partout.
+  author   Author?      @relation(fields: [authorId], references: [id], onDelete: Restrict)
 
   @@index([recordId])
   @@index([authorId])
@@ -697,7 +759,12 @@ model OfflineLicense {
   // « la » licence n'en révoquait qu'une, les autres restaient actives et le
   // blob restait téléchargeable. L'administrateur croyait l'accès coupé.
   // Vérifié en conditions réelles : 7 licences pour un même document.
-  @@unique([userId, deviceId, recordId])
+  // `map:` fige le nom RÉELLEMENT déployé. Prisma nommerait cet index
+  // `..._key` ; l'historique de migrations et `buildUniqueIndexStatements`
+  // (rattrapage tenant) le créent en `..._idx`. On aligne le modèle sur ce qui
+  // existe plutôt que de renommer un index vivant dans chaque schéma — un
+  // renommage cosmétique qui désynchroniserait le rattrapage tenant.
+  @@unique([userId, deviceId, recordId], map: "offline_licenses_user_id_device_id_record_id_idx")
   @@index([userId])
   @@index([deviceId])
   @@index([recordId])
@@ -721,9 +788,35 @@ model Item {
   @@map("items")
 }
 
+// Format NATIF d'une notice (colonne `biblio_records.marc_format`).
+//
+// GAFESO n'est pas un dialecte MARC : c'est la « notice Gafeso », le modèle
+// plat propriétaire de l'application (voir docs/architecture-notice.md). Une
+// notice saisie dans Gafeso n'a jamais eu de MARC ; la déclarer UNIMARC avec
+// un `marcData` vide était une affirmation fausse portée par le schéma.
+// Le nom de la colonne reste `marc_format` pour l'instant (renommage en
+// `source_format` au backlog) — la valeur, elle, dit maintenant la vérité.
+// Formats de DESCRIPTION, pas seulement MARC — malgré le nom du type, qui
+// attend son renommage (`DescriptionFormat`, au backlog : il touche chaque
+// schéma tenant).
+//
+// ⚠ C'est ce vocabulaire qui rendait la couche 3 incomplète : il ne savait
+// NOMMER que du MARC. Une description Dublin Core pouvait être stockée dans
+// `marcData` sans pouvoir être déclarée — ce qui vide I3 de son sens, puisque
+// « ce qui arrive dans un format y reste » suppose de pouvoir dire lequel.
+//
+// GAFESO         : décrite nativement dans Gafeso, aucune source externe.
+// MARC21/UNIMARC : reçue par import ou moissonnage MARC.
+// DUBLIN_CORE    : reçue en Dublin Core. ⚠ Aucun chemin ne la PRODUIT encore —
+//   le client de moissonnage OAI est en P7. Posée maintenant parce qu'étendre ce
+//   type est une opération MULTI-ÉTABLISSEMENTS (type par schéma, voir la
+//   migration) : la poser le jour où le besoin arrive coûterait le même
+//   balayage, en urgence. C'est un vocabulaire, pas une commande inerte.
 enum MarcFormat {
   MARC21
   UNIMARC
+  GAFESO
+  DUBLIN_CORE
 }
 
 enum ItemStatus {
@@ -846,9 +939,27 @@ enum HoldStatus {
 
 // ── Patrons ──
 
+// Un ADHÉRENT est une PERSONNE inscrite à la bibliothèque, pas un compte
+// applicatif. Une carte se délivre à un lecteur sans adresse e-mail, à un
+// visiteur extérieur, à un élève trop jeune pour un compte — exiger un compte
+// pour porter un nom reviendrait à exiger une identité numérique pour emprunter
+// un livre.
+//
+// D'où `firstName` / `lastName` PORTÉS ICI, et non seulement sur le compte lié.
+// NULLABLES : les cartes déjà créées n'en ont pas, et la contrainte se pose
+// dans le DTO (un nom OU un compte lié), pas dans la colonne.
+//
+// ⚠ QUAND UN COMPTE EST LIÉ, C'EST LE NOM DE L'ADHÉRENT QUI FAIT FOI, et la
+// raison n'est pas esthétique : corriger le nom d'un COMPTE exige
+// `comptes.gerer`, que seul l'Administrateur détient. Si le compte faisait foi,
+// un nom mal orthographié serait incorrigible par la bibliothécaire, qui porte
+// `adherents.gerer`. Le nom est recopié depuis le compte au moment du lien,
+// puis il lui appartient.
 model Patron {
   id               String     @id @default(uuid())
   userId           String?    @unique @map("user_id")
+  firstName        String?    @map("first_name")
+  lastName         String?    @map("last_name")
   barcode          String     @unique
   category         String
   registrationDate DateTime   @default(now()) @map("registration_date")

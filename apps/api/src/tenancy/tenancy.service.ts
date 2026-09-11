@@ -111,7 +111,6 @@ export class TenancyService {
       ...(themeTokens !== undefined && { themeTokens }),
       ...(dto.latticeEnabled !== undefined && { latticeEnabled: dto.latticeEnabled }),
       ...(homepageContent !== undefined && { homepageContent }),
-      ...(dto.require2fa !== undefined && { require2fa: dto.require2fa }),
     };
     return this.prisma.tenantSettings.upsert({
       where: { tenantId },

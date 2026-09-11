@@ -35,7 +35,12 @@ export class OpacSearchDto {
   @IsInt()
   year?: number;
 
-  @ApiPropertyOptional({ description: 'Facette type de document (book...)' })
+  @ApiPropertyOptional({
+    description:
+      'Facette type de document. PLUSIEURS valeurs séparées par une virgule : ' +
+      '« book,these ». Forme retenue avec la session frontend — plus courte et ' +
+      'plus lisible dans une URL partagée qu’un paramètre répété.',
+  })
   @IsOptional()
   @IsString()
   recordType?: string;

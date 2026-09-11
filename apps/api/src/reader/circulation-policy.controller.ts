@@ -29,7 +29,7 @@ import { UpdateCirculationPolicyDto } from './dto/update-circulation-policy.dto'
 @ApiTags('circulation-policy')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+@RequiresFunctions(FONCTIONS.ETABLISSEMENT_REGLES)
 @Controller('circulation-policy')
 export class CirculationPolicyController {
   constructor(

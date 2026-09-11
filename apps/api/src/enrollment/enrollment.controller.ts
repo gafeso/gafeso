@@ -28,7 +28,7 @@ import {
 @ApiTags('enrollment')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.CLASSES_GERER)
+@RequiresFunctions(FONCTIONS.LECTEURS_GERER)
 @Controller('enrollment')
 export class EnrollmentController {
   constructor(

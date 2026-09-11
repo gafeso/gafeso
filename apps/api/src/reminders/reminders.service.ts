@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../accounts/mail/mail.service';
+import { ModulesService } from '../modules/modules.service';
 import {
   DEFAULT_REMINDER_TEMPLATES,
   formatDueDate,
@@ -78,6 +79,7 @@ export class RemindersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly modules: ModulesService,
   ) {}
 
   // ── Configuration par établissement ──────────────────────────────────────
@@ -87,7 +89,9 @@ export class RemindersService {
     const s = await this.prisma.tenantSettings.findUnique({ where: { tenantId } });
     const templates = resolveTemplates(s?.reminderTemplates ?? null);
     return {
-      enabled: s?.remindersEnabled ?? false,
+      // L'état vient du registre : l'écran des rappels affiche ce qui est vrai,
+      // pas une seconde source qui pourrait en différer.
+      enabled: await this.modules.estActif(tenantId, 'rappels'),
       daysBefore: s?.reminderDaysBefore ?? 2,
       overdueRepeatDays: s?.overdueRepeatDays ?? 7,
       templates,
@@ -117,7 +121,6 @@ export class RemindersService {
       });
     }
     const data = {
-      ...(dto.enabled !== undefined && { remindersEnabled: dto.enabled }),
       ...(dto.daysBefore !== undefined && { reminderDaysBefore: dto.daysBefore }),
       ...(dto.overdueRepeatDays !== undefined && { overdueRepeatDays: dto.overdueRepeatDays }),
       ...(reminderTemplates !== undefined && {
@@ -151,7 +154,7 @@ export class RemindersService {
       this.prisma.reminderLog.count({ where }),
       this.prisma.reminderLog.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         select: {
@@ -222,7 +225,11 @@ export class RemindersService {
       include: { settings: true },
     });
     for (const tenant of tenants) {
-      if (!tenant.settings?.remindersEnabled) continue;
+      // ⚠ P4-1 : LE REGISTRE, plus `remindersEnabled`. Deux endroits où l'on
+      // éteint la même chose est la faute que ce lot vient supprimer : après
+      // l'absorption, l'ancien interrupteur n'est plus un chemin — ni en
+      // lecture ici, ni en écriture dans le DTO.
+      if (!(await this.modules.estActif(tenant.id, 'rappels'))) continue;
       summary.tenants += 1;
       try {
         const r = await this.processTenant(tenant.id, tenant.slug, tenant.settings, asOf);
@@ -242,9 +249,16 @@ export class RemindersService {
   }
 
   /**
-   * Déclenche les rappels pour UN tenant, quel que soit l'état de la bascule
-   * `remindersEnabled` (action admin explicite « envoyer maintenant » / test).
-   * Le planificateur, lui, ne traite que les tenants activés.
+   * Déclenche les rappels pour UN tenant, quel que soit l'état du module
+   * `rappels` (action admin explicite « envoyer maintenant » / test). Le
+   * planificateur, lui, ne traite que les établissements dont le module est
+   * actif.
+   *
+   * ⚠ CE CONTOURNEMENT N'EST ACCEPTABLE QUE PARCE QUE SA ROUTE EST GARDÉE.
+   * Si le module est éteint, l'appel doit être refusé AVANT d'arriver ici — par
+   * le garde de module (P4-3), qui nomme le module inactif. Sans ce garde, cette
+   * méthode serait une porte ouverte : « envoyer maintenant » enverrait des
+   * courriels au nom d'un module que l'établissement a éteint.
    */
   async runForTenant(tenantId: string, slug: string, asOf: Date = new Date()) {
     const settings = await this.prisma.tenantSettings.findUnique({ where: { tenantId } });

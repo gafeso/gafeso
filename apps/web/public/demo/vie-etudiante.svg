@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="img" aria-label="Vie étudiante">
+  <!-- Panneau de DÉMONSTRATION, charte Gafeso. Motif de constellation, écho de
+       la section « Constellation des savoirs » de la page d'accueil. -->
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#2E7D57"/>
+      <stop offset="1" stop-color="#08301D"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#halo)"/>
+  <g stroke="#FBF6EA" stroke-opacity=".22" stroke-width="2">
+    <path d="M800 340 L470 250M800 340 L1130 250M800 340 L560 520M800 340 L1040 520M800 340 L800 610"/>
+    <path d="M470 250 L560 520M1130 250 L1040 520M560 520 L800 610M1040 520 L800 610"/>
+  </g>
+  <g fill="#E07A2B">
+    <circle cx="470" cy="250" r="26"/><circle cx="1130" cy="250" r="26"/>
+    <circle cx="560" cy="520" r="22"/><circle cx="1040" cy="520" r="22"/>
+    <circle cx="800" cy="610" r="20"/>
+  </g>
+  <circle cx="800" cy="340" r="54" fill="#FBF6EA"/>
+  <circle cx="800" cy="340" r="54" fill="none" stroke="#E07A2B" stroke-width="6"/>
+  <g fill="#FBF6EA" fill-opacity=".5">
+    <circle cx="250" cy="170" r="4"/><circle cx="1380" cy="200" r="5"/>
+    <circle cx="1460" cy="430" r="4"/><circle cx="180" cy="470" r="5"/>
+    <circle cx="640" cy="120" r="4"/><circle cx="980" cy="140" r="5"/>
+  </g>
+</svg>

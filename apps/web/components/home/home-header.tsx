@@ -40,9 +40,19 @@ export function HomeHeader({
     <header className={styles.header}>
       <div className={`${styles.wrap} ${styles.navRow}`}>
         <a href="#top" className={styles.brand}>
-          <div className={styles.brandMark}>
-            {logoUrl ? <img src={logoUrl} alt={acronym} /> : brandMark || acronym.slice(0, 2)}
-          </div>
+          {/* Trois cas, jamais un aplat vide : le logo de l'établissement,
+              à défaut son sigle, à défaut la maison-livre de Gafeso. */}
+          {logoUrl ? (
+            <div className={styles.brandMark}>
+              <img src={logoUrl} alt={acronym} />
+            </div>
+          ) : brandMark || acronym ? (
+            <div className={styles.brandMark}>{brandMark || acronym.slice(0, 2)}</div>
+          ) : (
+            <div className={`${styles.brandMark} ${styles.brandMarkGafeso}`}>
+              <img src="/marque/gafeso_icone_simplifiee.svg" alt="Gafeso" />
+            </div>
+          )}
           <div className={styles.brandText}>
             {acronym && <div className={styles.top}>{acronym}</div>}
             {subtitle && <div className={styles.sub}>{subtitle}</div>}

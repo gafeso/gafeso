@@ -37,6 +37,10 @@ export const EXEMPLE_HOME_CONTENT: HomeContent = {
     heroImageUrl: null,
     heroImageKicker: 'ACCUEIL — REZ-DE-CHAUSSÉE',
     heroImageCaption: 'Comptoir d’accueil',
+    // Le seed reste sur les trois champs historiques : c'est le cas que la
+    // compatibilité ascendante doit couvrir, et l'exemple sert justement de
+    // témoin d'une école configurée « à l'ancienne ».
+    heroSlides: [],
   },
   stats: [
     { value: '400', label: 'Places · grande salle de lecture' },

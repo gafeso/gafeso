@@ -33,7 +33,7 @@ const EMPTY_FILTERS = { actor: '', action: '', from: '', to: '' };
 
 export default function JournalPage() {
   const { functions } = useMyFunctions();
-  const canView = functions?.includes('etablissement.gerer');
+  const canView = functions?.includes('securite.audit');
 
   const [actions, setActions] = useState<ActionOption[]>([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);

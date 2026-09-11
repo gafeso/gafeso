@@ -49,6 +49,82 @@ const NODE_VARS = ['var(--highlight)', 'var(--accent)', 'var(--accent-soft)', 'v
 function iconFor(category: string): string {
   return ICONS[category.toLowerCase()] ?? ICONS.book;
 }
+
+/**
+ * Vedette de catégorie mise en forme pour l'affichage : SEULE L'INITIALE.
+ *
+ * Ces libellés sont des vedettes Dewey, stockées volontairement EN MINUSCULES
+ * (`CategoriesService.normalize` applique `.toLowerCase()` — c'est la clé qui
+ * empêche « Droit » et « droit » de coexister). On ne peut donc pas les rendre
+ * bruts : un titre de rubrique tout en minuscules.
+ *
+ * Mais un `text-transform: capitalize` capitalise CHAQUE MOT, ce qui produisait
+ * « Histoire Et Disciplines Auxiliaires » et « Agronomie, Agriculture Et
+ * Activités Connexes ». En français, une vedette porte une majuscule initiale
+ * et rien d'autre : les mots-outils restent en minuscules.
+ *
+ * Fait en JS et non en CSS parce que les deux rendus doivent être IDENTIQUES :
+ * `::first-letter` ne s'applique pas au texte SVG de la carte des savoirs.
+ */
+function vedetteAffichable(category: string): string {
+  if (!category) return category;
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+/**
+ * Découpe une vedette pour qu'elle TIENNE dans son nœud : deux lignes au plus,
+ * ellipse au-delà.
+ *
+ * Sans cela, un libellé long (« Agronomie, agriculture et activités
+ * connexes ») sortait de sa pastille et venait se superposer à ses voisines —
+ * un texte SVG ne se replie ni ne se tronque tout seul. Le nom complet reste
+ * porté par l'`aria-label` du lien et par un `<title>`, donc rien n'est perdu
+ * pour qui survole ou écoute la page.
+ *
+ * Le budget de caractères suit le rayon du nœud, qui varie avec le nombre de
+ * domaines (voir nodeRadiusCap) : une constellation dense a des pastilles
+ * plus petites, donc des étiquettes plus courtes.
+ */
+const LARGEUR_CARACTERE = 8.2; // moyenne observée à fontSize 16, police du thème
+
+export function lignesEtiquette(texte: string, rayon: number): string[] {
+  const max = Math.max(7, Math.floor((rayon * 1.7) / LARGEUR_CARACTERE));
+  if (!texte) return [];
+  if (texte.length <= max) return [texte];
+
+  const mots = texte.split(' ').filter(Boolean);
+  const lignes: string[] = [];
+  let courante = '';
+  let i = 0;
+
+  while (i < mots.length && lignes.length < 2) {
+    const essai = courante ? `${courante} ${mots[i]}` : mots[i];
+    // `!courante` : un mot seul plus long que le budget est accepté ici puis
+    // coupé plus bas — sinon la boucle tournerait sans jamais avancer.
+    if (essai.length <= max || !courante) {
+      courante = essai;
+      i += 1;
+    } else {
+      lignes.push(courante);
+      courante = '';
+    }
+  }
+  if (courante && lignes.length < 2) {
+    lignes.push(courante);
+    courante = '';
+  }
+
+  // Des mots restent-ils sur le carreau ? Alors la dernière ligne doit le dire.
+  const tronque = i < mots.length || courante !== '';
+  const couper = (ligne: string) => `${ligne.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+
+  const sortie = lignes.map((ligne) => (ligne.length > max ? couper(ligne) : ligne));
+  if (tronque && sortie.length > 0) {
+    const dernier = sortie.length - 1;
+    if (!sortie[dernier].endsWith('…')) sortie[dernier] = couper(sortie[dernier]);
+  }
+  return sortie;
+}
+
 function colorFor(index: number): string {
   return NODE_VARS[index % NODE_VARS.length];
 }
@@ -58,15 +134,26 @@ function makeStars(count: number) {
   const out: { x: number; y: number; r: number; o: number }[] = [];
   for (let i = 0; i < count; i++) {
     const h = (i * 2654435761) % 4294967296;
+    // ⚠ `>>>` ET NON `>>`. Le décalage SIGNÉ de JavaScript convertit d'abord en
+    // entier 32 bits signé : au-delà de 2³¹, `h >> 20` rend un NÉGATIF, et le
+    // reste `%` conserve le signe du dividende. On obtenait alors
+    // `0.6 + (-9)/12 = -0.15` — un rayon négatif, refusé par SVG, qui a rempli
+    // la console d'erreurs pendant des jours sur la page d'accueil PUBLIQUE.
+    // Les valeurs observées, -0,15 et -0,0667, sont exactement -9/12 et -8/12.
+    // Le décalage non signé garde h dans les entiers positifs, ce que ce hachage
+    // a toujours supposé.
     out.push({
       x: (h % 1000) * 0.8,
-      y: ((h >> 10) % 1000) * 0.8,
-      r: 0.6 + ((h >> 20) % 10) / 12,
-      o: 0.15 + ((h >> 24) % 10) / 25,
+      y: ((h >>> 10) % 1000) * 0.8,
+      r: 0.6 + ((h >>> 20) % 10) / 12,
+      o: 0.15 + ((h >>> 24) % 10) / 25,
     });
   }
   return out;
 }
+
+/** Exposé pour le test : un décor ne doit pas produire de géométrie invalide. */
+export const ETOILES_POUR_TEST = () => makeStars(70);
 
 const STARS = makeStars(70);
 const CENTER = 400;
@@ -106,7 +193,7 @@ function DomainGrid({ domains, always }: { domains: Domain[]; always?: boolean }
           <span className={styles.disc} style={{ borderColor: colorFor(i) }} aria-hidden="true">
             {domain.count}
           </span>
-          <span className={styles.dname}>{domain.category}</span>
+          <span className={styles.dname}>{vedetteAffichable(domain.category)}</span>
           <span className={styles.dcount} aria-hidden="true">
             {domain.count} ressource{domain.count > 1 ? 's' : ''}
           </span>
@@ -303,12 +390,40 @@ export function ConstellationSection({
                         strokeLinejoin="round"
                         style={{ stroke: color }}
                       />
-                      <text x={x} y={y + r - 34} textAnchor="middle" fontSize="16" fontWeight="700" style={{ fill: 'var(--surface)', textTransform: 'capitalize' }}>
-                        {domain.category}
-                      </text>
-                      <text x={x} y={y + r - 16} textAnchor="middle" fontSize="12" style={{ fill: color }}>
-                        {domain.count} ressource{domain.count > 1 ? 's' : ''}
-                      </text>
+                      <title>{label(domain.category, domain.count)}</title>
+                      {(() => {
+                        const lignes = lignesEtiquette(vedetteAffichable(domain.category), r);
+                        // La pile (nom + compte) est remontée d'une ligne quand
+                        // il y en a deux, pour rester dans la pastille.
+                        const base = y + r - 16 - (lignes.length - 1) * 17;
+                        return (
+                          <>
+                            <text
+                              x={x}
+                              y={base - 18}
+                              textAnchor="middle"
+                              fontSize="16"
+                              fontWeight="700"
+                              style={{ fill: 'var(--surface)' }}
+                            >
+                              {lignes.map((ligne, n) => (
+                                <tspan key={n} x={x} dy={n === 0 ? 0 : 17}>
+                                  {ligne}
+                                </tspan>
+                              ))}
+                            </text>
+                            <text
+                              x={x}
+                              y={y + r - 16}
+                              textAnchor="middle"
+                              fontSize="12"
+                              style={{ fill: color }}
+                            >
+                              {domain.count} ressource{domain.count > 1 ? 's' : ''}
+                            </text>
+                          </>
+                        );
+                      })()}
                     </g>
                   </a>
                 );
@@ -321,7 +436,12 @@ export function ConstellationSection({
         )}
 
         <div style={{ marginTop: 28 }}>
-          <a href="/opac" className={`${styles.btn} ${styles.btnPrimary}`}>
+          {/* `btnPrimary` était un aplat de --primary posé sur un ciel de
+              --primary-dark : 1,5:1, le bouton se fondait dans le fond. Un
+              bouton CLAIR sur ce ciel sombre est le seul choix qui tienne les
+              deux contrastes à la fois — la forme sur le fond, et le texte
+              dans le bouton. Mesuré, pas supposé. */}
+          <a href="/opac" className={`${styles.btn} ${styles.btnSurface}`}>
             Catalogue complet →
           </a>
         </div>

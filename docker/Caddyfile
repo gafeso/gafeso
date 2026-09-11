@@ -112,3 +112,77 @@
 		format json
 	}
 }
+
+# ── Attrape-tout : tout Host non déclaré ci-dessus ──
+#
+# SANS CE BLOC, Caddy répond 200 AVEC UN CORPS VIDE et sans aucun en-tête de
+# sécurité. C'est un faux silencieux au niveau du serveur web : l'informaticien
+# qui installe tape l'adresse pendant la propagation DNS, voit une page
+# blanche, et conclut que l'installation a échoué — alors que tout fonctionne
+# et qu'il lui manque un enregistrement. Le diagnostic est indisponible
+# précisément au moment où il est nécessaire.
+#
+# Port 80 UNIQUEMENT, délibérément. Sur 443, un Host inconnu n'a par
+# définition pas de certificat : la poignée de main TLS échoue avant qu'aucune
+# réponse HTTP soit possible, et le navigateur affiche une erreur de
+# certificat — un message, pas une page blanche. Le cas à corriger est bien
+# celui du HTTP en clair, qui est ce que l'on obtient avant qu'un certificat
+# existe.
+#
+# 404 et non 421 « Misdirected Request », pourtant sémantiquement plus juste :
+# un 421 autorise le client HTTP/2 à REJOUER la requête sur une nouvelle
+# connexion (coalescence de connexions), ce qui transforme un diagnostic en
+# boucle de reprise. Ce qui compte ici est le CORPS, pas le code.
+:80 {
+	# Le challenge ACME n'est VOLONTAIREMENT pas capturé par ce bloc.
+	#
+	# Caddy insère son propre gestionnaire de challenge en tête des routes du
+	# serveur HTTP, donc il passe avant ce bloc et cette exclusion est en
+	# principe superflue. Elle est là pour que la réponse reste celle
+	# d'AUJOURD'HUI si cette précédence changeait un jour : le chemin ne
+	# correspond alors à aucun handler ici et retombe sur le comportement par
+	# défaut de Caddy, au lieu d'être avalé par le refus ci-dessous.
+	#
+	# L'enjeu n'est pas théorique : un challenge refusé fait échouer le
+	# renouvellement des certificats, et cet échec reste SILENCIEUX jusqu'à
+	# l'expiration.
+	@inconnu not path /.well-known/acme-challenge/*
+
+	handle @inconnu {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "SAMEORIGIN"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Content-Type "text/plain; charset=utf-8"
+		}
+
+		respond <<TEXTE
+			Aucun établissement ne correspond à ce domaine.
+
+			Le serveur Gafeso fonctionne : c'est le domaine demandé ({host}) qui
+			n'est déclaré dans aucun établissement de cette installation.
+
+			Causes les plus fréquentes, dans l'ordre :
+
+			  1. Les enregistrements DNS ne sont pas encore propagés. Cela peut
+				 prendre de quelques minutes à 24 heures.
+			  2. L'un des trois sous-domaines requis n'a pas été créé. Il en faut
+				 trois : le domaine lui-même, api.<domaine> et storage.<domaine>.
+			  3. Le domaine tapé ne correspond pas à PUBLIC_DOMAIN dans .env.prod.
+
+			Pour vérifier, depuis le serveur :
+
+			  dig +short <domaine> api.<domaine> storage.<domaine>
+
+			Les trois lignes doivent renvoyer l'adresse IP de ce serveur.
+
+			Documentation : docs/INSTALLATION.md
+			TEXTE 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

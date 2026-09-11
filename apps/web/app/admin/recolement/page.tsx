@@ -6,6 +6,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { Button, Card, Input, Select } from '@/components/ui';
 import { ITEM_LOCATIONS } from '@/lib/item-locations';
@@ -22,7 +23,11 @@ interface Session {
 }
 
 export default function RecolementPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // ⚠ `null` TANT QU'ON NE SAIT PAS, jamais `[]` — un tableau vide ne distingue
+  // pas « pas encore chargé » de « il n'y en a aucun », et l'écran affirme
+  // alors le vide avant d'avoir la réponse. Même correction que
+  // /admin/catalogue le 8 septembre 2026, répliquée le 10.
+  const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -145,14 +150,21 @@ export default function RecolementPage() {
             </tr>
           </thead>
           <tbody>
-            {sessions.length === 0 && (
+            {sessions === null && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-muted">
+                  {LIBELLES.commun.chargement}
+                </td>
+              </tr>
+            )}
+            {sessions !== null && sessions.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-muted">
                   Aucune session de récolement.
                 </td>
               </tr>
             )}
-            {sessions.map((s) => (
+            {(sessions ?? []).map((s) => (
               <tr key={s.id} className="border-b border-line last:border-0 hover:bg-paper">
                 <td className="px-4 py-2.5 font-medium">
                   <Link href={`/admin/recolement/${s.id}`} className="hover:text-ocre">

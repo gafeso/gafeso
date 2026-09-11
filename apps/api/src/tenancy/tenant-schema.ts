@@ -13,6 +13,8 @@
  */
 
 /** Tables propres à chaque école (schéma tenant). Les autres restent dans `public`. */
+import { COLLATION, COLONNES_COLLATIONNEES } from './collation-francaise';
+
 export const TENANT_TABLES = [
   'expected_students',
   'roles',
@@ -45,7 +47,9 @@ export const TENANT_TABLES = [
 const TENANT_ENUMS: Record<string, string[]> = {
   UserRole: ['STUDENT', 'LIBRARIAN', 'MANAGER', 'ACQUISITIONS', 'ADMIN'],
   AccountStatus: ['PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED'],
-  MarcFormat: ['MARC21', 'UNIMARC'],
+  // GAFESO = notice Gafeso, le modèle plat propriétaire (docs/architecture-notice.md).
+  // DUBLIN_CORE = description reçue en Dublin Core (couche 3, P3-1).
+  MarcFormat: ['MARC21', 'UNIMARC', 'GAFESO', 'DUBLIN_CORE'],
   ItemStatus: [
     'AVAILABLE',
     'CHECKED_OUT',
@@ -340,11 +344,14 @@ export function buildColumnIntrospectionQuery(schema: string): string {
   return `
     SELECT c.relname AS table_name, a.attname AS column_name,
            format_type(a.atttypid, a.atttypmod) AS type_decl,
-           t.typtype = 'e' AS is_enum
+           t.typtype = 'e' AS is_enum,
+           a.attnotnull AS not_null,
+           pg_get_expr(d.adbin, d.adrelid) AS default_expr
     FROM pg_attribute a
     JOIN pg_class c ON c.oid = a.attrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_type t ON t.oid = a.atttypid
+    LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
     WHERE n.nspname = '${schema}' AND c.relname IN (${tables})
       AND a.attnum > 0 AND NOT a.attisdropped
   `.trim();
@@ -355,6 +362,12 @@ export interface IntrospectedColumn {
   column_name: string;
   type_decl: string;
   is_enum: boolean;
+  /** `NOT NULL` posé sur la colonne. Optionnel : les anciens appelants (tests)
+   *  peuvent l'omettre — absent vaut « pas de contrainte connue ». */
+  not_null?: boolean;
+  /** Expression `DEFAULT` de la colonne, telle que Postgres la reformule
+   *  (`'bibliographique'::text`), ou null si la colonne n'en a pas. */
+  default_expr?: string | null;
 }
 
 /**
@@ -384,13 +397,76 @@ export function buildAddMissingColumnsStatements(
       continue;
     }
 
+    // Une colonne avec DEFAULT peut être ajoutée NOT NULL sans risque : Postgres
+    // remplit les lignes existantes avec le défaut. Sans défaut, elle reste
+    // nullable (règle historique : jamais de NOT NULL sec sur une table pleine).
+    const parts = [`ADD COLUMN ${quote(col.column_name)} ${col.type_decl}`];
+    if (col.default_expr) {
+      parts.push(`DEFAULT ${col.default_expr}`);
+      if (col.not_null) parts.push('NOT NULL');
+    }
     statements.push(
-      `ALTER TABLE ${quote(schema)}.${quote(col.table_name)} ` +
-        `ADD COLUMN ${quote(col.column_name)} ${col.type_decl}`,
+      `ALTER TABLE ${quote(schema)}.${quote(col.table_name)} ` + parts.join(' '),
     );
   }
 
   return { statements, skippedEnumColumns };
+}
+
+/**
+ * Compare les CONTRAINTES des colonnes présentes des deux côtés (gabarit
+ * `public` vs schéma tenant) et génère les `ALTER COLUMN` de rattrapage.
+ *
+ * Nécessaire parce que `CREATE TABLE ... (LIKE public.t INCLUDING ALL)` copie
+ * `NOT NULL` et `DEFAULT` **une seule fois, à la création**. Une migration qui
+ * RELÂCHE une contrainte sur une table tenant (premier cas réel :
+ * `biblio_records.marc_data DROP NOT NULL`, lot « notice Gafeso ») ne touche
+ * que `public` : chez les écoles déjà provisionnées la colonne reste NOT NULL,
+ * et la première notice sans MARC échoue en production. `ADD COLUMN` (ci-dessus)
+ * ne rattrapait que les colonnes ABSENTES, jamais les contraintes des colonnes
+ * existantes.
+ *
+ * Deux directions seulement, toutes deux SÛRES sur une table qui contient déjà
+ * des lignes :
+ * - `DROP NOT NULL` quand le gabarit est devenu nullable ;
+ * - `SET DEFAULT` quand le gabarit a un défaut que l'école n'a pas.
+ *
+ * Le sens inverse (`SET NOT NULL`, `DROP DEFAULT`) n'est **volontairement pas**
+ * produit : `SET NOT NULL` échoue si une seule ligne est nulle, ce qui ferait
+ * planter une resynchro entière sur une donnée métier. Un durcissement de
+ * contrainte reste une opération manuelle, précédée de son propre nettoyage.
+ * Les colonnes enum sont ignorées ici comme dans `buildAddMissingColumnsStatements`
+ * (leur type est local au schéma tenant, comparer les défauts n'aurait pas de sens).
+ */
+export function buildColumnConstraintStatements(
+  slug: string,
+  publicColumns: IntrospectedColumn[],
+  tenantColumns: IntrospectedColumn[],
+): string[] {
+  const schema = tenantSchemaName(slug);
+  const tenantByKey = new Map(
+    tenantColumns.map((c) => [`${c.table_name}.${c.column_name}`, c]),
+  );
+  const statements: string[] = [];
+
+  for (const col of publicColumns) {
+    if (col.is_enum) continue;
+    const tenantCol = tenantByKey.get(`${col.table_name}.${col.column_name}`);
+    if (!tenantCol) continue; // colonne absente → traitée par ADD COLUMN
+
+    const target =
+      `ALTER TABLE ${quote(schema)}.${quote(col.table_name)} ` +
+      `ALTER COLUMN ${quote(col.column_name)}`;
+
+    if (col.not_null === false && tenantCol.not_null === true) {
+      statements.push(`${target} DROP NOT NULL`);
+    }
+    if (col.default_expr && !tenantCol.default_expr) {
+      statements.push(`${target} SET DEFAULT ${col.default_expr}`);
+    }
+  }
+
+  return statements;
 }
 
 export interface IntrospectedEnumValue {
@@ -500,4 +576,72 @@ export function buildMissingIndexStatements(
     );
   }
   return statements;
+}
+
+/**
+ * REQUÊTE DE VÉRIFICATION DE LA COLLATION — elle interroge LA BASE.
+ *
+ * 🔴 POURQUOI LA BASE ET NON LE SCHÉMA, alors qu'un test de source serait plus
+ * simple : parce que le schéma NE PORTE PAS la collation. Prisma ne la modélise
+ * ni par colonne ni par requête. Un test qui lirait `schema.prisma` ou les
+ * fichiers de migration ne vérifierait que l'INTENTION — il passerait au vert
+ * sur une base dont la collation a déjà été PERDUE.
+ *
+ * Et elle peut l'être : mesuré sur une base jetable, un `ALTER COLUMN … SET
+ * DATA TYPE` écrit pour une autre raison la retire, la migration réussit, et
+ * l'ordre redevient faux sans que rien ne le signale. C'est ce qui fait de ce
+ * garde une CONDITION du lot, et non une amélioration.
+ */
+export function buildCollationIntrospectionQuery(schema: string): string {
+  return `
+    SELECT c.relname AS table_name, a.attname AS column_name,
+           coalesce(col.collname, '(défaut)') AS collation
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    LEFT JOIN pg_collation col ON col.oid = a.attcollation
+    WHERE n.nspname = '${schema}'
+      AND a.attnum > 0 AND NOT a.attisdropped
+  `.trim();
+}
+
+export interface IntrospectedCollation {
+  table_name: string;
+  column_name: string;
+  collation: string;
+}
+
+/**
+ * Colonnes déclarées collationnées qui ne le sont PAS en base, et les
+ * instructions de rattrapage.
+ *
+ * ⚠ Une colonne ABSENTE du schéma n'est pas un écart : toutes les tables ne
+ * vivent pas dans tous les schémas (`collections` est publique seulement). On
+ * ne signale que ce qui EXISTE et porte la mauvaise collation — sinon le garde
+ * crierait à chaque schéma sur des tables qui n'y sont pas, et on cesserait de
+ * le lire.
+ */
+export function buildCollationStatements(
+  slug: string,
+  presentes: IntrospectedCollation[],
+): { statements: string[]; ecarts: string[] } {
+  const schema = tenantSchemaName(slug);
+  const parCle = new Map(
+    presentes.map((c) => [`${c.table_name}.${c.column_name}`, c.collation]),
+  );
+  const statements: string[] = [];
+  const ecarts: string[] = [];
+
+  for (const { table, colonne } of COLONNES_COLLATIONNEES) {
+    const cle = `${table}.${colonne}`;
+    const actuelle = parCle.get(cle);
+    if (actuelle === undefined) continue; // colonne absente de ce schéma
+    if (actuelle === COLLATION) continue; // déjà juste
+    ecarts.push(`${cle} (${actuelle})`);
+    statements.push(
+      `ALTER TABLE ${quote(schema)}.${quote(table)} ` +
+        `ALTER COLUMN ${quote(colonne)} TYPE text COLLATE "${COLLATION}"`,
+    );
+  }
+  return { statements, ecarts };
 }

@@ -30,3 +30,31 @@ export function isDefenseType(recordType: string): boolean {
 export function yearLabel(recordType: string): string {
   return isDefenseType(recordType) ? 'Année de soutenance' : 'Année de publication';
 }
+
+/**
+ * Regroupements proposés au public sur la page d'accueil.
+ *
+ * ⚠ CE SONT DES VALEURS D'API, pas des libellés : la clé `types` part telle
+ * quelle dans `recordType=a,b` (forme multiple livrée le 10 septembre 2026).
+ * Les libellés affichés vivent dans lib/libelles.ts — les mêler ferait
+ * traduire un contrat.
+ *
+ * ⚠ Deux groupes de la maquette sont ABSENTS, et c'est mesuré, pas supposé :
+ *  - « Périodiques » : aucun `recordType` ne correspond. RECORD_TYPES ne
+ *    connaît pas ce type, et l'inventer donnerait un filtre qui ne trouve rien.
+ *  - « Documents numériques » : il n'est PAS absent faute de route — depuis le
+ *    lot API du 10 septembre 2026, /opac/parcourir le sert, paginé, filtre
+ *    `avecFichier` lu en base. Il reste absent d'ICI parce que ce n'est pas un
+ *    filtre de RECHERCHE : /opac/search ne peut pas le porter sans que ses
+ *    totaux deviennent faux. La page d'accueil l'offre donc comme un PARCOURS,
+ *    à côté du formulaire, et non comme une option de ce menu — une option qui
+ *    promettrait une recherche restreinte que rien ne sait servir.
+ */
+export const GROUPES_DE_TYPES = [
+  { cle: 'livres', types: ['ouvrage'] },
+  // Tous les travaux soutenus, ceux que isDefenseType() reconnaît déjà.
+  { cle: 'travaux', types: ['these', 'memoire', 'licence', 'master', 'these_unique'] },
+  { cle: 'publications', types: ['publication'] },
+] as const;
+
+export type CleGroupe = (typeof GROUPES_DE_TYPES)[number]['cle'];

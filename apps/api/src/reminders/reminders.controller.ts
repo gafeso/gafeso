@@ -33,7 +33,7 @@ import { ReminderLogQueryDto } from './dto/reminder-log-query.dto';
 @ApiTags('reminders')
 @Controller('reminders')
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+@RequiresFunctions(FONCTIONS.CIRCULATION_RETARDS)
 @ApiBearerAuth()
 export class RemindersController {
   constructor(

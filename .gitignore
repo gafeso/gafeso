@@ -63,9 +63,30 @@ docs/documentsnumerises/
 # Documents de travail INTERNES (audits, maquettes, cahiers des charges, briefs de conception).
 # La doc publique reste versionnée (README, INSTALL, DEPLOY, docs/ orientée utilisateur).
 docs/audit/
-docs/maquettes/
 docs/cahier-des-charges-*.md
-brief-*.md
+
+# ⚠ LES BRIEFS ET LES MAQUETTES SONT VERSIONNÉS depuis le 11 septembre 2026.
+#
+# Motif : une correction de brief ne vivait que sur un seul disque. La décision
+# la plus importante de P4 — « un défaut ne se pose jamais sur un comportement
+# qui ÉMET vers l'extérieur » — est née d'une règle de brief qui aurait envoyé
+# des courriels à des adhérents réels. Un document qui porte des décisions de ce
+# poids ne peut pas être hors du suivi. Et le brief P4 dit qu'une maquette
+# « fait foi » : un document qui fait foi et qu'on ne peut pas lire n'en fait
+# plus.
+#
+# Avant de les verser, ils ont été relus au critère suivant : ce n'est pas le
+# NOM d'un établissement réel qui gêne — il figure déjà dans le seed et les
+# scripts de provisionnement — c'est le JUGEMENT porté sur son fonctionnement
+# interne. Cinq passages ont été reformulés à ce titre.
+#
+# ⚠ UNE SEULE EXCLUSION SUBSISTE, et elle est nommée. `buc-ujkz-accueil.html`
+# est la maquette du site RÉEL d'un établissement identifié : son nom de
+# fichier, le nom de l'établissement (27 fois) et son DOMAINE DE PRODUCTION
+# (15 fois, absent de tout fichier versionné). Reformuler une phrase est une
+# chose ; réécrire 600 lignes de maquette en changeant son identité en est une
+# autre, et ce n'est pas une décision d'outillage.
+docs/maquettes/buc-ujkz-accueil.html
 amendement-*.md
 spike-*.md
 reconciliation-*.md
@@ -78,3 +99,6 @@ reconciliation-*.md
 *.doc
 *.xlsx
 *.pptx
+
+# Captures de comparaison P2 (artefacts de travail, jamais du code)
+var/

@@ -152,6 +152,29 @@ export class AccessControlController {
     return this.accessControl.ruleOptions(this.requireTenant(tenant).slug);
   }
 
+  /**
+   * ⚠ DÉCLARÉE AVANT `@Get(':id')`, et ce n'est pas indifférent : `documents`
+   * serait sinon un candidat plausible pour `:id` à la lecture du fichier. Les
+   * deux chemins n'ont pas le même nombre de segments, donc Nest ne les
+   * confond pas — mais l'ordre rend l'intention lisible.
+   */
+  @Get('documents/:recordId')
+  @UseGuards(FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.COLLECTIONS_GERER)
+  @ApiOperation({
+    summary: 'Libellé d’un document local (identifiant + titre) (admin)',
+    description:
+      'Le strict nécessaire pour afficher un document rattaché à une ' +
+      'collection. Le registre professionnel complet est sur ' +
+      '/cataloging/records/:id, derrière `catalogue.gerer`.',
+  })
+  async recordLabel(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.accessControl.recordLabel(this.requireTenant(tenant).slug, recordId);
+  }
+
   @Get(':id')
   @UseGuards(FunctionsGuard)
   @RequiresFunctions(FONCTIONS.COLLECTIONS_GERER)

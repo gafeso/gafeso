@@ -1,0 +1,77 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caractérisation — les trois champs dans le document de recherche > ⚠ EMPREINTE DU DOCUMENT DE RECHERCHE : figée à l’octet 1`] = `
+{
+  "author": "Ouédraogo, Awa",
+  "category": "informatique",
+  "contributorList": [
+    {
+      "authorId": null,
+      "name": "Ouédraogo, Awa",
+      "role": "AUTEUR_PRINCIPAL",
+    },
+    {
+      "authorId": null,
+      "name": "Kaboré, Salif",
+      "role": "DIRECTEUR_MEMOIRE",
+    },
+  ],
+  "contributors": [
+    "Ouédraogo, Awa",
+    "Kaboré, Salif",
+  ],
+  "coverUrl": null,
+  "defenseUniversity": "Université d’Exemple — Ouagadougou",
+  "id": "rec-caracterisation",
+  "isbn": "EXEMPLE-1301",
+  "keywords": [
+    "informatique",
+  ],
+  "language": "fr",
+  "publishYear": 2018,
+  "recordType": "these",
+  "summary": "Résumé d’exemple.",
+  "title": "Architecture des ordinateurs en Afrique de l’Ouest",
+  "titleComplement": "édition revue",
+}
+`;
+
+exports[`caractérisation — les trois champs dans l’export UNIMARC > ⚠ EMPREINTE DU MARCXML : figée à l’octet 1`] = `
+"<record>
+  <leader>00000nam a2200000 a 4500</leader>
+  <datafield tag="010" ind1=" " ind2=" ">
+    <subfield code="a">EXEMPLE-1301</subfield>
+  </datafield>
+  <datafield tag="101" ind1="0" ind2=" ">
+    <subfield code="a">fr</subfield>
+  </datafield>
+  <datafield tag="200" ind1="1" ind2=" ">
+    <subfield code="a">Architecture des ordinateurs en Afrique de l&#x2019;Ouest</subfield>
+    <subfield code="e">&#xE9;dition revue</subfield>
+  </datafield>
+  <datafield tag="210" ind1=" " ind2=" ">
+    <subfield code="a">Ouagadougou</subfield>
+    <subfield code="c">Presses universitaires d&#x2019;Exemple</subfield>
+    <subfield code="d">2018</subfield>
+  </datafield>
+  <datafield tag="328" ind1=" " ind2=" ">
+    <subfield code="c">Universit&#xE9; d&#x2019;Exemple &#x2014; Ouagadougou</subfield>
+    <subfield code="e">Amphith&#xE9;&#xE2;tre B &#x2014; Exemple</subfield>
+  </datafield>
+  <datafield tag="610" ind1="0" ind2=" ">
+    <subfield code="a">informatique</subfield>
+  </datafield>
+  <datafield tag="700" ind1=" " ind2="1">
+    <subfield code="a">Ou&#xE9;draogo, Awa</subfield>
+  </datafield>
+  <datafield tag="702" ind1=" " ind2="1">
+    <subfield code="a">Kabor&#xE9;, Salif</subfield>
+    <subfield code="4">727</subfield>
+  </datafield>
+  <datafield tag="900" ind1=" " ind2=" ">
+    <subfield code="a">these</subfield>
+    <subfield code="b">informatique</subfield>
+  </datafield>
+</record>
+"
+`;

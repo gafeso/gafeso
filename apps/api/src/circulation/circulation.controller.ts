@@ -10,7 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModulesService } from '../modules/modules.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -30,13 +33,14 @@ import {
 @ApiTags('circulation')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.CIRCULATION_GERER)
+@RequiresFunctions(FONCTIONS.CIRCULATION_FAIRE)
 @Controller('circulation')
 export class CirculationController {
   constructor(
     private readonly circulation: CirculationService,
     private readonly holds: HoldsService,
     private readonly prisma: PrismaService,
+    private readonly modules: ModulesService,
   ) {}
 
   /**
@@ -50,7 +54,11 @@ export class CirculationController {
       where: { tenantId: t.id },
       select: { loanDueTime: true, timezone: true },
     });
-    return s ?? undefined;
+    // ⚠ SEUL ENDROIT où ce sac est construit — six appelants y passent. L'état
+    // du module y entre donc une fois, et aucun chemin de circulation ne peut
+    // l'oublier.
+    const amendesActives = await this.modules.estActif(t.id, 'amendes');
+    return { ...(s ?? {}), amendesActives };
   }
 
   private requireTenant(tenant: ResolvedTenant | null): ResolvedTenant {
@@ -194,6 +202,8 @@ export class CirculationController {
 
   // ── Règles ──────────────────────────────────────────────────
   @Post('rules')
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('amendes')
   @ApiOperation({
     summary: 'Créer une règle de circulation',
     description:
@@ -208,12 +218,16 @@ export class CirculationController {
   }
 
   @Get('rules')
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('amendes')
   @ApiOperation({ summary: 'Lister les règles de circulation' })
   async listRules(@CurrentTenant() tenant: ResolvedTenant | null) {
     return this.circulation.listRules(this.db(tenant));
   }
 
   @Patch('rules/:id')
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('amendes')
   @ApiOperation({ summary: 'Modifier une règle de circulation' })
   async updateRule(
     @CurrentTenant() tenant: ResolvedTenant | null,
@@ -224,6 +238,8 @@ export class CirculationController {
   }
 
   @Delete('rules/:id')
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('amendes')
   @ApiOperation({ summary: 'Supprimer une règle de circulation' })
   async deleteRule(
     @CurrentTenant() tenant: ResolvedTenant | null,

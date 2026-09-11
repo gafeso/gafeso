@@ -9,7 +9,7 @@ lecture : [presentation-gafeso.md](presentation-gafeso.md).
 
 | Service | Rôle | Image / techno |
 |---|---|---|
-| **web** | Frontend Next.js (vitrine, OPAC, back-office). SSR. | Next.js 14 |
+| **web** | Frontend Next.js (vitrine, OPAC, back-office). SSR. | Next.js 15 |
 | **api** | Backend NestJS (monolithe modulaire). Toute la logique métier. | NestJS 10 |
 | **db** | Base de données principale. | PostgreSQL 16 |
 | **meilisearch** | Moteur de recherche (défaut). | Meilisearch |
@@ -187,7 +187,7 @@ gafeso/
 │   ├── api/                 # NestJS (monolithe modulaire)
 │   │   ├── src/             # modules (cataloging, circulation, opac, oai, sru…)
 │   │   └── prisma/          # schema.prisma + migrations
-│   └── web/                 # Next.js 14 (App Router)
+│   └── web/                 # Next.js 15 (App Router)
 ├── docker/
 │   ├── docker-compose.yml       # DÉVELOPPEMENT (infra seule)
 │   ├── docker-compose.prod.yml  # PRODUCTION (tout conteneurisé)

@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
+import { ModulesModule } from './modules/modules.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { TenantMiddleware } from './tenancy/tenant.middleware';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +32,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { HealthModule } from './health/health.module';
 import { OfflineLicensingModule } from './offline-licensing/offline-licensing.module';
 import { UploadSizeMiddleware } from './common/upload-size.middleware';
+import { ClientCacheKeyMiddleware } from './common/client-cache-key.middleware';
 
 @Module({
   imports: [
@@ -46,6 +48,7 @@ import { UploadSizeMiddleware } from './common/upload-size.middleware';
     // Tâches planifiées (rappels de circulation quotidiens).
     ScheduleModule.forRoot(),
     PrismaModule,
+    ModulesModule,
     TenancyModule,
     AuthModule,
     AuditModule,
@@ -81,6 +84,12 @@ export class AppModule implements NestModule {
     // le client recevait « Internal Server Error » (voir le commentaire du
     // middleware). Placé en premier, avant toute autre consommation.
     consumer.apply(UploadSizeMiddleware).forRoutes('*');
+
+    // Retire les paramètres de transport (`__host`, clé de cache du front)
+    // avant validation : le ValidationPipe global refuse tout paramètre
+    // inconnu, et seize routes portent un @Query() typé. Traité ici une fois,
+    // pour les routes présentes et futures.
+    consumer.apply(ClientCacheKeyMiddleware).forRoutes('*');
 
     // Résolution du tenant sur toutes les routes, sauf santé et docs
     consumer

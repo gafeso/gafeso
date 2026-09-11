@@ -1,57 +1,83 @@
 'use client';
 
-// Coque de l'espace back-office (personnel). Garde : tout rôle non-étudiant.
-// La barre latérale n'affiche que les sections permises au rôle ; chaque
-// page revérifie, et l'API reste seule autorité.
+// Coque de l'espace professionnel : barre d'onglets par métier + barre
+// latérale contextuelle. Découpage repris de
+// docs/maquettes/maquette-navigation-v2.html — les métiers en haut, « Outils »
+// pour les opérations ponctuelles, « Administration » pour le seul paramétrage.
+//
+// La STRUCTURE vit dans lib/navigation.ts, pas ici : elle doit pouvoir être
+// examinée par un test sans rendre de DOM. Ce fichier n'est que son affichage.
+//
+// Une seule vérité pour le filtrage : la FONCTION. L'ancienne coque mélangeait
+// deux mécanismes — une liste de rôles pour l'accès, des fonctions pour les
+// entrées — au point qu'un bibliothécaire avait l'accès sans jamais voir le
+// lien. L'accès est désormais exactement « cette personne a-t-elle au moins
+// une entrée ? ». L'API reste seule autorité sur les actions.
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { getUser } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
+import { useModulesActifs } from '@/lib/modules-actifs';
+import { moduleDeLaRoute, ongletDe, ongletsVisibles } from '@/lib/navigation';
 import { Header } from '@/components/header';
-
-// Fonction requise pour VOIR l'entrée de nav (l'API reste seule autorité sur
-// l'action elle-même — chaque page revérifie via ses propres appels API).
-const ADMIN_NAV = [
-  { href: '/admin/comptes', label: 'Comptes', fonction: 'comptes.voir' },
-  { href: '/admin/import-etudiants', label: 'Import étudiants', fonction: 'etudiants.importer' },
-  { href: '/admin/classes', label: 'Classes', fonction: 'classes.gerer' },
-  { href: '/admin/catalogue', label: 'Catalogue', fonction: 'catalogue.gerer' },
-  { href: '/admin/recolement', label: 'Récolement', fonction: 'catalogue.gerer' },
-  { href: '/admin/auteurs', label: 'Auteurs', fonction: 'catalogue.gerer' },
-  { href: '/admin/categories', label: 'Catégories', fonction: 'catalogue.gerer' },
-  { href: '/admin/collections', label: 'Collections', fonction: 'collections.gerer' },
-  { href: '/admin/roles', label: 'Rôles', fonction: 'roles.gerer' },
-  { href: '/admin/statistiques', label: 'Statistiques', fonction: 'etablissement.gerer' },
-  { href: '/admin/interoperabilite', label: 'Interopérabilité', fonction: 'etablissement.gerer' },
-  { href: '/admin/parametres', label: 'Établissement', fonction: 'etablissement.gerer' },
-  { href: '/admin/accueil', label: 'Page d’accueil', fonction: 'etablissement.gerer' },
-  { href: '/admin/rappels', label: 'Rappels envoyés', fonction: 'etablissement.gerer' },
-  { href: '/admin/journal', label: 'Journal d’audit', fonction: 'etablissement.gerer' },
-];
-
-const STAFF_ROLES = ['MANAGER', 'LIBRARIAN', 'ACQUISITIONS', 'ADMIN'];
+import { LIBELLES } from '@/lib/libelles';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [role, setRole] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
   const { functions } = useMyFunctions();
+  const { modulesActifs } = useModulesActifs();
 
-  useEffect(() => {
-    setRole(getUser()?.role ?? null);
-    setReady(true);
-  }, []);
-
-  if (!ready) {
-    return <Header />;
-  }
-
-  if (!role || !STAFF_ROLES.includes(role)) {
+  // ⚠ AUCUNE ENTRÉE tant que /auth/me/functions n'a pas répondu : en montrer,
+  // même brièvement, qui ne seraient pas permises, serait pire que d'attendre.
+  //
+  // ⚠ MAIS LE CONTENU, LUI, S'AFFICHE. Rendre seulement l'en-tête laissait une
+  // page réduite à « ☰ » — pas de titre, pas d'écran, rien — pendant tout le
+  // temps de la réponse. Mesuré le 11 septembre 2026 avec 1,5 s de latence :
+  // chaque navigation du personnel montrait une page vide, alors que chaque
+  // écran sait déjà dire qu'il charge. Un menu qu'on ne connaît pas encore
+  // n'est pas une raison de cacher l'écran qu'on a demandé.
+  if (!functions) {
     return (
       <>
-        <Header />
+        <Header fonctions={null} />
+        <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      </>
+    );
+  }
+
+  // ⚠ P4-3. Le menu se filtre sur l'ÉTAT RÉEL des modules, jamais sur une
+  // supposition. `null` laisse passer : masquer sur une information qu'on n'a
+  // pas encore ferait clignoter le menu, et disparaître des écrans auxquels la
+  // personne a droit. Ce filtrage est une politesse — la garantie est que
+  // l'API refuse les routes d'un module inactif, en le nommant.
+  const onglets = ongletsVisibles(functions, modulesActifs);
+
+  // ⚠ L'ADRESSE TAPÉE DIRECTEMENT EST REFUSÉE, pas seulement l'entrée retirée.
+  // La règle normative de P4 exige « ni entrée de menu, ni bouton, ni écran
+  // atteignable par son adresse » — et mesuré en recette, l'écran d'un module
+  // éteint s'affichait encore normalement, en annonçant un entrepôt qui répond
+  // 403. Cacher l'entrée sans refuser l'adresse laisse une interface qui ment.
+  //
+  // `modulesActifs === null` laisse passer, comme pour le menu : on ne refuse
+  // pas sur une information qu'on n'a pas encore. La garantie reste l'API.
+  const moduleRequis = moduleDeLaRoute(pathname);
+  if (moduleRequis && modulesActifs && !modulesActifs.includes(moduleRequis)) {
+    return (
+      <>
+        <Header fonctions={functions} />
+        <main className="mx-auto max-w-3xl px-6 py-8">
+          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+            {LIBELLES.modules.ecranModuleInactif}
+          </p>
+        </main>
+      </>
+    );
+  }
+
+  if (onglets.length === 0) {
+    return (
+      <>
+        <Header fonctions={functions} />
         <main className="mx-auto max-w-3xl px-6 py-8">
           <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
             Cet espace est réservé au personnel de la bibliothèque.
@@ -61,38 +87,90 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Le temps que /auth/me/functions réponde, la nav reste vide plutôt que de
-  // montrer (même brièvement) des sections auxquelles l'utilisateur n'a pas
-  // droit — l'API bloquerait l'action de toute façon, mais autant ne pas
-  // l'exposer.
-  const nav = functions
-    ? ADMIN_NAV.filter((item) => functions.includes(item.fonction))
-    : [];
+  const courant = ongletDe(pathname) ?? onglets[0];
+  const actif = onglets.find((o) => o.id === courant.id) ?? onglets[0];
+
+  // Sous-groupes (« § » de la maquette) dans l'ordre d'apparition.
+  const groupes: { titre?: string; entrees: typeof actif.entrees }[] = [];
+  for (const entree of actif.entrees) {
+    const dernier = groupes[groupes.length - 1];
+    if (dernier && dernier.titre === entree.groupe) dernier.entrees.push(entree);
+    else groupes.push({ titre: entree.groupe, entrees: [entree] });
+  }
 
   return (
     <>
-      <Header />
-      <div className="mx-auto flex max-w-5xl gap-8 px-6 py-8">
-        <aside className="w-44 shrink-0">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-            Administration
-          </p>
-          <nav className="flex flex-col gap-1">
-            {nav.map((item) => (
+      <Header fonctions={functions} />
+
+      {/* Barre d'onglets. `flex-wrap` plutôt qu'un défilement horizontal : sur
+          un écran étroit les onglets passent à la ligne et restent tous
+          atteignables, sans geste de balayage à deviner. */}
+      <div className="border-b border-line bg-paper/60">
+        <nav
+          aria-label="Sections"
+          className="mx-auto flex max-w-5xl flex-wrap gap-1 px-4 py-2 sm:px-6"
+        >
+          {onglets.map((onglet) => {
+            const estActif = onglet.id === actif.id;
+            return (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  pathname.startsWith(item.href)
+                key={onglet.id}
+                href={onglet.entrees[0].href}
+                aria-current={estActif ? 'page' : undefined}
+                // min-h-11 = 44 px, la cible tactile minimale recommandée.
+                // Les onglets faisaient 32 px : mesuré à 375 px, ça se rate.
+                className={`inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium transition-colors ${
+                  estActif
                     ? 'bg-ink text-white'
                     : 'text-muted hover:bg-line/60 hover:text-ink'
                 }`}
               >
-                {item.label}
+                {onglet.libelle}
               </Link>
-            ))}
-          </nav>
-        </aside>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-8 md:py-8">
+        {/* Un onglet à une seule entrée n'a pas besoin d'une barre latérale
+            qui répète son propre nom. */}
+        {actif.entrees.length > 1 && (
+          <aside className="w-full shrink-0 md:w-52">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              {actif.libelle}
+            </p>
+            <nav className="flex flex-col gap-1">
+              {groupes.map((groupe, i) => (
+                <div key={groupe.titre ?? `g${i}`} className="flex flex-col gap-1">
+                  {groupe.titre && (
+                    <p className="mt-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted/80">
+                      {groupe.titre}
+                    </p>
+                  )}
+                  {groupe.entrees.map((entree) => {
+                    const courante =
+                      pathname === entree.href || pathname.startsWith(`${entree.href}/`);
+                    return (
+                      <Link
+                        key={entree.href}
+                        href={entree.href}
+                        aria-current={courante ? 'page' : undefined}
+                        className={`inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium transition-colors ${
+                          courante
+                            ? 'bg-ink text-white'
+                            : 'text-muted hover:bg-line/60 hover:text-ink'
+                        }`}
+                      >
+                        {entree.libelle}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
+          </aside>
+        )}
         <div className="min-w-0 flex-1">{children}</div>
       </div>
     </>

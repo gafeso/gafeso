@@ -15,6 +15,25 @@
  *    des clés/valeurs arbitraires ou démesurées dans le JSON.
  */
 
+/**
+ * Une diapositive du bandeau d'accueil.
+ *
+ * ⚠ NOMS LITTÉRAUX, ET C'EST DÉLIBÉRÉ. `apps/web/lib/hero-slides.ts` porte un
+ * abus de langage ASSUMÉ et daté (`heroImageKicker` → « legende ») choisi pour
+ * ne rien déplacer à l'écran des établissements déjà configurés. Ce fichier
+ * demande explicitement de NE PAS le reprendre ici : un *kicker* est un
+ * SURTITRE. Le contrat stocké porte donc les vrais noms — recopier l'abus
+ * l'aurait figé dans la base, là où plus rien ne l'aurait rattrapé.
+ */
+export interface HomeHeroSlide {
+  /** Image de la diapositive. OBLIGATOIRE : sans elle, il n'y a rien à montrer. */
+  imageUrl: string;
+  /** Texte mis en avant. Vide si non saisi. */
+  titre: string;
+  /** Texte affiché AU-DESSUS du titre (surtitre mono). Vide si non saisi. */
+  surtitre: string;
+}
+
 export interface HomeIdentity {
   fullName: string; // nom complet ("Bibliothèque Universitaire Centrale")
   acronym: string; // sigle ("BUC")
@@ -29,6 +48,14 @@ export interface HomeIdentity {
   heroImageUrl: string | null; // photo du hero (MinIO) — remplace le dégradé
   heroImageKicker: string; // sur-titre mono de la photo
   heroImageCaption: string; // légende de la photo
+  /**
+   * Bandeau à plusieurs diapositives. LISTE STOCKÉE : elle ne contient que ce
+   * qu'un établissement a réellement enregistré. Elle est VIDE sur les écoles
+   * configurées avant ce champ — leur bandeau est reconstruit à la LECTURE,
+   * sans aucune écriture, par heroSlidesEffectives().
+   * Ordre significatif : la première est celle que voit le mobile.
+   */
+  heroSlides: HomeHeroSlide[];
 }
 
 export interface HomeStat {
@@ -83,8 +110,17 @@ export interface HomeContent {
 
 // Cardinalités maximales (spec §2 : stats 0–4 ; le reste borné pour éviter un
 // JSON démesuré).
+/**
+ * Au-delà, personne ne les regarde et le poids s'envole. EXPORTÉE parce que le
+ * refus explicite vit dans le DTO (UpdateTenantSettingsDto) : la limite doit
+ * être nommée à l'utilisateur, et un second 5 écrit en dur ailleurs finirait
+ * par diverger de celui-ci.
+ */
+export const MAX_HERO_SLIDES = 5;
+
 const MAX = {
   stats: 4,
+  heroSlides: MAX_HERO_SLIDES,
   espaces: 12,
   services: 12,
   hoursLines: 12,
@@ -109,6 +145,7 @@ const EMPTY_IDENTITY: HomeIdentity = {
   heroImageUrl: null,
   heroImageKicker: '',
   heroImageCaption: '',
+  heroSlides: [],
 };
 
 export const EMPTY_HOME_CONTENT: HomeContent = {
@@ -196,6 +233,31 @@ export function normalizeHomeContent(stored: unknown): HomeContent {
       heroImageUrl: nullableUrl(id.heroImageUrl),
       heroImageKicker: str(id.heroImageKicker),
       heroImageCaption: str(id.heroImageCaption),
+      // LECTURE : on TRONQUE, on ne lève pas. Un blob déjà en base qui
+      // dépasserait la limite doit rester LISIBLE — lever ici rendrait la page
+      // d'accueil inaccessible au lieu de la dégrader, et cette fonction sert
+      // aussi l'affichage public. Le refus explicite est en ÉCRITURE, dans le
+      // DTO.
+      heroSlides: asArray(id.heroSlides)
+        .map((s) => {
+          const o = asObject(s);
+          return {
+            imageUrl: safeUrl(o.imageUrl),
+            titre: str(o.titre),
+            surtitre: str(o.surtitre),
+          };
+        })
+        // ⚠ On écarte AVANT de borner, pas après. Une diapositive sans image
+        // n'existe pas (URL vide, ou rejetée par safeUrl : javascript:,
+        // //evil.com…) : ce n'est pas une diapositive dégradée, c'en est zéro.
+        // Borner d'abord ferait perdre une diapositive valide à cause d'une
+        // entrée qui n'aurait jamais dû compter.
+        // À ne PAS confondre avec le piège du bandeau front (une image qui
+        // ÉCHOUE AU CHARGEMENT ne doit pas faire glisser l'affichage sur la
+        // suivante) : ici on décide ce qui EXISTE, pas ce qu'on affiche quand
+        // le réseau lâche.
+        .filter((s) => s.imageUrl.length > 0)
+        .slice(0, MAX.heroSlides),
     },
     stats: asArray(src.stats)
       .slice(0, MAX.stats)
@@ -264,4 +326,59 @@ export function normalizeHomeContent(stored: unknown): HomeContent {
  */
 export function sanitizeHomeContentInput(input: unknown): HomeContent {
   return normalizeHomeContent(input);
+}
+
+/**
+ * ⚠ DÉRIVATION DE LECTURE — VOLONTAIREMENT HORS DE normalizeHomeContent.
+ *
+ * Reconstruit le bandeau d'un établissement configuré AVANT `heroSlides`, à
+ * partir des trois champs historiques. C'est la compatibilité ascendante SANS
+ * AUCUNE ÉCRITURE : rien n'est migré, la base garde exactement ce que
+ * l'établissement a saisi.
+ *
+ * ⚠ NE JAMAIS APPELER CETTE FONCTION DEPUIS normalizeHomeContent NI DEPUIS
+ * sanitizeHomeContentInput. Les deux ne font qu'un (sanitize appelle normalize)
+ * et l'écriture REMPLACE le blob entier (tenancy.service : « remplacement
+ * complet, le formulaire admin envoie l'état entier »). Une dérivation placée
+ * là serait donc PERSISTÉE au premier enregistrement d'un champ sans rapport —
+ * un horaire, un numéro de téléphone — sur les données d'un client, à un moment
+ * que personne n'aurait décidé. La voie « lire les deux » a été retenue parce
+ * qu'elle n'écrit rien : c'est cette séparation, et elle seule, qui tient la
+ * promesse. Le test « aucune dérivation ne fuit dans le chemin d'écriture »
+ * exerce exactement ce cas.
+ *
+ * ⚠ Même raison côté HTTP : la liste effective se sert À CÔTÉ de `content`
+ * (GET /tenancy/home), jamais dans `content.identity.heroSlides`. L'écran
+ * /admin/accueil relit ce même endpoint et RENVOIE `content` entier en PATCH —
+ * la glisser dedans réintroduirait l'écriture par le chemin du réseau.
+ *
+ * Correspondance LITTÉRALE (voir HomeHeroSlide) :
+ *   heroImageCaption → titre     (le texte mis en avant)
+ *   heroImageKicker  → surtitre  (le surtitre mono au-dessus)
+ */
+export function heroSlidesEffectives(identity: HomeIdentity): HomeHeroSlide[] {
+  // Une liste saisie fait foi : on ne complète JAMAIS une liste par les champs
+  // historiques, sinon un établissement qui retire sa dernière diapositive
+  // verrait réapparaître l'ancienne image sans l'avoir demandé.
+  if (identity.heroSlides.length > 0) return identity.heroSlides;
+  const imageUrl = (identity.heroImageUrl ?? '').trim();
+  // Pas d'image, pas de bandeau — même règle que pour la liste.
+  if (imageUrl === '') return [];
+  return [
+    {
+      imageUrl,
+      titre: identity.heroImageCaption.trim(),
+      surtitre: identity.heroImageKicker.trim(),
+    },
+  ];
+}
+
+/**
+ * URL de contenu acceptable, au sens de safeUrl (http/https absolus, ou
+ * relative same-origin). Exportée pour que le DTO refuse EXPLICITEMENT une
+ * diapositive sans image plutôt que de la voir disparaître en silence à la
+ * normalisation.
+ */
+export function urlDeContenuValide(value: unknown): boolean {
+  return safeUrl(value).length > 0;
 }

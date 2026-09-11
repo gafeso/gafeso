@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { Badge, Card, Input } from '@/components/ui';
 
@@ -88,6 +89,14 @@ export default function AuthorsIndexPage() {
           {error}
         </p>
       )}
+
+        {/* ⚠ Même règle que /opac : tant qu'on ne sait pas, on le dit. L'index
+            restait muet entre l'arrivée et la réponse — invisible en local,
+            1,5 s de page vide sur le réseau d'un campus (mesuré le
+            11 septembre 2026). */}
+        {!data && !error && (
+          <p className="mt-4 text-sm text-muted">{LIBELLES.commun.chargement}</p>
+        )}
 
       {data && (
         <>

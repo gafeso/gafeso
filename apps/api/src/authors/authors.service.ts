@@ -33,7 +33,7 @@ export class AuthorsService {
       db.author.count({ where }),
       db.author.findMany({
         where,
-        orderBy: { displayName: 'asc' },
+        orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         select: {

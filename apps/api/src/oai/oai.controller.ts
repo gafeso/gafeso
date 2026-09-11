@@ -1,6 +1,8 @@
-import { Controller, Get, Header, Post, Query, Req, Body } from '@nestjs/common';
+import { Controller, Get, Header, Post, Query, Req, Body, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiExcludeController } from '@nestjs/swagger';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
@@ -24,6 +26,8 @@ export class OaiController {
   ) {}
 
   @Get()
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('interoperabilite')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Header('Content-Type', 'text/xml; charset=utf-8')
   async get(
@@ -35,6 +39,8 @@ export class OaiController {
   }
 
   @Post()
+  @UseGuards(ModuleActifGuard)
+  @ModuleRequis('interoperabilite')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Header('Content-Type', 'text/xml; charset=utf-8')
   async post(

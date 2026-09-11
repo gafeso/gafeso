@@ -31,8 +31,34 @@ import { CurrentTenant } from './current-tenant.decorator';
 import { ResolvedTenant, TenancyService } from './tenancy.service';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { mergeHomeTokens } from './home-theme';
-import { normalizeHomeContent } from './home-content';
+import { heroSlidesEffectives, normalizeHomeContent } from './home-content';
 import { enrollmentUrl, qrPng, qrPosterPdf } from './enrollment-qr';
+
+/**
+ * Nom d'établissement destiné à être AFFICHÉ, la chaîne vide comptant pour une
+ * absence.
+ *
+ * `a ?? b` ne retombe sur `b` que si `a` vaut `null` ou `undefined` — JAMAIS
+ * sur une chaîne vide. Un nom enregistré vide traversait donc intact et
+ * ressortait tel quel jusque dans la Constellation et le pied de page de la
+ * vitrine, qui rendent cette valeur SANS aucun repli
+ * (`components/constellation.tsx` ligne 263, `app/page.tsx` ligne 397).
+ *
+ * Le repli est « Bibliothèque » et JAMAIS le slug : celui-ci est un
+ * identifiant technique, tronqué et sans accents
+ * (« universite-joseph-ki-zer »), et l'afficher à un lecteur donne
+ * l'impression d'une installation à moitié faite. C'est déjà le repli retenu
+ * côté vitrine (`app/page.tsx` ligne 19) et côté provisioning : un seul mot
+ * pour les trois endroits.
+ */
+const REPLI_NOM_ETABLISSEMENT = 'Bibliothèque';
+
+export function nomAffichable(...candidats: (string | null | undefined)[]): string {
+  for (const c of candidats) {
+    if (typeof c === 'string' && c.trim() !== '') return c;
+  }
+  return REPLI_NOM_ETABLISSEMENT;
+}
 
 // Images de la vitrine (logo, photo hero) — servies publiquement, donc dans le
 // bucket public « covers ». Formats web courants, taille raisonnable.
@@ -79,7 +105,7 @@ export class TenancyController {
    */
   @Get('qr.png')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'QR d’inscription de l’établissement (PNG)' })
   async qrPngEndpoint(
@@ -100,7 +126,7 @@ export class TenancyController {
 
   @Get('qr.pdf')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Affiche A4 imprimable avec le QR d’inscription' })
   async qrPdfEndpoint(
@@ -109,7 +135,14 @@ export class TenancyController {
   ): Promise<void> {
     if (!tenant) throw new BadRequestException('Établissement non résolu.');
     const record = await this.prisma.tenant.findUnique({ where: { id: tenant.id } });
-    const bytes = await qrPosterPdf(this.appUrl(), tenant.slug, record?.name ?? tenant.name);
+    // Même repli que les autres surfaces d'affichage : une affiche A4 collée
+    // dans un amphi avec un titre vide est le pire endroit où découvrir que le
+    // nom n'était pas renseigné.
+    const bytes = await qrPosterPdf(
+      this.appUrl(),
+      tenant.slug,
+      nomAffichable(record?.name, tenant.name),
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="affiche-qr-${tenant.slug}.pdf"`);
     res.end(Buffer.from(bytes));
@@ -145,7 +178,7 @@ export class TenancyController {
       version: 1,
       api,
       tenant: tenant.slug,
-      name: record?.name ?? tenant.name,
+      name: nomAffichable(record?.name, tenant.name),
       enrollmentUrl: enrollmentUrl(this.appUrl(), tenant.slug),
     };
   }
@@ -167,7 +200,7 @@ export class TenancyController {
       include: { settings: true },
     });
     return {
-      name: record?.name ?? tenant.name,
+      name: nomAffichable(record?.name, tenant.name),
       slug: tenant.slug,
       primaryColor: record?.settings?.primaryColor ?? '#0F2B46',
       secondaryColor: record?.settings?.secondaryColor ?? '#D97B2B',
@@ -211,14 +244,28 @@ export class TenancyController {
       where: { id: tenant.id },
       include: { settings: true },
     });
+    const content = normalizeHomeContent(record?.settings?.homepageContent);
     return {
-      name: record?.name ?? tenant.name,
+      name: nomAffichable(record?.name, tenant.name),
       slug: tenant.slug,
       primaryColor: record?.settings?.primaryColor ?? '#0F2B46',
       secondaryColor: record?.settings?.secondaryColor ?? '#D97B2B',
       themeTokens: mergeHomeTokens(record?.settings?.themeTokens),
       latticeEnabled: record?.settings?.latticeEnabled ?? false,
-      content: normalizeHomeContent(record?.settings?.homepageContent),
+      content,
+      // ⚠ À CÔTÉ de `content`, JAMAIS DEDANS.
+      //
+      // Liste EFFECTIVE du bandeau : celle qui est stockée, ou — pour une école
+      // configurée avant `heroSlides` — celle reconstruite à la volée depuis
+      // les trois champs historiques. Aucune écriture n'en découle.
+      //
+      // La placer dans `content.identity.heroSlides` la ferait PERSISTER : cet
+      // endpoint est aussi celui que relit l'écran /admin/accueil, qui renvoie
+      // `content` ENTIER en PATCH. Le bandeau reconstruit serait alors écrit
+      // dans les données du client au premier enregistrement d'un horaire. La
+      // séparation lecture/écriture du modèle (heroSlidesEffectives tenue hors
+      // du normaliseur) ne tiendrait pas si le réseau la contournait ici.
+      heroSlides: heroSlidesEffectives(content.identity),
     };
   }
 
@@ -229,7 +276,7 @@ export class TenancyController {
    */
   @Patch('settings')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Modifier les couleurs de l’école courante' })
   async updateSettings(
@@ -253,13 +300,27 @@ export class TenancyController {
       targetType: 'homepage',
       targetId: tenant.id,
       // Trace ce qui a changé (sans le contenu volumineux).
+      //
+      // ⚠ LA LISTE ÉTAIT INCOMPLÈTE, ET C'ÉTAIT DÉFINITIF. Elle ne portait que
+      // trois booléens sur les champs que cette route écrit : `latticeEnabled`
+      // ne laissait aucune trace, et `require2fa` — qui vivait ici — non plus.
+      // Une permission mal placée se resserre et le problème disparaît ; une
+      // absence de trace ne se rattrape jamais, les changements déjà survenus
+      // restant invisibles. Toute addition à `UpdateTenantSettingsDto` doit
+      // donc apparaître ici : un test le vérifie (audit-des-reglages.spec.ts).
+      //
+      // ⚠ `require2fa` a QUITTÉ ce DTO (PATCH /auth/policy) : sa trace vit
+      // désormais auprès de sa route, sous sa propre action d'audit. Il reste
+      // LU plus haut (GET current) — un toggle doit pouvoir afficher son état.
       metadata: {
         changedHomepage: dto.homepageContent !== undefined,
         changedColors: dto.primaryColor !== undefined || dto.secondaryColor !== undefined,
         changedTheme: dto.themeTokens !== undefined,
+        changedLattice: dto.latticeEnabled !== undefined,
       },
       ip,
     });
+
     return result;
   }
 
@@ -271,7 +332,7 @@ export class TenancyController {
    */
   @Post('settings/image')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_GERER)
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Téléverser une image de la vitrine (logo / photo hero)' })

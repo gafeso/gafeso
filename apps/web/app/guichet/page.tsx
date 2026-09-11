@@ -2,7 +2,10 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { getToken, getUser } from '@/lib/session';
+import { getToken } from '@/lib/session';
+import { useMyFunctions } from '@/lib/functions';
+import { useModulesActifs } from '@/lib/modules-actifs';
+import { LIBELLES } from '@/lib/libelles';
 import { Badge, Button, Card, Input } from '@/components/ui';
 
 // ── Types des réponses circulation ────────────────────────────
@@ -53,33 +56,35 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function GuichetPage() {
-  const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>('checkout');
-
-  useEffect(() => {
-    const role = getUser()?.role;
-    setAuthorized(role === 'LIBRARIAN' || role === 'ADMIN');
-  }, []);
+  // Garde par FONCTION, pas par rôle : un rôle personnalisé de l'école qui
+  // porte circulation.faire tient le guichet, quel que soit son enum.
+  const { functions } = useMyFunctions();
+  const authorized = functions ? functions.includes('circulation.faire') : null;
 
   if (authorized === null) return null;
   if (!authorized) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <div>
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
-          Le guichet est réservé aux bibliothécaires et administrateurs.
+          Le guichet est réservé au personnel qui tient la circulation.
         </p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <div>
       <h1 className="font-serif text-3xl font-bold">Guichet de circulation</h1>
       <p className="mt-1 text-sm text-muted">
         Scannez ou saisissez les codes-barres — exemplaire et carte d’adhérent.
       </p>
 
-      <div className="mt-6 flex gap-1 border-b border-line" role="tablist">
+      {/* `flex-wrap` : les quatre onglets débordaient de 34 px à 375 px et
+          faisaient défiler la page latéralement — mesuré sur build de
+          production. Même défaut que la barre du haut, sur l'écran où une
+          bibliothécaire passe sa journée. */}
+      <div className="mt-6 flex flex-wrap gap-1 border-b border-line" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -103,7 +108,7 @@ export default function GuichetPage() {
         {tab === 'patron' && <PatronTab />}
         {tab === 'holds' && <HoldsTab />}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -224,7 +229,7 @@ function CheckoutTab() {
           <Input
             value={itemBarcode}
             onChange={(e) => setItemBarcode(e.target.value)}
-            placeholder="ZK-000123"
+            placeholder="BIB-000123"
             required
           />
         </label>
@@ -290,7 +295,7 @@ function ReturnTab() {
           <Input
             value={itemBarcode}
             onChange={(e) => setItemBarcode(e.target.value)}
-            placeholder="ZK-000123"
+            placeholder="BIB-000123"
             required
             autoFocus
           />
@@ -309,22 +314,21 @@ function ReturnTab() {
         <div className="mt-4 flex flex-col gap-2">
           <div
             className={`rounded-md px-4 py-3 text-sm ${
-              result.fine.amountXof > 0
+              result.fine.overdueDays > 0
                 ? 'bg-amber-50 text-amber-900'
                 : 'bg-green-50 text-green-900'
             }`}
           >
             <p className="font-semibold">Retour enregistré.</p>
             <p className="mt-0.5">
-              {result.fine.amountXof > 0 ? (
-                <>
-                  Retard de <strong>{result.fine.overdueDays} jour
-                  {result.fine.overdueDays > 1 ? 's' : ''}</strong> — amende à
-                  encaisser : <strong>{fcfa(result.fine.amountXof)}</strong>.
-                </>
-              ) : (
-                'Rendu dans les délais, aucune amende.'
-              )}
+              {result.fine.overdueDays === 0
+                ? LIBELLES.amendes.retourDansLesDelais
+                : result.fine.amountXof > 0
+                  ? LIBELLES.amendes.retourEnRetard(
+                      result.fine.overdueDays,
+                      fcfa(result.fine.amountXof),
+                    )
+                  : LIBELLES.amendes.retourEnRetardSansAmende(result.fine.overdueDays)}
             </p>
           </div>
           {result.holdReady && (
@@ -346,6 +350,11 @@ function ReturnTab() {
 
 // ── Onglet Adhérent ───────────────────────────────────────────
 function PatronTab() {
+  // État du module `amendes` — P4-4. `null` VAUT « PAS ENCORE SU » et garde le
+  // comportement d'avant : on n'affirme pas qu'un module est éteint sur la foi
+  // d'une réponse qui n'est pas arrivée.
+  const { modulesActifs } = useModulesActifs();
+  const amendesActives = modulesActifs === null ? null : modulesActifs.includes('amendes');
   const [barcode, setBarcode] = useState('');
   const [situation, setSituation] = useState<PatronSituation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -420,18 +429,31 @@ function PatronTab() {
                     ` · carte valable jusqu'au ${dateFr.format(new Date(situation.patron.expiryDate))}`}
                 </p>
               </div>
-              {situation.fines.totalXof > 0 ? (
+              {amendesActives === false ? (
+                // Module éteint : il ne reste que la DETTE, et seulement si elle
+                // existe. Un « Aucune amende » vert ici laisserait croire qu'un
+                // calcul a tourné et n'a rien trouvé.
+                situation.fines.recordedXof > 0 && (
+                  <Badge tone="ocre">
+                    {LIBELLES.amendes.dues(fcfa(situation.fines.recordedXof))}
+                  </Badge>
+                )
+              ) : situation.fines.totalXof > 0 ? (
                 <Badge tone="ocre">Amendes : {fcfa(situation.fines.totalXof)}</Badge>
               ) : (
                 <Badge tone="green">Aucune amende</Badge>
               )}
             </div>
-            {situation.fines.totalXof > 0 && (
-              <p className="mt-2 text-sm text-muted">
-                Constatées aux retours : {fcfa(situation.fines.recordedXof)} · en cours
-                sur les retards : {fcfa(situation.fines.accruingXof)}
-              </p>
-            )}
+            {amendesActives === false
+              ? situation.fines.recordedXof > 0 && (
+                  <p className="mt-2 text-sm text-muted">{LIBELLES.amendes.conservees}</p>
+                )
+              : situation.fines.totalXof > 0 && (
+                  <p className="mt-2 text-sm text-muted">
+                    Constatées aux retours : {fcfa(situation.fines.recordedXof)} · en cours
+                    sur les retards : {fcfa(situation.fines.accruingXof)}
+                  </p>
+                )}
           </Card>
 
           <Card>
@@ -457,7 +479,16 @@ function PatronTab() {
                   </div>
                   {checkout.overdue ? (
                     <Badge tone="ocre">
-                      En retard · {fcfa(checkout.accruedFineXof)}
+                      {/*
+                        ⚠ « En retard · 0 FCFA » écrit vingt-deux jours de retard
+                        comme une ligne à zéro : le montant est exact, la lecture
+                        est fausse. Le retard appartient à la circulation et se
+                        dit toujours ; le montant n'est dit que s'il existe.
+                        Trouvé À L'ÉCRAN, module éteint — aucun test unitaire du
+                        lot ne montait cette liste.
+                      */}
+                      En retard
+                      {checkout.accruedFineXof > 0 && ` · ${fcfa(checkout.accruedFineXof)}`}
                     </Badge>
                   ) : (
                     <Badge tone="green">Dans les délais</Badge>

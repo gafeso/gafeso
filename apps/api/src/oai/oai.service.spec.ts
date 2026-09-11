@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OaiService } from './oai.service';
 import { oaiDatestamp } from './oai-xml';
+import {
+  MARCXCHANGE_FORMAT,
+  MARCXCHANGE_NAMESPACE,
+  MARCXCHANGE_PREFIX,
+  MARCXCHANGE_SCHEMA_URL,
+} from '../cataloging/unimarc-xml';
 
 const tenant = { slug: 'zinda', name: 'EXEMPLE', adminEmail: 'bibliotheque@exemple.bf' };
 const baseUrl = 'http://localhost/oai';
@@ -96,6 +102,48 @@ describe('OaiService — verbes & erreurs', () => {
 });
 
 describe('oaiDatestamp', () => {
+  it('ListMetadataFormats annonce marcxchange, avec le schéma de la NORME', async () => {
+    const xml = await svc.handle(makeDb(1), tenant, { verb: 'ListMetadataFormats' }, baseUrl);
+    expect(xml).toContain(`<metadataPrefix>${MARCXCHANGE_PREFIX}</metadataPrefix>`);
+    expect(xml).toContain(`<metadataNamespace>${MARCXCHANGE_NAMESPACE}</metadataNamespace>`);
+    // Le schéma est celui d'ISO 25577, chez son mainteneur — pas une copie
+    // maison : le schéma d'une norme appartient à la norme.
+    expect(xml).toContain(`<schema>${MARCXCHANGE_SCHEMA_URL}</schema>`);
+    // Plus aucune affirmation MARC21 : loc.gov apparaît (c'est l'hôte du
+    // schéma ISO 25577), mais jamais « MARC21 ».
+    expect(xml).not.toContain('MARC21');
+  });
+
+  it('l’ancien préfixe marcxml est REFUSÉ, en nommant son remplaçant', async () => {
+    const xml = await svc.handle(
+      makeDb(1),
+      tenant,
+      { verb: 'ListRecords', metadataPrefix: 'marcxml' },
+      baseUrl,
+    );
+    expect(xml).toContain('cannotDisseminateFormat');
+    // Un moissonneur qui échoue doit savoir quoi demander à la place.
+    expect(xml).toContain(MARCXCHANGE_PREFIX);
+    // Et surtout : aucune notice n'est servie sous l'ancien nom.
+    expect(xml).not.toContain('<record>');
+  });
+
+  it('GetRecord marcxchange → notice ISO 25577 déclarant son dialecte UNIMARC', async () => {
+    const xml = await svc.handle(
+      makeDb(1),
+      tenant,
+      { verb: 'GetRecord', identifier: 'oai:zinda:id-0', metadataPrefix: MARCXCHANGE_PREFIX },
+      baseUrl,
+    );
+    expect(xml).toContain(`<record xmlns="${MARCXCHANGE_NAMESPACE}"`);
+    expect(xml).toContain(`format="${MARCXCHANGE_FORMAT}"`);
+    expect(xml).not.toContain('MARC21');
+    // Le label ISO 2709 n'est pas inventé (facultatif en MarcXchange 2.0).
+    expect(xml).not.toContain('<leader>');
+    // Témoin positif : la notice est bien là (sinon le test ne prouverait rien).
+    expect(xml).toContain('<datafield tag="200"');
+  });
+
   it('granularité seconde, UTC', () => {
     expect(oaiDatestamp(new Date('2026-07-18T10:33:00.789Z'))).toBe('2026-07-18T10:33:00Z');
   });

@@ -183,7 +183,7 @@ navigation filtrée n'est qu'un confort d'affichage).
 - **Export MARC** (voir §1.3).
 - **Serveur OAI-PMH 2.0** : entrepôt **public** tenant-scopé, 6 verbes
   (Identify, ListMetadataFormats, ListSets, ListIdentifiers, ListRecords,
-  GetRecord), formats **oai_dc** et **marcxml**, moissonnage incrémental,
+  GetRecord), formats **oai_dc** et **marcxchange** (ISO 25577 ; notices déclarées `format="UNIMARC"`, pas du MARC21), moissonnage incrémental,
   sets par catégorie. **Uniquement des métadonnées — jamais les fichiers.**
 - **Récupération SRU** (voir §1.2).
 - **Page d'administration Interopérabilité** : l'URL OAI de l'établissement,

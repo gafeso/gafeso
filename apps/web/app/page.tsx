@@ -8,11 +8,26 @@
 // liens sont relatifs → domaine du tenant courant.
 
 import type { Metadata } from 'next';
-import { fetchConstellation, fetchTenantHome, toHomeTheme } from '@/lib/server-api';
+import {
+  fetchChiffres,
+  fetchConstellation,
+  fetchNouveautes,
+  fetchTenantHome,
+  toHomeTheme,
+} from '@/lib/server-api';
 import { homeThemeStyle } from '@/lib/home-theme';
 import { HomeHeader } from '@/components/home/home-header';
-import { ConstellationSection } from '@/components/constellation';
+import { HeroBandeau } from '@/components/home/hero-bandeau';
+import { bornerDiapositives } from '@/lib/hero-slides';
+import { GROUPES_DE_TYPES } from '@/lib/record-types';
+import { formaterNombre, tuilesSignificatives } from '@/lib/chiffres';
+import {
+  SectionAcquisitions,
+  SectionChiffres,
+  SectionConstellation,
+} from './sections-differees';
 import styles from './home.module.css';
+import { LIBELLES } from '@/lib/libelles';
 
 export async function generateMetadata(): Promise<Metadata> {
   const home = await fetchTenantHome();
@@ -69,8 +84,14 @@ export default async function HomePage() {
     );
   }
 
-  const constellation = await fetchConstellation();
-  const domains = constellation.domains;
+  // ⚠ LES TROIS APPELS ONT QUITTÉ CETTE FONCTION — backlog n° 13. Ils étaient
+  // en série (6,25 s), puis en parallèle (3,14 s) ; ils sont maintenant DANS
+  // leurs sections, derrière des frontières `Suspense`. La page ne les attend
+  // plus : premier octet à 1,53 s au lieu de 3,14.
+  //
+  // ⚠ `fetchTenantHome` reste seul et AVANT : le repli sobre ci-dessus dépend
+  // de sa réponse, et c'est lui qui porte le nom de l'école et le bandeau.
+  // C'est le plancher de ce lot, structurel et assumé.
   const { content, latticeEnabled } = home;
   const { identity } = content;
   const themeStyle = homeThemeStyle(toHomeTheme(home));
@@ -78,7 +99,6 @@ export default async function HomePage() {
   // Ancres de navigation : seulement les sections réellement présentes.
   const hasEspaces = content.espaces.length > 0;
   const hasServices = content.services.length > 0;
-  const hasSavoirs = domains.length > 0;
   const hasHours = content.hours.lines.length > 0 || content.hours.note.length > 0;
   const hasResources = content.resources.length > 0;
   const hasHorairesSection = hasHours || hasResources;
@@ -86,7 +106,12 @@ export default async function HomePage() {
   const navItems = [
     hasEspaces && { href: '#espaces', label: 'Espaces' },
     hasServices && { href: '#services', label: 'Services' },
-    hasSavoirs && { href: '#savoirs', label: 'Catalogue' },
+    // ⚠ TOUJOURS AFFICHÉE. Elle dépendait de la constellation : le menu
+    // attendait un troisième appel pour savoir s'il montrait « Catalogue ».
+    // Faire dépendre la navigation d'une donnée qui ne la concerne pas est ce
+    // qui empêchait de diffuser la page tôt. La section existe toujours, sous
+    // une forme ou une autre — répartition, ou message d'indisponibilité.
+    { href: '#savoirs', label: 'Catalogue' },
     hasHorairesSection && { href: '#horaires', label: 'Horaires' },
     { href: '#contact', label: 'Contact' },
   ].filter(Boolean) as { href: string; label: string }[];
@@ -105,72 +130,114 @@ export default async function HomePage() {
       {latticeEnabled && <div className={styles.latticeStrip} />}
 
       <main>
-        {/* ---------- HERO ---------- */}
-        <section className={styles.hero}>
-          <Lattice />
-          <div className={`${styles.wrap} ${styles.heroInner}`}>
-            <div>
-              {identity.tagline && <div className={styles.eyebrow}>{identity.tagline}</div>}
-              <h1>
-                {identity.heroTitle}
-                {identity.heroTitleAccent && (
-                  <>
-                    {identity.heroTitle && <br />}
-                    <em>{identity.heroTitleAccent}</em>
-                  </>
-                )}
-              </h1>
-              {identity.lead && <p className={styles.lead}>{identity.lead}</p>}
+        {/* ---------- BANDEAU PLEINE LARGEUR ----------
+            Texte par-dessus l'image, flèches et points. Le moteur est celui du
+            lot précédent : sur mobile UNE seule image est montée, jamais
+            masquée en CSS. Ne pas contourner `HeroBandeau` pour « simplifier ».
+            ⚠ `home.heroSlides` : la liste EFFECTIVE, servie à la racine.
+            Surtout pas `content.identity.heroSlides`, qui porte le stocké. */}
+        <HeroBandeau
+          plein
+          diapositives={bornerDiapositives(home.heroSlides)}
+          lattice={latticeEnabled}
+          // Défaut du PRODUIT quand l'établissement n'a rien saisi. Affiché,
+              // jamais enregistré : voir LIBELLES.defauts.
+              accroche={identity.lead || LIBELLES.defauts.presentation}
+          actions={
+            <>
+              <a href="#recherche" className={`${styles.btn} ${styles.btnClay}`}>
+                {LIBELLES.accueil.rechercherDocument}
+              </a>
+              <a href="/inscription" className={`${styles.btn} ${styles.btnSurContraste}`}>
+                {LIBELLES.accueil.creerCompte}
+              </a>
+            </>
+          }
+        />
 
-              {/* Recherche : formulaire GET natif → page OPAC (aucun JS). */}
-              <form className={styles.searchCard} action="/opac" method="get">
-                <input
-                  type="text"
-                  name="q"
-                  placeholder="Que cherchez-vous aujourd'hui ? — titre, auteur, sujet…"
-                  aria-label="Rechercher dans le catalogue"
-                />
-                <button type="submit">Rechercher</button>
-              </form>
-              {identity.searchHint && (
-                <div className={styles.searchHint}>
-                  {identity.searchHint}{' '}
-                  <a href="/opac">Ouvrir le catalogue</a>
-                </div>
-              )}
-
-              <div className={styles.heroCta}>
-                <a href="/inscription" className={`${styles.btn} ${styles.btnClay}`}>
-                  Créer un compte lecteur
-                </a>
-                {hasEspaces && (
-                  <a href="#espaces" className={`${styles.btn} ${styles.btnGhost}`}>
-                    Découvrir les espaces
-                  </a>
-                )}
+        {/* Sans diapositive, le bandeau ne rend RIEN — la page doit rester
+            cohérente sans lui. On rappelle donc ici le titre de
+            l'établissement, qui vivait dans le bandeau avant la refonte. */}
+        {bornerDiapositives(home.heroSlides).length === 0 &&
+          (identity.heroTitle || identity.lead) && (
+            <section className={styles.section}>
+              <div className={styles.wrap}>
+                {identity.tagline && <div className={styles.eyebrow}>{identity.tagline}</div>}
+                <h1>
+                  {identity.heroTitle || LIBELLES.defauts.accroche}
+                  {identity.heroTitleAccent && (
+                    <>
+                      <br />
+                      <em>{identity.heroTitleAccent}</em>
+                    </>
+                  )}
+                </h1>
+                <p className={styles.lead}>{identity.lead || LIBELLES.defauts.presentation}</p>
               </div>
-            </div>
+            </section>
+          )}
 
-            <div className={styles.heroFrame}>
-              {identity.heroImageUrl && (
-                <img
-                  className={styles.heroPhoto}
-                  src={identity.heroImageUrl}
-                  alt={identity.heroImageCaption || ''}
-                />
-              )}
-              <Lattice />
-              {(identity.heroImageKicker || identity.heroImageCaption) && (
-                <div className={styles.caption}>
-                  {identity.heroImageKicker && (
-                    <div className={styles.mono}>{identity.heroImageKicker}</div>
-                  )}
-                  {identity.heroImageCaption && (
-                    <div className={styles.title}>{identity.heroImageCaption}</div>
-                  )}
-                </div>
-              )}
+        {/* ---------- QUATRE PILIERS ---------- */}
+        <section className={styles.piliers} aria-label={LIBELLES.piliers[0].titre}>
+          <div className={`${styles.wrap} ${styles.piliersGrille}`}>
+            {LIBELLES.piliers.map((pilier) => (
+              <div key={pilier.titre} className={styles.pilier}>
+                <b>{pilier.titre}</b>
+                <span>{pilier.texte}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ---------- RECHERCHE ----------
+            Formulaire GET natif vers l'OPAC : aucun JS, donc utilisable même
+            si l'hydratation échoue. Le filtre part en `recordType`, le nom que
+            l'OPAC attend déjà. */}
+        <section id="recherche" className={styles.section}>
+          <div className={styles.wrap}>
+            <div className={styles.sectionHead}>
+              <h2>{LIBELLES.recherche.titre}</h2>
+              <p>{LIBELLES.recherche.sousTitre}</p>
             </div>
+            <form className={styles.rechercheCarte} action="/opac" method="get">
+              <input
+                type="text"
+                name="q"
+                placeholder={LIBELLES.recherche.placeholder}
+                aria-label={LIBELLES.recherche.champAccessible}
+              />
+              {/* Regroupements de la maquette, rendus possibles par le
+                  recordType MULTIPLE livré le 10 septembre. « Périodiques »
+                  reste absent, et c'est mesuré : aucun recordType ne
+                  correspond, et un filtre qui ne filtre pas est un contrôle
+                  sans effet. « Documents numériques » n'est pas ici non plus,
+                  mais pour une autre raison — voir le lien de parcours sous le
+                  formulaire. */}
+              <select name="recordType" aria-label={LIBELLES.recherche.filtreAccessible}>
+                <option value="">{LIBELLES.recherche.tousLesTypes}</option>
+                {GROUPES_DE_TYPES.map((g) => (
+                  <option key={g.cle} value={g.types.join(',')}>
+                    {LIBELLES.recherche.groupes[g.cle]}
+                  </option>
+                ))}
+              </select>
+              <button type="submit">{LIBELLES.recherche.bouton}</button>
+            </form>
+            {/* ⚠ Un PARCOURS, pas une option du menu ci-dessus.
+                Le filtre « a un fichier » se lit en base ; /opac/search ne
+                peut pas le porter sans que ses totaux deviennent faux, et
+                l'API l'a donc sorti sur /opac/parcourir. Le glisser dans le
+                menu promettrait une recherche restreinte aux documents
+                numériques — que rien ne sait servir. Lien natif : il marche
+                sans JavaScript, comme le formulaire. */}
+            <p className={styles.rechercheParcours}>
+              <a href="/opac?numeriques=1">{LIBELLES.opac.parcourirNumeriques} →</a>
+            </p>
+            {/* Indice de saisie : celui de l'établissement, ou le défaut du
+                produit. Affiché, jamais enregistré. */}
+            <p className={styles.searchHint}>
+              {identity.searchHint || LIBELLES.defauts.indiceRecherche}
+            </p>
           </div>
         </section>
 
@@ -240,15 +307,14 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* ---------- CONSTELLATION DES SAVOIRS (animée, dynamique) ---------- */}
-        {hasSavoirs && (
-          <ConstellationSection
-            id="savoirs"
-            domains={domains}
-            totalRecords={constellation.totalRecords}
-            tenantName={home.name}
-          />
-        )}
+        {/* ⚠ DIFFÉRÉES — backlog n° 13. Ces deux sections faisaient attendre
+            la page entière : premier octet à 3,137 s pour un total de 3,139 s,
+            c'est-à-dire du blanc du début à la fin. Elles font désormais leur
+            propre appel derrière une frontière `Suspense`, et le reste de la
+            page part dès que `fetchTenantHome` a répondu. Voir
+            app/sections-differees.tsx. */}
+        <SectionAcquisitions />
+        <SectionConstellation tenantName={home.name} />
 
         {/* ---------- HORAIRES + ACCÈS ---------- */}
         {hasHorairesSection && (
@@ -314,19 +380,37 @@ export default async function HomePage() {
         )}
       </main>
 
+        <SectionChiffres />
+
       {/* ---------- FOOTER ---------- */}
       <footer id="contact" className={styles.footer}>
         <div className={styles.wrap}>
           <div className={styles.footGrid}>
             <div>
               <div className={styles.brand} style={{ marginBottom: 18 }}>
-                <div className={styles.brandMark} style={{ background: 'var(--highlight)', color: 'var(--text)' }}>
-                  {identity.logoUrl ? (
+                {/* Même cascade qu'en en-tête — et surtout le MÊME repli :
+                    la démonstration montrait deux pastilles de couleurs
+                    différentes selon l'écran, ce qui se lisait comme deux
+                    logos concurrents. */}
+                {identity.logoUrl ? (
+                  <div
+                    className={styles.brandMark}
+                    style={{ background: 'var(--highlight)', color: 'var(--text)' }}
+                  >
                     <img src={identity.logoUrl} alt={identity.acronym} />
-                  ) : (
-                    identity.brandMark || identity.acronym.slice(0, 2)
-                  )}
-                </div>
+                  </div>
+                ) : identity.brandMark || identity.acronym ? (
+                  <div
+                    className={styles.brandMark}
+                    style={{ background: 'var(--highlight)', color: 'var(--text)' }}
+                  >
+                    {identity.brandMark || identity.acronym.slice(0, 2)}
+                  </div>
+                ) : (
+                  <div className={`${styles.brandMark} ${styles.brandMarkGafeso}`}>
+                    <img src="/marque/gafeso_icone_simplifiee.svg" alt="Gafeso" />
+                  </div>
+                )}
                 {identity.acronym && (
                   <div className={styles.brandText}>
                     <div className={styles.top}>{identity.acronym}</div>
@@ -339,15 +423,59 @@ export default async function HomePage() {
               )}
             </div>
 
+            {/* ⚠ Chaque lien est conditionné à l'EXISTENCE de sa destination.
+                « Constellation » et « Horaires » pointent vers des ancres de
+                cette page : si la section ne se rend pas, l'ancre n'existe pas
+                et le lien mènerait nulle part. La maquette proposait aussi
+                « Application mobile », « À propos de Gafeso », « Mentions
+                légales » et « Politique de confidentialité » : aucune de ces
+                pages n'existe, aucun de ces liens n'est affiché. */}
+            <div>
+              <h5>{LIBELLES.pied.bibliotheque}</h5>
+              <a className={styles.flink} href="/opac">
+                {LIBELLES.pied.catalogue}
+              </a>
+              {/* ⚠ Comme l'ancre de l'en-tête : toujours affichée. Elle
+                  dépendait de la constellation, donc d'un appel que la page
+                  n'attend plus — et un lien de pied qui apparaîtrait une
+                  seconde après le reste se lirait comme un défaut. */}
+              <a className={styles.flink} href="#savoirs">
+                {LIBELLES.pied.constellation}
+              </a>
+              {content.hours.lines.length > 0 && (
+                <a className={styles.flink} href="#horaires">
+                  {LIBELLES.pied.horaires}
+                </a>
+              )}
+            </div>
+
+            <div>
+              <h5>{LIBELLES.pied.services}</h5>
+              <a className={styles.flink} href="/inscription">
+                {LIBELLES.pied.creerCompte}
+              </a>
+              <a className={styles.flink} href="#contact">
+                {LIBELLES.pied.contact}
+              </a>
+            </div>
+
             {content.contact.address && (
               <div>
-                <h5>Campus</h5>
+                <h5>{LIBELLES.pied.campus}</h5>
                 <p>{content.contact.address}</p>
               </div>
             )}
 
+            {/* Conditionnée comme « Campus » juste au-dessus. Sans cela, un
+                établissement qui n'a renseigné ni courriel, ni téléphone, ni
+                réseau affichait un titre CONTACT surmontant le vide — ce qui
+                se lit comme une page cassée, pas comme une information
+                absente. */}
+            {(content.contact.email ||
+              content.contact.phones ||
+              content.contact.socials.some((social) => safeHref(social.url))) && (
             <div>
-              <h5>Contact</h5>
+              <h5>{LIBELLES.pied.contact}</h5>
               {content.contact.email && (
                 <a className={styles.flink} href={`mailto:${content.contact.email}`}>
                   {content.contact.email}
@@ -372,29 +500,37 @@ export default async function HomePage() {
                   </a>
                 ))}
             </div>
+            )}
 
-            <div>
-              <h5>Ressources</h5>
-              <a className={styles.flink} href="/opac">
-                Catalogue OPAC
-              </a>
-              {content.resources
-                .filter((r) => safeHref(r.url))
-                .map((resource, i) => (
-                  <a
-                    key={i}
-                    className={styles.flink}
-                    href={safeHref(resource.url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {resource.name}
-                  </a>
-                ))}
-            </div>
+            {/* « Catalogue OPAC » a disparu d'ici : le même lien est
+                désormais sous LA BIBLIOTHÈQUE, et un pied de page qui répète
+                sa propre entrée fait douter qu'il s'agisse de la même. La
+                colonne ne subsiste donc que pour les ressources EXTERNES de
+                l'établissement — et seulement s'il en a. */}
+            {content.resources.some((r) => safeHref(r.url)) && (
+              <div>
+                <h5>{LIBELLES.pied.ressources}</h5>
+                {content.resources
+                  .filter((r) => safeHref(r.url))
+                  .map((resource, i) => (
+                    <a
+                      key={i}
+                      className={styles.flink}
+                      href={safeHref(resource.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {resource.name}
+                    </a>
+                  ))}
+              </div>
+            )}
           </div>
+          {/* Le copyright est celui de l'ÉTABLISSEMENT ; Gafeso ne signe
+              qu'en dessous, discrètement. C'est sa vitrine, pas la nôtre. */}
           <div className={styles.footBottom}>
             <div>{content.contact.copyright || home.name}</div>
+            <div className={styles.signatureGafeso}>{LIBELLES.pied.signature}</div>
           </div>
         </div>
       </footer>

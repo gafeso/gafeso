@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -94,6 +95,23 @@ export class AdminController {
   })
   async migrateAuthors(@Param('slug') slug: string) {
     return this.admin.migrateAuthors(slug);
+  }
+
+  @Post('tenants/:slug/domaines-orphelins')
+  @UseGuards(ApiKeyGuard)
+  @ApiSecurity('admin-api-key')
+  @ApiOperation({
+    summary: 'Lister les domaines orphelins d’une école (lecture seule par défaut)',
+    description:
+      'Valeurs de `biblio_records.category` sans catégorie correspondante : ' +
+      'visibles dans la constellation, absentes de l’écran de gestion, hors ' +
+      'd’atteinte du renommage et de la suppression. ' +
+      'LISTE seulement, avec le nombre d’occurrences de chaque valeur. ' +
+      'Ajouter ?creer=true pour créer les catégories manquantes — décision ' +
+      'explicite : le vocabulaire des domaines appartient à la bibliothécaire.',
+  })
+  async orphanCategories(@Param('slug') slug: string, @Query('creer') creer?: string) {
+    return this.admin.orphanCategories(slug, creer === 'true');
   }
 
   @Post('tenants/:slug/dedupe-authors')

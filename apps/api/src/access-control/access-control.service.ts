@@ -233,6 +233,35 @@ export class AccessControlService {
   }
 
   /**
+   * LIBELLÉ d'un document local rattaché à une collection — identifiant et
+   * titre, rien d'autre.
+   *
+   * ⚠ POURQUOI CETTE ROUTE EXISTE. L'écran des collections affichait le titre
+   * de ses documents en appelant `GET /cataloging/records/:id`, qui n'exigeait
+   * AUCUNE fonction : le registre professionnel entier — `marcData`,
+   * exemplaires, contributeurs — était donc lisible par tout compte
+   * authentifié, étudiants compris, et le commentaire du front reposait
+   * là-dessus en toutes lettres. La faille est fermée (`catalogue.gerer` sur
+   * les trois routes de lecture), et ce besoin-là, légitime, a désormais sa
+   * propre porte, couverte par `collections.gerer`.
+   *
+   * ⚠ ET LE `select` EST LA SÉCURITÉ, pas une optimisation. Rendre la ligne
+   * entière ici recréerait la fuite sous un autre nom : un écran qui a besoin
+   * d'un libellé n'a pas besoin du registre. Toute colonne ajoutée à
+   * `BiblioRecord` resterait ainsi hors de cette réponse, par construction —
+   * c'est ce qu'un `include` ne garantit jamais.
+   */
+  async recordLabel(slug: string, recordId: string) {
+    const db = this.prisma.forTenant(slug);
+    const record = await db.biblioRecord.findUnique({
+      where: { id: recordId },
+      select: { id: true, title: true },
+    });
+    if (!record) throw new NotFoundException('Notice introuvable.');
+    return record;
+  }
+
+  /**
    * Référentiels pour composer une règle : classes réelles (avec leur libellé)
    * et paliers d'abonnement RÉELLEMENT portés par des comptes.
    *

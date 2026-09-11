@@ -30,7 +30,7 @@ import { CreateSessionDto, ScanDto } from './dto/inventory.dto';
 @ApiTags('inventory')
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, FunctionsGuard)
-@RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+@RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
 @ApiBearerAuth()
 export class InventoryController {
   constructor(

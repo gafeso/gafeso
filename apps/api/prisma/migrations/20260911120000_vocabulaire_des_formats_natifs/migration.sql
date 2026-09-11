@@ -1,0 +1,47 @@
+-- Le vocabulaire des formats de description s'ouvre au non-MARC.
+--
+-- LE DÉFAUT. La couche 3 — la description d'origine — avait déjà son logement
+-- (`marc_data` porte la charge, `marc_format` déclare le format), mais le
+-- vocabulaire ne savait NOMMER que du MARC : MARC21, UNIMARC, GAFESO. Une
+-- description Dublin Core pouvait être stockée sans pouvoir être déclarée, ce
+-- qui vide l'invariant I3 de son sens : « ce qui arrive dans un format y reste »
+-- suppose qu'on puisse dire dans quel format.
+--
+-- ⚠ GÉNÉRALISATION SUR PLACE, PAS DE PAIRE PARALLÈLE. Une seconde colonne à
+-- côté de `marc_data` créerait deux sources pour un même fait — la dérive déjà
+-- payée trois fois : author/contributors, le nom de l'adhérent, le marcxml
+-- reconstruit.
+--
+-- ⚠ LE VOCABULAIRE VIT À TROIS ENDROITS, ET IL FAUT LES TROIS.
+--   1. `schema.prisma` — la déclaration Prisma ;
+--   2. `TENANT_ENUMS` (apps/api/src/tenancy/tenant-schema.ts) — la liste que le
+--      provisioning recrée dans chaque schéma d'école ET dont se sert la
+--      synchronisation ; une école NEUVE reçoit ce que dit cette liste ;
+--   3. le type LOCAL de chaque école déjà provisionnée.
+--
+-- `MarcFormat` n'est pas une table mais un TYPE PostgreSQL, et il en existe une
+-- copie par schéma — vérifié en base : le type vit dans `public` ET dans
+-- `tenant_zinda`, chacun avec ses propres valeurs.
+--
+-- CE FICHIER NE TOUCHE QUE LE GABARIT `public`. Le point 3 est rattrapé par
+-- `node scripts/sync-schema.mjs <slug>`, qui compare les valeurs présentes chez
+-- l'école à TENANT_ENUMS et émet les `ALTER TYPE ... ADD VALUE` manquants
+-- (`buildMissingEnumValueStatements`, couvert par tenant-schema.spec).
+--
+-- ⚠ D'OÙ LA CONDITION, ET ELLE M'A PRIS AU PIÈGE : la synchronisation suit
+-- TENANT_ENUMS, pas Prisma. Une valeur ajoutée au schéma Prisma et oubliée dans
+-- TENANT_ENUMS ne se propage donc à AUCUNE école — ni neuve, ni existante — et
+-- sync-schema rapporte un succès. C'est exactement ce qui s'est produit en
+-- écrivant ce lot : première exécution, « applied 8 », valeur toujours absente.
+-- Les deux listes sont désormais tenues d'accord par un test.
+
+-- ⚠ AUCUNE DONNÉE N'EST TOUCHÉE. Les notices gardent leur format — y compris
+-- celles qui portent `UNIMARC` avec un `marc_data` vide, affirmation fausse
+-- relevée en P2. Les réécrire changerait des réponses servies, ce que ce lot
+-- promet de ne pas faire. Lot à part, à annoncer.
+
+ALTER TYPE "MarcFormat" ADD VALUE IF NOT EXISTS 'DUBLIN_CORE';
+
+-- Une seule instruction : le gabarit. Les écoles existantes passent par
+-- sync-schema (voir ci-dessus). Un second mécanisme ici ferait deux chemins
+-- pour un même travail — la duplication qu'on passe la phase à défaire.

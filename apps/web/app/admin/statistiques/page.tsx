@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
+import { useModulesActifs } from '@/lib/modules-actifs';
+import { LIBELLES } from '@/lib/libelles';
 import { Alert } from '@/components/ui';
 import {
   AreaLineChart,
@@ -58,7 +60,10 @@ const REMINDER_STATUS: Record<string, string> = {
 
 export default function StatsPage() {
   const { functions } = useMyFunctions();
-  const canView = functions?.includes('etablissement.gerer');
+  // Module `rappels` — P4-4. `null` = pas encore su : on garde l'affichage d'avant.
+  const { modulesActifs } = useModulesActifs();
+  const rappelsActifs = modulesActifs === null ? null : modulesActifs.includes('rappels');
+  const canView = functions?.includes('statistiques.voir');
   const params = useSearchParams();
   const router = useRouter();
 
@@ -67,6 +72,20 @@ export default function StatsPage() {
   const granularity = params.get('granularity') ?? 'day';
 
   const [data, setData] = useState<Dashboard | null>(null);
+
+  /**
+   * Le bloc « Rappels envoyés » s'affiche-t-il ?
+   *
+   * Module allumé (ou état pas encore su) : oui, comme avant. Module éteint : il
+   * ne reste que l'HISTOIRE, donc seulement s'il y en a — sinon « Aucun rappel
+   * sur la période » affirmerait qu'on a compté, alors qu'on ne compte plus.
+   *
+   * ⚠ Le `?? 0` ne remplace pas ici une donnée qui pourrait manquer : cette
+   * valeur n'est LUE que sous `{data && …}`, donc `data` y est toujours chargée.
+   * Il satisfait le typage, il n'affirme rien.
+   */
+  const montrerRappels =
+    rappelsActifs === false ? (data?.system.reminders.length ?? 0) > 0 : true;
   const [error, setError] = useState<string | null>(null);
 
   const periodQs = useCallback(() => {
@@ -116,7 +135,7 @@ export default function StatsPage() {
     return (
       <Alert tone="error">
         Vous n’avez pas la permission de consulter les statistiques (fonction
-        «&nbsp;etablissement.gerer&nbsp;»).
+        «&nbsp;statistiques.voir&nbsp;»).
       </Alert>
     );
   }
@@ -193,7 +212,7 @@ export default function StatsPage() {
                 <AreaLineChart data={data.timeseries} />
               </ChartCard>
             </div>
-            <ChartCard title="Fonds par catégorie" action={<CsvLink href={exportUrl('fund-by-category')} />}>
+            <ChartCard title="Fonds par domaine" action={<CsvLink href={exportUrl('fund-by-category')} />}>
               <Donut rows={data.fundByCategory} />
             </ChartCard>
           </div>
@@ -206,7 +225,7 @@ export default function StatsPage() {
             <ChartCard title="Auteurs les plus consultés" action={<CsvLink href={exportUrl('top-authors')} />}>
               <HorizontalBars rows={data.rankings.topAuthors} accent valueSuffix=" prêts" />
             </ChartCard>
-            <ChartCard title="Catégories les plus actives" action={<CsvLink href={exportUrl('top-categories')} />}>
+            <ChartCard title="Domaines les plus actifs" action={<CsvLink href={exportUrl('top-categories')} />}>
               <HorizontalBars rows={data.rankings.topCategories} valueSuffix=" prêts" />
             </ChartCard>
             <ChartCard title="Classes les plus actives" action={<CsvLink href={exportUrl('top-classes')} />}>
@@ -235,13 +254,28 @@ export default function StatsPage() {
                 </ul>
               )}
             </ChartCard>
-            <ChartCard title="Activité système" action={<CsvLink href={exportUrl('reminders')} />}>
+            {/*
+              ⚠ Le lien d'export ne porte QUE les rappels, sur une carte qui
+              montre aussi les réservations. Il accompagne donc exactement le
+              bloc « Rappels envoyés » : présent quand ce bloc l'est, absent
+              sinon. Un export proposé sur un bloc retiré serait un bouton sans
+              effet, et la carte, elle, reste — les réservations sont du noyau.
+            */}
+            <ChartCard
+              title="Activité système"
+              action={montrerRappels ? <CsvLink href={exportUrl('reminders')} /> : undefined}
+            >
               <div className="text-sm">
                 <div className="font-medium">Réservations</div>
                 <p className="mt-0.5 text-muted">
                   {data.system.holds.fulfilled} honorée(s) · {data.system.holds.expired} expirée(s)
                 </p>
+                {montrerRappels && (
+                  <>
                 <div className="mt-3 font-medium">Rappels envoyés</div>
+                {rappelsActifs === false && (
+                  <p className="mt-0.5 text-muted">{LIBELLES.statistiques.rappelsEteints}</p>
+                )}
                 {data.system.reminders.length === 0 ? (
                   <p className="mt-0.5 text-muted">Aucun rappel sur la période.</p>
                 ) : (
@@ -256,6 +290,8 @@ export default function StatsPage() {
                       ))}
                     </tbody>
                   </table>
+                )}
+                  </>
                 )}
               </div>
             </ChartCard>

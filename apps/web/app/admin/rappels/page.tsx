@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { Alert, Badge, Button, Card, Select } from '@/components/ui';
+import { ReminderSettings } from '@/components/reminder-settings';
 
 interface ReminderLogEntry {
   id: string;
@@ -46,7 +47,7 @@ const EMPTY = { type: '', status: '' };
 
 export default function ReminderJournalPage() {
   const { functions } = useMyFunctions();
-  const canView = functions?.includes('etablissement.gerer');
+  const canView = functions?.includes('circulation.retards');
 
   const [filters, setFilters] = useState(EMPTY);
   const [page, setPage] = useState(1);
@@ -76,7 +77,7 @@ export default function ReminderJournalPage() {
     return (
       <Alert tone="error">
         Vous n’avez pas la permission de consulter ce journal (fonction
-        «&nbsp;etablissement.gerer&nbsp;»).
+        «&nbsp;circulation.retards&nbsp;»).
       </Alert>
     );
   }
@@ -205,6 +206,13 @@ export default function ReminderJournalPage() {
           </Button>
         </div>
       )}
+      {/* ⚠ VENU DE /admin/parametres le 11 septembre 2026. Son API exige
+          `circulation.retards` — la permission de CET écran, pas celle de
+          l'établissement. Sur l'écran d'origine il refusait pour la personne
+          même qui pouvait le voir. Le droit et le métier concordent ici. */}
+      <div className="mt-8 max-w-2xl">
+        <ReminderSettings />
+      </div>
     </div>
   );
 }

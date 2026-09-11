@@ -3,6 +3,7 @@ import { BiblioRecord, DigitalFormat, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { buildRecordSearchDoc, SearchService } from '../search/search.service';
+import { aplatirChampsDeProfil } from './champs-de-profil';
 import { ContentIngestionService } from '../offline-licensing/content-ingestion.service';
 import { computeMetadataPatch, MetadataExtractionService } from './metadata-extraction.service';
 
@@ -291,7 +292,10 @@ export class DigitalCopyService {
       });
 
       try {
-        await this.search.indexRecords(slug, [buildRecordSearchDoc(updated)]);
+        // Aplati : les champs de profil viennent de `profileData` (P3-3).
+        await this.search.indexRecords(slug, [
+          buildRecordSearchDoc(aplatirChampsDeProfil(updated)),
+        ]);
       } catch (error) {
         this.logger.warn(
           `Réindexation après pré-remplissage échouée (notice ${updated.id}) : ${(error as Error).message}`,

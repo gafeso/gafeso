@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { MARCXCHANGE_FORMAT, MARCXCHANGE_NAMESPACE } from './unimarc-xml';
 import { Readable } from 'stream';
 import { Marc, Record as MarcRecord } from 'marcjs';
 import {
   buildUnimarcFields,
-  catalogToMarcxml,
+  catalogToMarcxchange,
   MarcExportRecord,
   recordToIso2709,
 } from './marc-export';
@@ -89,9 +90,11 @@ describe('marc-export — aller-retour UNIMARC', () => {
     expect(f995).toContain('346 NIK');
   });
 
-  it('MARCXML : collection dans l’espace de noms MARC slim', () => {
-    const xml = catalogToMarcxml([rich]);
-    expect(xml).toContain('<collection xmlns="http://www.loc.gov/MARC21/slim">');
+  it('MarcXchange : collection ISO 25577, notices déclarant UNIMARC', () => {
+    const xml = catalogToMarcxchange([rich]);
+    expect(xml).toContain(`<collection xmlns="${MARCXCHANGE_NAMESPACE}">`);
+    expect(xml).toContain(`format="${MARCXCHANGE_FORMAT}"`);
+    expect(xml).not.toContain('MARC21');
     // marcjs échappe le non-ASCII en références numériques (XML valide) : on
     // vérifie une sous-chaîne ASCII du titre + les zones clés.
     expect(xml).toContain('Plateau central');

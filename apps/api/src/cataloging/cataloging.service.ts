@@ -13,21 +13,69 @@ import {
   RecordSearchDoc,
   SearchService,
 } from '../search/search.service';
-import { extractBiblio, MarcFields } from './marc-mapper';
+import { extractBiblio, MarcFields, MarcFormatName } from './marc-mapper';
 import { ContributorDto, CreateRecordDto } from './dto/create-record.dto';
 import { UpdateRecordDto } from './dto/update-record.dto';
 import { CreateItemDto, UpdateItemDto } from './dto/item.dto';
 import { ListRecordsDto } from './dto/list-records.dto';
 import { DigitalCopyService } from './digital-copy.service';
 import { normalizeItemLocation } from './item-locations';
+import { foldAccents, sqlFoldExpression } from '../common/accent-folding';
+
+/**
+ * Plafond de correspondances pré-résolues par la recherche de notices.
+ *
+ * Large pour un fonds d'établissement (les catalogues réels se comptent en
+ * dizaines de milliers), et jamais dépassé en silence : au-delà, un
+ * avertissement est journalisé et l'utilisateur est invité à affiner. Même
+ * raison et même ordre de grandeur que le plafond de la recherche de comptes.
+ */
+const RECHERCHE_PLAFOND = 5000;
+import { construireOrderBy } from './tri-du-catalogue';
+import {
+  aplatirChampsDeProfil,
+  ecrireChampsDeProfil,
+  lireChampsDeProfil,
+} from './champs-de-profil';
+import { DEFAULT_RECORD_TYPE, DEFENSE_RECORD_TYPES } from './description-profiles';
+import { profilPourTypeDeNotice } from './profil-de-notice';
+import { foldCategoryName, normalizeCategoryName } from '../categories/category-name';
 import { AuthorsService } from '../authors/authors.service';
 import { MarcExportRecord } from './marc-export';
+import { porteDuNatif, zonesPortees } from './metadonnees-natives';
 
 export type TenantDb = PrismaClient;
 
 export interface ImportMarcResult {
   imported: number;
   skipped: number;
+  /**
+   * Sort des domaines rencontrés dans le fichier. TROIS cas distincts, jamais
+   * fondus en deux : « la source n'en portait pas » et « elle en portait un
+   * qu'on n'a pas reconnu » sont deux situations différentes pour la
+   * bibliothécaire, et les confondre serait le même silence sous une autre
+   * forme (invariant I6).
+   */
+  categories: {
+    /** Notices dont la source ne portait aucun domaine (pas de 900$b). */
+    sansValeur: number;
+    /** Notices dont le domaine a été reconnu et repris. */
+    reconnues: number;
+    /**
+     * Notices dont le domaine n'a pas été reconnu : la notice est importée, sa
+     * catégorie reste VIDE, et la valeur d'origine reste dans les métadonnées
+     * natives (`marcData`, zone 900$b) — rien n'est perdu (invariant I3).
+     */
+    inconnues: number;
+    /**
+     * Les valeurs non reconnues avec leur nombre d'occurrences, du plus
+     * fréquent au moins fréquent. C'est la liste sur laquelle la
+     * bibliothécaire décide : créer le domaine, ou rattacher à un existant.
+     * On ne crée RIEN à sa place — importer le 900$b d'un catalogue étranger
+     * remplirait son vocabulaire sans qu'elle l'ait voulu.
+     */
+    valeursInconnues: { valeur: string; occurrences: number }[];
+  };
 }
 
 @Injectable()
@@ -60,7 +108,11 @@ export class CatalogingService {
   private toExportRecord(r: {
     id: string; title: string; titleComplement: string | null; isbn: string | null;
     publishYear: number | null; language: string; publisher: string | null;
-    publicationCity: string | null; defenseUniversity: string | null; defensePlace: string | null;
+    // ⚠ P3-3 : les trois champs de profil sont LUS dans `profileData`. La
+    // sortie MARC, elle, ne change pas d'un octet — 210$a, 328$c et 328$e
+    // portent les mêmes valeurs (empreinte figée par
+    // champs-de-profil-caracterisation.spec.ts).
+    profileData: unknown;
     category: string | null; recordType: string;
     contributors: { name: string; role: string; position: number }[];
     keywords: { keyword: { name: string } }[];
@@ -74,9 +126,7 @@ export class CatalogingService {
       publishYear: r.publishYear,
       language: r.language,
       publisher: r.publisher,
-      publicationCity: r.publicationCity,
-      defenseUniversity: r.defenseUniversity,
-      defensePlace: r.defensePlace,
+      ...lireChampsDeProfil(r.profileData),
       category: r.category,
       recordType: r.recordType,
       contributors: r.contributors.map((c) => ({ name: c.name, role: c.role, position: c.position })),
@@ -141,10 +191,11 @@ export class CatalogingService {
     // Compat clients existants : `author` seul est accepté et converti.
     const contributors = normalizeContributors(dto.contributors, dto.author);
     requirePrincipalAuthor(contributors);
-    const recordType = dto.recordType?.trim() || 'book';
+    const recordType = dto.recordType?.trim() || DEFAULT_RECORD_TYPE;
     requireDefenseFields(recordType, dto.defenseUniversity, contributors);
     const keywords = normalizeKeywords(dto.keywords);
     requireMinKeywords(keywords);
+    const category = await this.resolveCategory(db, dto.category);
     // Rattache chaque contributeur à sa fiche d'autorité (dédup à la source).
     const linkedContributors = await this.withAuthorIds(db, contributors);
 
@@ -160,12 +211,25 @@ export class CatalogingService {
         publishYear: dto.publishYear ?? null,
         language: dto.language?.trim() || 'fr',
         publisher: dto.publisher?.trim() ?? null,
+        // ⚠ COEXISTENCE P3-3, TEMPS 1 : les champs de profil sont écrits aux
+        // DEUX endroits. Les colonnes partiront au temps 2 ; jusque-là, elles
+        // sont ce qui permet de rattraper un consommateur manqué. Écrire le
+        // JSON seul rendrait le temps 1 irréversible, ce qui lui retirerait sa
+        // raison d'être.
         publicationCity: dto.publicationCity?.trim() || null,
         defenseUniversity: dto.defenseUniversity?.trim() || null,
         defensePlace: dto.defensePlace?.trim() || null,
+        profileData: ecrireChampsDeProfil({
+          publicationCity: dto.publicationCity?.trim() || null,
+          defenseUniversity: dto.defenseUniversity?.trim() || null,
+          defensePlace: dto.defensePlace?.trim() || null,
+        }),
         summary: dto.summary?.trim() || null,
-        category: dto.category?.trim().toLowerCase() ?? null,
+        category,
         recordType,
+        // P3-2 : le profil est DÉDUIT du type, jamais saisi. Une seule source,
+        // donc aucune dérive possible entre les deux.
+        profile: profilPourTypeDeNotice(recordType),
         marcFormat: dto.marcFormat ?? MarcFormat.UNIMARC,
         marcData: (dto.marcData ?? { fields: [] }) as Prisma.InputJsonValue,
         coverUrl: dto.coverUrl ?? null,
@@ -180,7 +244,7 @@ export class CatalogingService {
       },
     });
     await this.safeIndex(slug, [this.toSearchDoc(record)]);
-    return flattenKeywords(record);
+    return aplatirNotice(record);
   }
 
   /**
@@ -192,7 +256,10 @@ export class CatalogingService {
     db: TenantDb,
     slug: string,
     buffer: Buffer,
-    format: MarcFormat,
+    // MarcFormatName et non l'enum MarcFormat : on n'importe que du MARC.
+    // `GAFESO` (notice Gafeso native, docs/architecture-notice.md) est une
+    // valeur du format NATIF d'une notice, jamais un format d'import.
+    format: MarcFormatName,
     defaultCategory?: string,
   ): Promise<ImportMarcResult> {
     const parsed = await this.parseIso2709(buffer);
@@ -200,6 +267,15 @@ export class CatalogingService {
     let imported = 0;
     let skipped = 0;
     const docs: RecordSearchDoc[] = [];
+    // Référentiel de l'école, chargé UNE fois : l'import peut porter des
+    // dizaines de milliers de notices.
+    const connues = new Map(
+      (await db.category.findMany()).map((c) => [foldCategoryName(c.name), c.name]),
+    );
+    const parDefaut = defaultCategory ? normalizeCategoryName(defaultCategory) : null;
+    let sansValeur = 0;
+    let reconnues = 0;
+    const inconnues = new Map<string, number>();
 
     for (const marc of parsed) {
       const extracted = extractBiblio(marc.fields as MarcFields, format);
@@ -213,6 +289,22 @@ export class CatalogingService {
       // ne BLOQUE pas un import : une notice sans zone auteur reste importable.
       const linked = await this.withAuthorIds(db, extracted.contributors);
       const importedKeywords = normalizeKeywords(extracted.keywords);
+
+      // Trois issues distinctes, comptées séparément (voir ImportMarcResult).
+      const brute = extracted.category ?? parDefaut;
+      let categorieDeLaNotice: string | null = null;
+      if (!brute || !normalizeCategoryName(brute)) {
+        sansValeur++;
+      } else {
+        const normalisee = normalizeCategoryName(brute);
+        const connue = connues.get(foldCategoryName(normalisee));
+        if (connue) {
+          categorieDeLaNotice = connue;
+          reconnues++;
+        } else {
+          inconnues.set(normalisee, (inconnues.get(normalisee) ?? 0) + 1);
+        }
+      }
       const record = await db.biblioRecord.create({
         data: {
           title: extracted.title,
@@ -225,10 +317,18 @@ export class CatalogingService {
           publicationCity: extracted.publicationCity,
           defenseUniversity: extracted.defenseUniversity,
           defensePlace: extracted.defensePlace,
-          // Catégorie : celle de la notice si présente (zone locale 900$b),
-          // sinon la catégorie par défaut choisie à l'import.
-          category: extracted.category ?? defaultCategory?.trim().toLowerCase() ?? null,
-          recordType: extracted.recordType ?? 'book',
+          profileData: ecrireChampsDeProfil({
+            publicationCity: extracted.publicationCity,
+            defenseUniversity: extracted.defenseUniversity,
+            defensePlace: extracted.defensePlace,
+          }),
+          // Domaine : celui de la notice si présent (zone locale 900$b), sinon
+          // celui choisi à l'import. Voir `classerCategorie` : une valeur non
+          // reconnue laisse le domaine VIDE — la notice est importée quand
+          // même, et la valeur d'origine reste dans `marcData` (I3).
+          category: categorieDeLaNotice,
+          recordType: extracted.recordType ?? DEFAULT_RECORD_TYPE,
+          profile: profilPourTypeDeNotice(extracted.recordType ?? DEFAULT_RECORD_TYPE),
           marcFormat: format,
           marcData: {
             leader: marc.leader,
@@ -249,16 +349,80 @@ export class CatalogingService {
     }
 
     await this.safeIndex(slug, docs);
-    this.logger.log(`Import MARC (${slug}) : ${imported} notices, ${skipped} ignorées.`);
-    return { imported, skipped };
+    const valeursInconnues = [...inconnues.entries()]
+      .map(([valeur, occurrences]) => ({ valeur, occurrences }))
+      .sort((a, b) => b.occurrences - a.occurrences || a.valeur.localeCompare(b.valeur));
+    const nbInconnues = valeursInconnues.reduce((n, v) => n + v.occurrences, 0);
+
+    this.logger.log(
+      `Import MARC (${slug}) : ${imported} notices, ${skipped} ignorées ; ` +
+        `domaines — ${reconnues} reconnus, ${nbInconnues} non reconnus ` +
+        `(${valeursInconnues.length} valeur(s) distincte(s)), ${sansValeur} absents.`,
+    );
+    return {
+      imported,
+      skipped,
+      categories: { sansValeur, reconnues, inconnues: nbInconnues, valeursInconnues },
+    };
   }
 
   async listRecords(db: TenantDb, query: ListRecordsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where = query.category
-      ? { category: query.category.trim().toLowerCase() }
-      : {};
+
+    // ⚠ LE MÊME `where` SERT AU COMPTAGE ET À LA PAGE. Le construire une seule
+    // fois n'est pas une élégance : deux `where` divergents donnent un `total`
+    // qui ne correspond pas aux lignes rendues — le front affiche alors un
+    // nombre de pages qu'il ne peut pas atteindre, sans qu'aucune erreur ne
+    // soit levée.
+    const where: Prisma.BiblioRecordWhereInput = {};
+    if (query.category) where.category = normalizeCategoryName(query.category);
+
+    const recherche = query.q?.trim();
+    if (recherche) {
+      // Recherche d'IDENTIFICATION, côté base : le bibliothécaire cherche une
+      // notice qu'il sait exister. La recherche de DÉCOUVERTE reste à l'OPAC,
+      // sur Meilisearch. `summary` est délibérément hors périmètre : il fait du
+      // bruit sur une liste d'administration, et c'est la colonne la plus chère.
+      //
+      // ⚠ INSENSIBLE AUX ACCENTS DEPUIS LE 11 SEPTEMBRE 2026, et c'était une
+      // vraie panne : `contains` + `mode: 'insensitive'` repose sur `ILIKE`,
+      // qui franchit la casse mais PAS les diacritiques. Mesuré sur le fonds —
+      // « région » rendait 42 notices, « region » en rendait ZÉRO, et 268 des
+      // 352 titres portent un accent. Un bibliothécaire qui tape sans accent ne
+      // trouvait rien, et rien ne lui disait pourquoi.
+      //
+      // ⚠ MÊME MÉCANIQUE QUE LA RECHERCHE DE COMPTES (accounts.service) : le
+      // SQL brut pré-résout les IDENTIFIANTS, puis Prisma filtre dessus — la
+      // pagination, le comptage et le filtre par catégorie restent inchangés.
+      // `translate()` plutôt que l'extension `unaccent` : c'est du SQL
+      // standard, disponible partout, sans étape de déploiement — décision
+      // déjà prise et documentée dans `common/accent-folding.ts`.
+      //
+      // ⚠ `biblio_records` n'est PAS qualifié par un schéma : le client tenant
+      // porte `?schema=tenant_<slug>`, donc son `search_path` vise déjà la
+      // bonne école, et le SQL brut emprunte la même connexion. Un test le
+      // vérifie : s'il cessait d'être vrai, la requête taperait dans `public`.
+      const haystack = sqlFoldExpression(
+        `coalesce("title",'') || ' ' || coalesce("title_complement",'') || ' ' || ` +
+          `coalesce("author",'') || ' ' || coalesce("isbn",'') || ' ' || ` +
+          `coalesce("publisher",'')`,
+      );
+      const lignes = await db.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT "id" FROM "biblio_records" WHERE ${haystack} LIKE $1 ` +
+          `LIMIT ${RECHERCHE_PLAFOND + 1}`,
+        `%${foldAccents(recherche)}%`,
+      );
+      if (lignes.length > RECHERCHE_PLAFOND) {
+        // Jamais de troncature silencieuse : on le dit, plutôt que de laisser
+        // croire que le fonds ne contient que ces notices-là.
+        this.logger.warn(
+          `Recherche de notices « ${recherche} » : plus de ${RECHERCHE_PLAFOND} ` +
+            `correspondances, résultats tronqués — affinez le terme.`,
+        );
+      }
+      where.id = { in: lignes.slice(0, RECHERCHE_PLAFOND).map((l) => l.id) };
+    }
 
     const [total, records] = await Promise.all([
       db.biblioRecord.count({ where }),
@@ -269,13 +433,23 @@ export class CatalogingService {
           // Auteurs affichés dans le tableau du catalogue admin, ordonnés.
           contributors: { orderBy: { position: 'asc' } },
         },
-        orderBy: { createdAt: 'desc' },
+        // Le tri ET son départage viennent du même endroit : voir
+        // `tri-du-catalogue.ts`, qui porte aussi la raison pour laquelle le tri
+        // alphabétique n'est pas exposé.
+        orderBy: construireOrderBy(query.sort, query.order),
         skip: (page - 1) * limit,
         take: limit,
       }),
     ]);
 
-    return { total, page, totalPages: Math.ceil(total / limit) || 1, records };
+    return {
+      total,
+      page,
+      totalPages: Math.ceil(total / limit) || 1,
+      // Même raison qu'`aplatirNotice` : la liste renvoie la ligne entière, et
+      // `profile_data` s'y serait invité.
+      records: records.map((r) => aplatirChampsDeProfil(r)),
+    };
   }
 
   async getRecord(db: TenantDb, id: string) {
@@ -288,7 +462,7 @@ export class CatalogingService {
       },
     });
     if (!record) throw new NotFoundException('Notice introuvable.');
-    return flattenKeywords(record);
+    return aplatirNotice(record);
   }
 
   /** Mots-clés du tenant (autocomplétion du champ tags — §2.4). */
@@ -302,6 +476,25 @@ export class CatalogingService {
 
   async updateRecord(db: TenantDb, slug: string, id: string, dto: UpdateRecordDto) {
     const existing = await this.getRecord(db, id);
+
+    // ⚠ INVARIANT I3 — RIEN N'ÉCRASE LA DESCRIPTION D'ORIGINE.
+    //
+    // `marcData` prenait la valeur reçue sans condition : un appelant qui
+    // l'envoyait remplaçait l'original. Sur une école dont le catalogue a été
+    // repris par import, cet original est le SEUL exemplaire de la description
+    // native — le perdre est irréversible et silencieux.
+    //
+    // On ne se fie pas à une mesure faite ailleurs (sur dev, les 352 notices
+    // sont vides) : on COMPTE À L'EXÉCUTION, sur la notice qu'on touche. Et on
+    // compte sur la ligne DÉJÀ LUE juste au-dessus — un garde qui coûte une
+    // requête de plus est un garde qu'on finit par déplacer.
+    if (dto.marcData !== undefined && porteDuNatif(existing.marcData)) {
+      throw new ConflictException(
+        `Cette notice conserve sa description d'origine (${zonesPortees(existing.marcData)} ` +
+          `zones, format ${existing.marcFormat}) : elle ne peut pas être écrasée. ` +
+          `C'est le seul exemplaire de la description reçue à l'import (invariant I3).`,
+      );
+    }
 
     // Contributeurs : absents = inchangés ; fournis = remplacement complet
     // (c'est le formulaire qui envoie l'état final), avec la même règle
@@ -328,6 +521,27 @@ export class CatalogingService {
     // Rattache les nouveaux contributeurs à leur fiche d'autorité (dédup source).
     const linkedContributors = contributors ? await this.withAuthorIds(db, contributors) : undefined;
 
+    // ⚠ LE JSON PORTE L'ÉTAT FINAL, PAS LE DELTA. Un PATCH est partiel : un
+    // champ absent doit rester, un champ vide doit s'effacer. `profile_data`
+    // étant réécrit en entier à chaque modification, il doit être recomposé
+    // depuis l'état existant — sinon modifier le seul titre effacerait les
+    // trois champs de profil, en silence, et la colonne resterait juste (donc
+    // le désaccord ne se verrait qu'au temps 2, une fois la colonne partie).
+    const profilFinal = {
+      publicationCity:
+        dto.publicationCity === undefined
+          ? existing.publicationCity
+          : dto.publicationCity.trim() || null,
+      defenseUniversity:
+        dto.defenseUniversity === undefined
+          ? existing.defenseUniversity
+          : dto.defenseUniversity.trim() || null,
+      defensePlace:
+        dto.defensePlace === undefined
+          ? existing.defensePlace
+          : dto.defensePlace.trim() || null,
+    };
+
     const record = await db.biblioRecord.update({
       where: { id },
       data: {
@@ -346,9 +560,18 @@ export class CatalogingService {
         publicationCity: emptyToNull(dto.publicationCity),
         defenseUniversity: emptyToNull(dto.defenseUniversity),
         defensePlace: emptyToNull(dto.defensePlace),
+        // Coexistence : le JSON est réécrit en entier, depuis l'état final.
+        profileData: ecrireChampsDeProfil(profilFinal),
         summary: emptyToNull(dto.summary),
-        category: dto.category?.trim().toLowerCase(),
+        category: dto.category === undefined ? undefined : await this.resolveCategory(db, dto.category),
         recordType: dto.recordType?.trim(),
+        // ⚠ `undefined` quand le type n'est pas fourni : Prisma laisse alors la
+        // colonne intacte. Le profil ne se recalcule QUE si le type change —
+        // sinon une modification de titre réécrirait le profil, et écraserait
+        // en silence le reclassement d'une notice ancienne.
+        profile: dto.recordType?.trim()
+          ? profilPourTypeDeNotice(dto.recordType.trim())
+          : undefined,
         marcFormat: dto.marcFormat,
         marcData: dto.marcData as Prisma.InputJsonValue | undefined,
         coverUrl: dto.coverUrl,
@@ -368,7 +591,7 @@ export class CatalogingService {
       },
     });
     await this.safeIndex(slug, [this.toSearchDoc(record)]);
-    return flattenKeywords(record);
+    return aplatirNotice(record);
   }
 
   /**
@@ -503,6 +726,45 @@ export class CatalogingService {
   }
 
   // ───────────────────────────────────────────────────────────
+  /**
+   * Normalise un domaine SAISI et vérifie qu'il existe dans le référentiel de
+   * l'école. Une chaîne vide efface le domaine.
+   *
+   * `biblio_records.category` est comparée par CHAÎNE au nom de la ligne
+   * `categories` (pas de clé étrangère — choix assumé, voir `schema.prisma`).
+   * Rien ne garantissait cette égalité à l'écriture : une valeur sans ligne
+   * correspondante devenait un domaine fantôme — visible dans la constellation
+   * (facette alimentée par la notice), absent de l'écran de gestion, et hors
+   * d'atteinte du renommage comme de la suppression, qui cherchent tous deux
+   * le nom exact d'une catégorie existante. Mesuré sur le jeu de démonstration
+   * avant correction : 8 notices sur 12.
+   *
+   * On REFUSE en nommant la valeur plutôt que de créer le domaine à la volée :
+   * le vocabulaire des domaines appartient à la bibliothécaire.
+   */
+  private async resolveCategory(
+    db: TenantDb,
+    saisie: string | null | undefined,
+  ): Promise<string | null> {
+    if (saisie === undefined || saisie === null) return null;
+    const name = normalizeCategoryName(saisie);
+    if (!name) return null;
+
+    const existante = await db.category.findUnique({ where: { name } });
+    if (existante) return existante.name;
+
+    // Rapprochement sans accents : « Économie » saisi, « economie » en base.
+    const cle = foldCategoryName(name);
+    const toutes = await db.category.findMany();
+    const proche = toutes.find((c) => foldCategoryName(c.name) === cle);
+    if (proche) return proche.name;
+
+    throw new BadRequestException(
+      `Domaine inconnu : « ${name} ». Créez-le dans les catégories, ou ` +
+        `choisissez-en un existant.`,
+    );
+  }
+
   /** Voir buildRecordSearchDoc : tout indexeur doit produire un document COMPLET. */
   toSearchDoc(
     record: BiblioRecord & {
@@ -510,7 +772,12 @@ export class CatalogingService {
       keywords?: string[] | { keyword: { name: string } }[];
     },
   ): RecordSearchDoc {
-    return buildRecordSearchDoc(record);
+    // ⚠ APLATI AVANT D'INDEXER. `buildRecordSearchDoc` lit `defenseUniversity`
+    // au premier niveau, et son contrat ne change PAS : c'est la SOURCE de la
+    // valeur qui change (le JSON au lieu de la colonne). C'est ce qui garde
+    // `defenseUniversity` cherchable — l'index reçoit le même document, donc
+    // aucune réindexation n'est due.
+    return buildRecordSearchDoc(aplatirChampsDeProfil(record));
   }
 
   // ───────────────────────────────────────────────────────────
@@ -576,7 +843,6 @@ function requirePrincipalAuthor(contributors: { role: string }[]): void {
  * Types de document soumis aux règles de soutenance (travaux universitaires
  * soutenus). Doit rester aligné avec la liste front (apps/web/lib/record-types.ts).
  */
-const DEFENSE_RECORD_TYPES = ['these', 'memoire', 'licence', 'master', 'these_unique'];
 
 /**
  * Règles serveur des travaux soutenus (cahier §4.3) : université de soutenance
@@ -588,7 +854,7 @@ function requireDefenseFields(
   defenseUniversity: string | null | undefined,
   contributors: { role: string }[],
 ): void {
-  if (!DEFENSE_RECORD_TYPES.includes(recordType)) return;
+  if (!(DEFENSE_RECORD_TYPES as readonly string[]).includes(recordType)) return;
   if (!defenseUniversity?.trim()) {
     throw new BadRequestException(
       'L’université de soutenance est requise pour une thèse ou un mémoire.',
@@ -642,6 +908,23 @@ function flattenKeywords<T extends { keywords?: { keyword: { name: string } }[] 
   record: T,
 ): Omit<T, 'keywords'> & { keywords: string[] } {
   return { ...record, keywords: (record.keywords ?? []).map((link) => link.keyword.name) };
+}
+
+/**
+ * Mise en forme d'une notice pour l'administration : mots-clés aplatis, ET
+ * champs de profil sortis de `profileData`.
+ *
+ * ⚠ POURQUOI LES DEUX AU MÊME ENDROIT. Ces routes renvoient la LIGNE ENTIÈRE
+ * (`include`) : la colonne `profile_data` s'est donc invitée dans leur réponse
+ * au moment du `db push`, sans que personne l'ait décidé — le défaut que P3-4 a
+ * corrigé sur la route publique, rejoué ici. Composer la mise en forme en un
+ * seul point fait que les trois routes qui l'appellent sont traitées ensemble,
+ * plutôt que deux sur trois.
+ */
+function aplatirNotice<
+  T extends { keywords?: { keyword: { name: string } }[]; profileData?: unknown },
+>(record: T) {
+  return aplatirChampsDeProfil(flattenKeywords(record));
 }
 
 /** Nom du premier auteur principal (dénormalisation transitoire du champ `author`). */

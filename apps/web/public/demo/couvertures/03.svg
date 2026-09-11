@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 220" width="160" height="220" role="img" aria-label="Couverture d'exemple">
+<!-- Couverture de DÉMONSTRATION, charte Gafeso. Vectorielle.
+     ⚠ Aucun chiffre de poids ici : il vaudrait pour le fichier QUI LE PORTE,
+     et l'écrire le fausse. Les mesures sont dans scripts/seed-demo.mjs. -->
+<rect width="160" height="220" fill="#2E7D57"/>
+<rect x="0" y="0" width="7" height="220" fill="#E9C46A" opacity=".85"/>
+<g fill="#E9C46A" opacity=".9">
+  <rect x="24" y="34" width="96" height="7" rx="3.5"/>
+  <rect x="24" y="49" width="70" height="7" rx="3.5"/>
+</g>
+<g fill="#E9C46A" opacity=".35">
+  <rect x="24" y="80" width="112" height="4" rx="2"/>
+  <rect x="24" y="92" width="104" height="4" rx="2"/>
+  <rect x="24" y="104" width="112" height="4" rx="2"/>
+  <rect x="24" y="116" width="86" height="4" rx="2"/>
+</g>
+<path d="M24 176 C52 164 72 164 100 176 C112 181 124 181 136 176" fill="none" stroke="#E9C46A" stroke-width="3" opacity=".55"/>
+<circle cx="130" cy="200" r="9" fill="none" stroke="#E9C46A" stroke-width="2" opacity=".5"/>
+</svg>

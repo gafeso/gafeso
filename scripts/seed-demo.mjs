@@ -81,6 +81,89 @@ function tenantUrl() {
   return url.toString();
 }
 
+/**
+ * Page d'accueil COMPLÈTE de l'école de démonstration.
+ *
+ * ⚠ POURQUOI C'EST DANS LE SEED et non saisi à la main : une démonstration
+ * configurée à la main disparaît à la première réinstallation, et personne ne
+ * sait ce qu'il fallait ressaisir. Ici c'est du code — versionné, reproductible,
+ * et toute réinstallation repart présentable.
+ *
+ * ⚠ TOUT CE QUI EST PROPRE À L'ÉTABLISSEMENT EST FICTIF, ET SE VOIT : adresse
+ * « 01 BP 0000 », téléphone en 00, courriel en @exemple.bf. Un contact
+ * plausible sur une démonstration finit recopié dans une vraie installation,
+ * et devient une adresse où personne ne répond.
+ *
+ * ⚠ LES TROIS IMAGES sont des panneaux SVG de la charte
+ * (apps/web/public/demo/), pas des photos. Décidé le 10 septembre 2026 : une
+ * image dont on ne peut pas vérifier la licence n'a rien à faire dans un dépôt
+ * qui sert de source à un instantané public, et une démonstration qui pointe
+ * vers un service externe contredit l'argument de souveraineté du produit —
+ * et tombe si le réseau faiblit. À remplacer par de vraies photos le jour où
+ * l'établissement en fournit : ce sera trois fichiers et trois chemins.
+ */
+const PAGE_ACCUEIL = {
+  identity: {
+    fullName: 'Université d’Exemple — Bibliothèque universitaire',
+    acronym: 'UEX',
+    brandMark: 'UE',
+    subtitle: 'Bibliothèque universitaire',
+    tagline: 'Bibliothèque universitaire',
+    heroTitle: 'Le savoir universitaire',
+    heroTitleAccent: 'à portée de main',
+    lead:
+      'Cherchez, empruntez et lisez les ressources de votre bibliothèque — sur le campus comme hors connexion.',
+    searchHint: 'Plus de 12 000 références, thèses et mémoires compris.',
+    logoUrl: null,
+    // Les trois champs historiques restent VIDES : la liste ci-dessous fait
+    // foi, et les remplir ferait apparaître le bloc « ancienne image sans
+    // effet » dans /admin/accueil dès la première ouverture.
+    heroImageUrl: null,
+    heroImageKicker: '',
+    heroImageCaption: '',
+    heroSlides: [
+      {
+        imageUrl: '/demo/salle-de-lecture.svg',
+        surtitre: 'CAMPUS',
+        titre: 'Une salle de lecture ouverte à tous',
+      },
+      {
+        imageUrl: '/demo/fonds-ancien.svg',
+        surtitre: 'COLLECTIONS',
+        titre: 'Un fonds patrimonial en accès libre',
+      },
+      {
+        imageUrl: '/demo/vie-etudiante.svg',
+        surtitre: 'NUMÉRIQUE',
+        titre: 'Vos documents, même sans réseau',
+      },
+    ],
+  },
+  stats: [],
+  espaces: [],
+  services: [],
+  hours: {
+    note: 'Fermeture annuelle en août.',
+    lines: [
+      { label: 'Lundi — vendredi', value: '08h00 — 19h00' },
+      { label: 'Samedi', value: '09h00 — 13h00' },
+      { label: 'Dimanche', value: 'Fermé' },
+    ],
+  },
+  resources: [],
+  contact: {
+    description:
+      'La bibliothèque universitaire accompagne étudiants, enseignants et chercheurs dans leurs travaux.',
+    partnerNote: '',
+    // Fictif ET visiblement fictif — voir l'avertissement en tête.
+    address: '01 BP 0000, Ouagadougou, Burkina Faso',
+    phones: '+226 00 00 00 00',
+    email: 'bibliotheque@exemple.bf',
+    socials: [],
+    copyright: '© 2026 — Université d’Exemple',
+  },
+};
+
 // ── 2. Public : super-admin, nom, couleurs, domaines ─────
 async function seedPublic(pub) {
   // Super-admin plateforme (login sur /admin/login)
@@ -96,7 +179,11 @@ async function seedPublic(pub) {
   await pub.tenant.update({ where: { id: tenant.id }, data: { name: SCHOOL } });
   await pub.tenantSettings.update({
     where: { tenantId: tenant.id },
-    data: { primaryColor: '#0E5D31', secondaryColor: '#C8102E' },
+    data: {
+      primaryColor: '#0E5D31',
+      secondaryColor: '#C8102E',
+      homepageContent: PAGE_ACCUEIL,
+    },
   });
   for (const domain of ['localhost', 'zinda.localhost']) {
     await pub.domain.upsert({
@@ -105,7 +192,7 @@ async function seedPublic(pub) {
       update: {},
     });
   }
-  log('branding (nom, couleurs, domaines)');
+  log('branding + page d’accueil complète (3 diapositives, horaires, contact fictif)');
 }
 
 // ── 3. École : comptes, classes, catalogue, prêts ─────────────
@@ -131,20 +218,228 @@ const CLASSES = [
   { name: 'L1_INFO', label: 'Licence 1 Informatique', level: 'L1' },
 ];
 
-const RECORDS = [
-  { title: 'Droit constitutionnel burkinabè', author: 'Traoré, Awa', category: 'droit', recordType: 'these', publishYear: 2023, isbn: '978-2-0001' },
+/**
+ * Catalogue de démonstration — 12 notices écrites à la main, complétées par un
+ * générateur.
+ *
+ * ⚠ POURQUOI BEAUCOUP DE NOTICES. À douze, une démonstration ne démontre rien :
+ * la section des chiffres reste sous son seuil, la constellation affiche des
+ * domaines à une ressource, et « À découvrir » puise dans un fonds famélique.
+ *
+ * ⚠ RIEN NE DOIT POUVOIR PASSER POUR UNE VRAIE NOTICE.
+ *  - Les ISBN sont préfixés « EXEMPLE- » : aucun ISBN réel ne commence ainsi.
+ *  - Les auteurs sont tirés de deux listes de prénoms et de noms TRÈS RÉPANDUS
+ *    au Burkina Faso, combinés au hasard. Deux auteurs réels traînaient dans
+ *    les douze notices d'origine — Ki-Zerbo et Bidima, des personnes qui ont
+ *    existé et publié — et ils ont été remplacés.
+ *    ⚠ Une combinaison tirée au sort PEUT coïncider avec une personne réelle :
+ *    c'est le prix de noms plausibles. Le risque est borné en n'attachant
+ *    aucune donnée biographique, et en ne combinant que des noms si courants
+ *    qu'ils ne désignent personne en particulier. Si cela ne suffit pas, la
+ *    solution est de nommer les auteurs « Auteur d'exemple 042 » — plus sûr,
+ *    et beaucoup moins parlant en démonstration.
+ *
+ * ⚠ TIRAGE DÉTERMINISTE (générateur congruentiel, graine fixe) : deux
+ * réinstallations produisent le MÊME catalogue. Sans cela, deux machines de
+ * démonstration montreraient des fonds différents, et aucune capture d'écran
+ * ne resterait valable.
+ */
+const PRENOMS = [
+  'Awa', 'Salif', 'Mariam', 'Issa', 'Pauline', 'Rasmata', 'Benjamin', 'Adama',
+  'Fatoumata', 'Alain', 'Aminata', 'Boureima', 'Céline', 'Drissa', 'Émilie',
+  'Hamidou', 'Justine', 'Karim', 'Léa', 'Moussa', 'Nathalie', 'Ousmane',
+  'Rakieta', 'Sayouba', 'Téné', 'Yacouba', 'Zalissa', 'Abdoulaye', 'Bintou',
+];
+const NOMS = [
+  'Ouédraogo', 'Kaboré', 'Sawadogo', 'Traoré', 'Compaoré', 'Zongo', 'Sanou',
+  'Nikiema', 'Ouoba', 'Sanogo', 'Bationo', 'Congo', 'Dabiré', 'Ilboudo',
+  'Kinda', 'Lompo', 'Nacoulma', 'Palenfo', 'Sankara', 'Tapsoba', 'Yaméogo',
+  'Zoungrana', 'Barry', 'Diallo', 'Koné', 'Sirima',
+];
+
+/** Sujets par domaine, croisés avec des qualificatifs — titres plausibles. */
+const SUJETS = {
+  droit: ['Droit foncier rural', 'Contentieux administratif', 'Droit du travail', 'Procédure civile', 'Droit des sociétés', 'Justice coutumière', 'Droit de la famille', 'Droit pénal des affaires'],
+  medecine: ['Santé maternelle', 'Paludisme', 'Nutrition infantile', 'Épidémiologie de terrain', 'Pharmacopée traditionnelle', 'Santé publique en milieu rural', 'Chirurgie ambulatoire', 'Maladies chroniques'],
+  informatique: ['Réseaux et protocoles', 'Bases de données', 'Apprentissage automatique', 'Génie logiciel', 'Sécurité des systèmes', 'Systèmes embarqués', 'Traitement d’images', 'Architecture des ordinateurs'],
+  histoire: ['Empires du Sahel', 'Colonisation et résistances', 'Histoire des migrations', 'Sociétés précoloniales', 'Mémoire et archives', 'Villes et commerce transsaharien'],
+  economie: ['Microfinance', 'Économie agricole', 'Commerce régional', 'Politiques publiques', 'Marchés du travail', 'Économie informelle'],
+  langues: ['Grammaire mooré', 'Lexicologie dioula', 'Sociolinguistique', 'Didactique du français', 'Traduction et interprétation', 'Langues et scolarisation'],
+  litterature: ['Roman contemporain', 'Poésie orale', 'Théâtre populaire', 'Récits de vie', 'Littérature et engagement', 'Contes et transmission'],
+  philosophie: ['Philosophie politique', 'Éthique appliquée', 'Philosophie des sciences', 'Pensée africaine contemporaine', 'Logique et argumentation'],
+  sciences: ['Chimie analytique', 'Physique des matériaux', 'Hydrologie', 'Agronomie des sols', 'Biodiversité sahélienne', 'Mathématiques appliquées'],
+  arts: ['Arts plastiques', 'Musique et instruments', 'Cinéma documentaire', 'Textiles et motifs', 'Photographie sociale'],
+};
+const QUALIFICATIFS = [
+  'au Burkina Faso', 'en Afrique de l’Ouest', '— approche comparée', '— étude de cas',
+  'dans la région du Centre', '— manuel de premier cycle', '— actes du colloque',
+  '— perspectives contemporaines', 'et développement local', '— travaux dirigés',
+];
+const TYPES = ['ouvrage', 'ouvrage', 'ouvrage', 'these', 'memoire', 'memoire', 'publication'];
+
+/** Générateur congruentiel : reproductible, sans dépendance. */
+function tirage(graine) {
+  let x = graine;
+  return () => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return x / 2147483648;
+  };
+}
+
+function genererNotices(combien) {
+  const alea = tirage(20260910);
+  const pioche = (liste) => liste[Math.floor(alea() * liste.length)];
+  const domaines = Object.keys(SUJETS);
+  const notices = [];
+  const vus = new Set();
+  let n = 0;
+  while (notices.length < combien && n < combien * 20) {
+    n += 1;
+    const category = pioche(domaines);
+    const titre = `${pioche(SUJETS[category])} ${pioche(QUALIFICATIFS)}`;
+    // Titre = clé naturelle de l'idempotence du seed : jamais deux fois le même.
+    if (vus.has(titre)) continue;
+    vus.add(titre);
+    notices.push({
+      title: titre,
+      author: `${pioche(NOMS)}, ${pioche(PRENOMS)}`,
+      category,
+      recordType: pioche(TYPES),
+      publishYear: 2012 + Math.floor(alea() * 14),
+      isbn: `EXEMPLE-${String(1000 + notices.length)}`,
+      // Couvertures VECTORIELLES d'exemple, servies en statique par le front,
+      // réparties sur six variantes pour que la grille ne se répète pas.
+      //
+      // MESURE, en curl et sans cookie, sur le build de production du
+      // 10 septembre 2026 — page d'accueil publique, tout compressé :
+      //   JavaScript, 7 fragments ......... 151 964 o
+      //   4 couvertures (celles qui sont
+      //   RÉELLEMENT demandées au
+      //   chargement, les 2 autres étant
+      //   différées) ........................ 2 118 o   soit 1,4 % du JS
+      //   3 panneaux du bandeau ............. 2 012 o
+      //
+      // ⚠ DEUX CORRECTIONS À UN RELEVÉ PRÉCÉDENT, et elles disent la même
+      // chose. Le premier comptait SIX fragments JS : il manquait
+      // `polyfills` (39 627 o compressés), que le navigateur ne demande pas
+      // — il porte `noModule`, les navigateurs modernes le sautent — mais
+      // qui est bien référencé dans le HTML et que servirait un navigateur
+      // ancien. Il comptait aussi SIX couvertures là où quatre seulement
+      // sont demandées. Dans les deux cas, le relevé venait du journal
+      // réseau du NAVIGATEUR : il ne montre que ce que CE navigateur-là a
+      // demandé, jamais ce que la page contient. C'est le même écart que
+      // « présent dans le DOM ≠ servi », pris par l'autre bout.
+      //
+      // D'où la règle : un relevé de poids se fait en curl, sur les
+      // fragments listés dans le HTML — aucun cookie, aucune session
+      // parasite, aucune optimisation propre à un navigateur.
+      coverUrl: `/demo/couvertures/0${(notices.length % 6) + 1}.svg`,
+    });
+  }
+  return notices;
+}
+
+const RECORDS_ECRITS = [
+  { title: 'Droit constitutionnel burkinabè', author: 'Traoré, Awa', category: 'droit', recordType: 'these', publishYear: 2023, isbn: 'EXEMPLE-0001' },
   { title: 'Précis de droit foncier rural', author: 'Ouédraogo, Salif', category: 'droit', recordType: 'memoire', publishYear: 2021 },
   { title: 'Anatomie générale', author: 'Kaboré, Mariam', category: 'medecine', recordType: 'ouvrage', publishYear: 2022 },
   { title: 'Informatique pour tous', author: 'Sawadogo, Issa', category: 'informatique', recordType: 'ouvrage', publishYear: 2020 },
   { title: 'Algorithmique avancée', author: 'Zongo, Pauline', category: 'informatique', recordType: 'ouvrage', publishYear: 2021 },
-  { title: 'Histoire des empires du Sahel', author: 'Ki-Zerbo, Joseph', category: 'histoire', recordType: 'publication', publishYear: 2019 },
+  { title: 'Histoire des empires du Sahel', author: 'Kaboré, Émilie', category: 'histoire', recordType: 'publication', publishYear: 2019 },
   { title: 'Microéconomie appliquée', author: 'Nikiema, Rasmata', category: 'economie', recordType: 'memoire', publishYear: 2022 },
   { title: 'Grammaire mooré-français', author: 'Ouoba, Benjamin', category: 'langues', recordType: 'memoire', publishYear: 2018 },
-  { title: 'Introduction à la philosophie africaine', author: 'Bidima, Jean-Godefroy', category: 'philosophie', recordType: 'these', publishYear: 2020 },
+  { title: 'Introduction à la philosophie africaine', author: 'Yaméogo, Céline', category: 'philosophie', recordType: 'these', publishYear: 2020 },
   { title: 'Chimie générale — 1er cycle', author: 'Compaoré, Adama', category: 'sciences', recordType: 'ouvrage', publishYear: 2023 },
   { title: 'Arts plastiques du Burkina', author: 'Sanou, Fatoumata', category: 'arts', recordType: 'publication', publishYear: 2021 },
   { title: 'Anthologie de la littérature burkinabè', author: 'Sanogo, Alain', category: 'litterature', recordType: 'ouvrage', publishYear: 2017 },
 ];
+
+/**
+ * PDF d'exemple minimal, construit ici plutôt que versionné en binaire.
+ *
+ * Les décalages de la table xref sont CALCULÉS : un xref faux se lit quand
+ * même dans pdf.js, qui sait reconstruire, mais un fichier qu'on produit
+ * soi-même n'a aucune raison d'être invalide.
+ */
+function construirePdfDExemple() {
+  const objets = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R'
+      + '/Resources<</Font<</F1 5 0 R>>>>>>',
+    null, // le flux de contenu, rempli juste après
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+  ];
+  const texte = 'BT /F1 22 Tf 60 760 Td (Document d\'exemple — Gafeso) Tj'
+    + ' 0 -34 Td /F1 13 Tf (Catalogue de demonstration. Aucun contenu reel.) Tj ET';
+  objets[3] = `<</Length ${texte.length}>>stream\n${texte}\nendstream`;
+
+  let pdf = '%PDF-1.4\n';
+  const decalages = [];
+  objets.forEach((corps, i) => {
+    decalages.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${corps}\nendobj\n`;
+  });
+  const debutXref = pdf.length;
+  pdf += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n`;
+  for (const d of decalages) pdf += `${String(d).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<</Size ${objets.length + 1}/Root 1 0 R>>\nstartxref\n${debutXref}\n%%EOF\n`;
+  return Buffer.from(pdf, 'latin1');
+}
+
+const PDF_EXEMPLE = construirePdfDExemple();
+const CLE_PDF_EXEMPLE = 'demo/document-d-exemple.pdf';
+
+/**
+ * Dépose le PDF d'exemple dans MinIO et rend sa clé. Rend `null` — sans faire
+ * échouer le seed — si le dépôt est indisponible : mieux vaut une démonstration
+ * sans documents numériques qu'un seed qui refuse de finir.
+ */
+async function deposerPdfDExemple() {
+  try {
+    const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const endpoint = `http${process.env.MINIO_USE_SSL === 'true' ? 's' : ''}://`
+      + `${process.env.MINIO_ENDPOINT || 'localhost'}:${process.env.MINIO_PORT || 9000}`;
+    const client = new S3Client({
+      endpoint,
+      region: 'us-east-1',
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.MINIO_ROOT_USER,
+        secretAccessKey: process.env.MINIO_ROOT_PASSWORD,
+      },
+    });
+    await client.send(
+      new PutObjectCommand({
+        // ⚠ « digital-copies », pas MINIO_BUCKET. Le nom du bac est une
+        // CONSTANTE de l'API (storage.service.ts : DIGITAL_COPIES_BUCKET), pas
+        // un réglage : MINIO_BUCKET du .env vaut « bibliocloud » et ce bac
+        // n'existe pas. Vérifié — les bacs réels sont « covers » et
+        // « digital-copies ».
+        Bucket: 'digital-copies',
+        Key: CLE_PDF_EXEMPLE,
+        Body: PDF_EXEMPLE,
+        ContentType: 'application/pdf',
+      }),
+    );
+    return CLE_PDF_EXEMPLE;
+  } catch (err) {
+    // NON silencieux : sans ce message, « 0 document numérique » se lirait
+    // comme un choix alors que c'est une panne.
+    console.error(`  ⚠ dépôt du PDF d'exemple impossible : ${err.message}`);
+    return null;
+  }
+}
+
+/** Les douze écrites à la main, puis le complément généré. */
+// Les douze écrites à la main reçoivent aussi une couverture : sans elle, ce
+// sont précisément les plus visibles qui montreraient le repli.
+const ECRITES = RECORDS_ECRITS.map((r, i) => ({
+  ...r,
+  coverUrl: `/demo/couvertures/0${(i % 6) + 1}.svg`,
+}));
+
+const RECORDS = [...ECRITES, ...genererNotices(340)];
 
 async function seedTenant(db) {
   const hash = await bcrypt.hash(PASSWORD, 10);
@@ -199,18 +494,195 @@ async function seedTenant(db) {
   }
   log(`${CLASSES.length} classes`);
 
-  // Catalogue (notices) — clé naturelle : titre
+  // Catalogue (notices) — clé naturelle : titre.
+  //
+  // ⚠ UNE SEULE lecture pour tout le catalogue, puis un createMany. La boucle
+  // d'origine faisait un findFirst PAR notice : acceptable à douze, trois cent
+  // cinquante allers-retours à quatre cents. Un seed qu'on subit à chaque
+  // réinstallation finit par ne plus être relancé.
+  const titresConnus = new Set(
+    (await db.biblioRecord.findMany({ select: { title: true } })).map((r) => r.title),
+  );
+  const aCreer = RECORDS.filter((r) => !titresConnus.has(r.title));
+  if (aCreer.length > 0) {
+    await db.biblioRecord.createMany({
+      data: aCreer.map((r) => ({ ...r, language: 'fr', marcData: {} })),
+    });
+  }
+  // ⚠ Les DOUZE notices écrites à la main sont mises à jour même si elles
+  // existent déjà. Sans cela, le seed ne ferait que « créer ce qui manque » et
+  // une correction déclarée ici ne toucherait jamais une base déjà semée —
+  // c'est ce qui est arrivé en remplaçant deux auteurs réels : la déclaration
+  // était juste, la base gardait l'ancienne valeur. Les 340 générées ne sont
+  // pas mises à jour : elles ne changent pas, et 340 écritures inutiles à
+  // chaque relance rendraient le seed pénible pour rien.
+  for (const r of ECRITES) {
+    await db.biblioRecord.updateMany({ where: { title: r.title }, data: { ...r } });
+  }
+
+  // ⚠ RATTRAPAGE des couvertures sur les notices DÉJÀ semées.
+  //
+  // Le commentaire ci-dessus disait « les 340 générées ne changent pas ». Ce
+  // n'est plus vrai depuis qu'elles portent une couverture, et la première
+  // relance l'a montré : 352 notices en base, 0 couverture — la branche de
+  // création n'avait rien à créer, celle de mise à jour ne les regardait pas.
+  // Une notice ajoutée au fichier n'est PAS le seul cas à traiter ; un champ
+  // ajouté à une notice existante en est un autre, et il est silencieux.
+  //
+  // Six écritures groupées, une par variante, et seulement là où la couverture
+  // manque : la deuxième relance ne touche donc plus rien.
+  const parCouverture = new Map();
   for (const r of RECORDS) {
-    const existing = await db.biblioRecord.findFirst({ where: { title: r.title } });
-    if (existing) {
-      await db.biblioRecord.update({ where: { id: existing.id }, data: { ...r, marcData: {} } });
-    } else {
-      await db.biblioRecord.create({ data: { ...r, language: 'fr', marcData: {} } });
+    if (!parCouverture.has(r.coverUrl)) parCouverture.set(r.coverUrl, []);
+    parCouverture.get(r.coverUrl).push(r.title);
+  }
+  let rattrapees = 0;
+  for (const [coverUrl, titres] of parCouverture) {
+    const { count } = await db.biblioRecord.updateMany({
+      where: { title: { in: titres }, coverUrl: null },
+      data: { coverUrl },
+    });
+    rattrapees += count;
+  }
+
+  log(
+    `${RECORDS.length} notices (${aCreer.length} créées, ${ECRITES.length} mises à jour` +
+      `, ${rattrapees} couvertures rattrapées)`,
+  );
+
+  // ── Auteurs et rattachements ───────────────────────────────────────────
+  //
+  // ⚠ CE QUI MANQUAIT, et qui ne se voyait pas. Le seed écrivait `author`
+  // comme une CHAÎNE sur la notice, et rien d'autre : 352 notices portaient un
+  // nom, 278 noms distincts, et la table `authors` contenait UNE ligne.
+  //
+  // Le front était honnête — il affichait « 0 auteur » parce qu'il n'y en avait
+  // pas — mais le nom de l'auteur est un LIEN sur chaque résultat de recherche.
+  // Cliquer « Tapsoba, Moussa », le geste le plus naturel dans un catalogue,
+  // menait donc à « Aucun auteur ». Trouvé le 10 septembre 2026 pendant la
+  // passe sans cookie de la surface publique, pas en relisant le code.
+  //
+  // `normalizedName` suit EXACTEMENT `normalizeAuthorName`
+  // (apps/api/src/authors/author-name.ts) : c'est la clé sur laquelle l'index
+  // des auteurs cherche. Une normalisation approchante donnerait des auteurs
+  // introuvables par leur propre nom — le défaut d'origine sous une autre forme.
+  const normaliser = (nom) =>
+    nom
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const notices = await db.biblioRecord.findMany({ select: { id: true, author: true } });
+  const nomsDistincts = [...new Set(notices.map((n) => n.author).filter(Boolean))];
+
+  const auteursConnus = new Map(
+    (await db.author.findMany({ select: { id: true, displayName: true } })).map((a) => [
+      a.displayName,
+      a.id,
+    ]),
+  );
+  const aCreerAuteurs = nomsDistincts.filter((nom) => !auteursConnus.has(nom));
+  if (aCreerAuteurs.length > 0) {
+    await db.author.createMany({
+      data: aCreerAuteurs.map((nom) => ({ displayName: nom, normalizedName: normaliser(nom) })),
+    });
+    for (const a of await db.author.findMany({ select: { id: true, displayName: true } })) {
+      auteursConnus.set(a.displayName, a.id);
     }
   }
-  log(`${RECORDS.length} notices`);
 
-  // Exemplaires sur la première notice « droit »
+  // Rattachements. Une seule lecture de l'existant, puis un createMany : la
+  // boucle qui interrogerait la base par notice ferait 352 allers-retours.
+  const rattachees = new Set(
+    (await db.recordContributor.findMany({ select: { recordId: true } })).map((c) => c.recordId),
+  );
+  const liens = notices
+    .filter((n) => n.author && !rattachees.has(n.id))
+    .map((n) => ({
+      recordId: n.id,
+      name: n.author,
+      role: 'AUTEUR_PRINCIPAL',
+      position: 0,
+      authorId: auteursConnus.get(n.author) ?? null,
+    }));
+  if (liens.length > 0) await db.recordContributor.createMany({ data: liens });
+
+  // ⚠ Reliquat de fixture : « Auteur, Un », sans œuvre, trie EN TÊTE de l'index
+  // alphabétique — c'est la première ligne que voit qui ouvre « Auteurs ». Un
+  // auteur à zéro œuvre en tête d'index fait douter de tout le reste.
+  //
+  // Supprimé PAR SON NOM, et seulement s'il ne porte aucune œuvre. Pas « tous
+  // les auteurs sans œuvre » : une fiche d'autorité créée avant de cataloguer
+  // l'ouvrage est un usage légitime de bibliothécaire, et ce seed n'a pas à
+  // décider qu'elle est de trop. La règle étroite ne se retourne contre
+  // personne ; la règle large finirait par effacer un vrai travail.
+  const RELIQUAT = 'Auteur, Un';
+  const orphelin = await db.author.findFirst({
+    where: { displayName: RELIQUAT, contributions: { none: {} } },
+    select: { id: true },
+  });
+  if (orphelin) await db.author.delete({ where: { id: orphelin.id } });
+
+  log(
+    `${nomsDistincts.length} auteurs (${aCreerAuteurs.length} créés)` +
+      `, ${liens.length} rattachements ajoutés` +
+      `${orphelin ? `, reliquat « ${RELIQUAT} » retiré` : ''}`,
+  );
+
+  // ── Fichiers numériques ────────────────────────────────────────────────
+  //
+  // Un quart du fonds porte un fichier, pour que « documents numériques » ne
+  // soit pas à zéro et que le filtre ait un sens.
+  //
+  // ⚠ TOUTES LES LIGNES POINTENT VERS LE MÊME OBJET. C'est un artefact de
+  // démonstration assumé : le but est que la lecture FONCTIONNE, pas que
+  // chaque notice ait son contenu propre. Sans fichier réel derrière, cliquer
+  // « lire » donnerait une erreur devant le client — pire que pas de document
+  // numérique du tout.
+  //
+  // ⚠ Ces copies n'ont pas d'ingestion offline (encStatus null) : elles se
+  // lisent EN LIGNE, pas hors connexion. Le chiffrement AEAD est fait par
+  // DigitalCopyService.upload, que ce raccourci contourne délibérément.
+  const cle = await deposerPdfDExemple();
+  if (cle) {
+    // ⚠ La CIBLE est un quart du catalogue, pas « un quart de ce qui n'en a
+    // pas encore ». La première rédaction prenait le second : chaque relance
+    // ajoutait un quart du reste, et le fonds numérique gonflait à chaque
+    // réinstallation sans que personne ne l'ait demandé. Un seed doit
+    // CONVERGER, pas s'accumuler.
+    const total = await db.biblioRecord.count();
+    const deja = await db.digitalCopy.count();
+    const objectif = Math.floor(total / 4);
+    const manquants = Math.max(0, objectif - deja);
+    const sansFichier =
+      manquants === 0
+        ? []
+        : await db.biblioRecord.findMany({
+            where: { digitalCopy: { is: null } },
+            select: { id: true },
+            take: manquants,
+          });
+    const cibles = sansFichier;
+    if (cibles.length > 0) {
+      await db.digitalCopy.createMany({
+        data: cibles.map((r) => ({
+          recordId: r.id,
+          objectKey: cle,
+          fileFormat: 'PDF',
+          fileSizeBytes: PDF_EXEMPLE.length,
+          originalName: 'document-d-exemple.pdf',
+        })),
+      });
+    }
+    log(`${deja + cibles.length} fichiers numériques (${cibles.length} ajoutés — un même PDF d'exemple, lisible en ligne)`);
+  } else {
+    log('fichiers numériques IGNORÉS — dépôt MinIO indisponible');
+  }
+
+  // Exemplaires sur la première notice « droit » — les deux écrits à la main,
+  // ceux dont les codes-barres servent d'exemple dans l'interface du guichet.
   const droit = await db.biblioRecord.findFirst({ where: { title: RECORDS[0].title } });
   for (const barcode of ['BIB-000123', 'BIB-000124']) {
     await db.item.upsert({
@@ -219,7 +691,65 @@ async function seedTenant(db) {
       update: {},
     });
   }
-  log('2 exemplaires (notice droit)');
+
+  // ── LE FONDS PHYSIQUE ──────────────────────────────────────────────────
+  //
+  // ⚠ CE QUI MANQUAIT. Le catalogue paraissait riche — 352 notices, 278 auteurs,
+  // 154 documents numériques — et comptait DEUX exemplaires, sur UNE notice.
+  // 351 notices sur 352 disaient « aucun exemplaire » : une bibliothèque sans
+  // livres. Constaté le 10 septembre 2026, passe mesurée de l'espace
+  // professionnel.
+  //
+  // ⚠ UN FONDS RÉEL N'EST PAS UNIFORME, et c'est le point. Tout mettre à un
+  // exemplaire disponible donnerait une bibliothèque de catalogue, pas une
+  // bibliothèque : personne n'aurait rien emprunté, rien ne serait en retard,
+  // aucun titre ne serait en plusieurs exemplaires. On répartit donc.
+  const alea = tirage(20260911); // graine distincte de celle des notices
+  const LIEUX = ['Salle de lecture', 'Magasin', 'Réserve', 'Salle des périodiques'];
+
+  const toutes = await db.biblioRecord.findMany({
+    select: { id: true, title: true, category: true },
+    orderBy: { id: 'asc' }, // ⚠ ordre STABLE : sans lui, la répartition change à chaque relance
+  });
+
+  let compteur = 200; // les codes-barres < 200 sont ceux écrits à la main
+  const aCreerItems = [];
+  const sansExemplaire = [];
+  for (const notice of toutes) {
+    if (notice.id === droit.id) continue; // déjà servie ci-dessus
+    const d = alea();
+    // 15 % sans exemplaire (notice décrite, ouvrage non reçu ou perdu),
+    // 70 % un seul, 12 % deux, 3 % trois.
+    const combien = d < 0.15 ? 0 : d < 0.85 ? 1 : d < 0.97 ? 2 : 3;
+    if (combien === 0) {
+      sansExemplaire.push(notice.id);
+      continue;
+    }
+    const lieu = LIEUX[Math.floor(alea() * LIEUX.length)];
+    for (let n = 0; n < combien; n++) {
+      compteur += 1;
+      aCreerItems.push({
+        recordId: notice.id,
+        barcode: `BIB-${String(compteur).padStart(6, '0')}`,
+        itemType: 'livre',
+        callNumber: `${(notice.category ?? 'gen').slice(0, 3).toUpperCase()} ${notice.title.slice(0, 3).toUpperCase()}`,
+        location: lieu,
+      });
+    }
+  }
+
+  // Une seule lecture de l'existant, puis un createMany : le code-barres est
+  // unique et DÉTERMINISTE, donc une relance ne crée rien de neuf.
+  const codesConnus = new Set(
+    (await db.item.findMany({ select: { barcode: true } })).map((i) => i.barcode),
+  );
+  const nouveaux = aCreerItems.filter((i) => !codesConnus.has(i.barcode));
+  if (nouveaux.length > 0) await db.item.createMany({ data: nouveaux });
+
+  log(
+    `${aCreerItems.length + 2} exemplaires (${nouveaux.length} créés)` +
+      `, ${sansExemplaire.length} notices sans exemplaire`,
+  );
 
   // Règle de circulation : étudiant × livre = 7 j, 50 FCFA/j
   await db.circulationRule.upsert({
@@ -243,7 +773,226 @@ async function seedTenant(db) {
       update: {},
     });
   }
-  log(`${patrons.length} adhérents`);
+
+  // ── UNE VINGTAINE D'ADHÉRENTS, POUR QUE LE GUICHET AIT DE QUOI MONTRER ──
+  //
+  // ⚠ Ils reçoivent un COMPTE, et ce n'est pas un luxe : le modèle `Patron` ne
+  // porte pas de nom. Le nom vit sur `User`, et le guichet retombe sur le
+  // code-barres quand il n'y en a pas (guichet/page.tsx : `patron.user ? … :
+  // patron.barcode`). Un adhérent sans compte s'affiche donc « P-2026-0007 »
+  // pendant tout le prêt — honnête, mais une carte de lecteur sans nom est un
+  // manque du MODÈLE, pas de l'écran. Noté au backlog.
+  const hashLecteurs = await bcrypt.hash(PASSWORD, 10);
+  const aleaL = tirage(20260912);
+  // ⚠ SOIXANTE, et pas vingt. À vingt adhérents pour vingt par page, la liste
+  // tenait sur une seule page : la pagination existait et ne s'affichait
+  // jamais. Elle est un argument produit, et un argument ne se démontre pas sur
+  // un écran où il est invisible. Porté à 60 le 11 septembre 2026 — trois
+  // pages, donc les deux boutons ET le compteur sont exercés.
+  const lecteurs = [];
+  for (let n = 3; n <= 60; n++) {
+    const prenom = PRENOMS[Math.floor(aleaL() * PRENOMS.length)];
+    const nom = NOMS[Math.floor(aleaL() * NOMS.length)];
+    const matricule = `ETU-2026-${String(100 + n).padStart(4, '0')}`;
+    lecteurs.push({
+      matricule,
+      // ⚠ e-mail dérivé du MATRICULE, pas du nom : deux homonymes tirés du même
+      // vivier produiraient la même adresse, et l'unicité de `email` ferait
+      // échouer le seed une fois sur cinq — un échec qui ne se reproduit pas
+      // à l'identique est le pire genre.
+      email: `${matricule.toLowerCase()}@exemple.bf`,
+      firstName: prenom,
+      lastName: nom,
+      className: CLASSES[n % CLASSES.length].name,
+      barcode: `P-2026-${String(n).padStart(4, '0')}`,
+    });
+  }
+  for (const l of lecteurs) {
+    const u = await db.user.upsert({
+      where: { matricule: l.matricule },
+      create: {
+        email: l.email, matricule: l.matricule, firstName: l.firstName,
+        lastName: l.lastName, className: l.className, password: hashLecteurs,
+        role: 'STUDENT', status: 'ACTIVE', activatedAt: new Date(),
+      },
+      update: { firstName: l.firstName, lastName: l.lastName, className: l.className },
+    });
+    await db.patron.upsert({
+      where: { barcode: l.barcode },
+      create: { barcode: l.barcode, userId: u.id, category: 'etudiant' },
+      update: {},
+    });
+  }
+  // ── DES CARTES QUI PORTENT LEUR PROPRE NOM ────────────────────────────
+  //
+  // ⚠ Depuis A2 (11 septembre 2026) le nom appartient à la CARTE, et non plus
+  // au compte. Toutes les cartes ci-dessus sont liées à un compte : le fonds
+  // n'exerçait donc ni le nom propre, ni le désaccord entre les deux. Une
+  // fonctionnalité qui ne s'affiche sur aucune donnée ne se démontre pas.
+  //
+  // Deux cas, ceux pour lesquels A2 existe :
+  //  1. des lecteurs SANS COMPTE — l'enfant trop jeune, le visiteur, celui qui
+  //     n'a pas d'adresse électronique. Leur nom n'existe que sur la carte ;
+  //  2. un DÉSACCORD assumé : la carte dit « Kaboré », le compte dit « Traoré ».
+  //     C'est le nom d'épouse corrigé par la bibliothécaire, exactement le
+  //     geste que le modèle rend possible — et que l'écran montre en
+  //     information, jamais en alerte.
+  const SANS_COMPTE = [
+    { barcode: 'P-2026-0101', firstName: 'Fatimata', lastName: 'Sawadogo' },
+    { barcode: 'P-2026-0102', firstName: 'Issouf', lastName: 'Zongo' },
+    { barcode: 'P-2026-0103', firstName: 'Mariam', lastName: 'Ilboudo' },
+  ];
+  for (const c of SANS_COMPTE) {
+    await db.patron.upsert({
+      where: { barcode: c.barcode },
+      create: { ...c, category: 'etudiant' },
+      update: { firstName: c.firstName, lastName: c.lastName },
+    });
+  }
+
+  // Les cartes liées reçoivent le nom de leur compte — c'est ce que fait la
+  // liaison depuis A2, et sans cela les cartes déjà semées resteraient muettes.
+  const liees = await db.patron.findMany({
+    where: { userId: { not: null }, firstName: null },
+    select: { id: true, user: { select: { firstName: true, lastName: true } } },
+  });
+  for (const l of liees) {
+    if (!l.user) continue;
+    await db.patron.update({
+      where: { id: l.id },
+      data: { firstName: l.user.firstName, lastName: l.user.lastName },
+    });
+  }
+
+  // Le désaccord, sur une carte liée : la carte a été corrigée, pas le compte.
+  const aCorriger = await db.patron.findFirst({
+    where: { barcode: 'P-2026-0003' },
+    select: { id: true, lastName: true },
+  });
+  if (aCorriger && aCorriger.lastName !== 'Kaboré') {
+    await db.patron.update({ where: { id: aCorriger.id }, data: { lastName: 'Kaboré' } });
+  }
+
+  const sansNom = await db.patron.count({ where: { firstName: null, lastName: null } });
+  log(
+    `${patrons.length + lecteurs.length + SANS_COMPTE.length} adhérents` +
+      ` (${SANS_COMPTE.length} sans compte, ${liees.length} noms recopiés, ${sansNom} sans nom)`,
+  );
+
+  // ── DES PRÊTS EN COURS, ET QUELQUES RETARDS ────────────────────────────
+  //
+  // ⚠ Une bibliothèque où tout est disponible ne ressemble pas à une
+  // bibliothèque. On emprunte donc une part du fonds, et une partie de ces
+  // prêts est en retard — c'est ce que le guichet et l'écran des rappels
+  // existent pour traiter.
+  //
+  // Les dates sont RELATIVES À AUJOURD'HUI, délibérément : un retard doit être
+  // en retard le jour de la démonstration, pas à une date figée par une graine.
+  const empruntables = await db.item.findMany({
+    where: { status: 'AVAILABLE', checkouts: { none: { returnDate: null } } },
+    select: { id: true },
+    orderBy: { barcode: 'asc' },
+  });
+  const adherents = await db.patron.findMany({ select: { id: true }, orderBy: { barcode: 'asc' } });
+  const REGLE_JOURS = 7;
+  const AMENDE_PAR_JOUR = 50;
+  const jour = 24 * 60 * 60 * 1000;
+
+  // Un exemplaire sur huit est dehors ; un tiers de ceux-là est en retard.
+  const cible = Math.floor(empruntables.length / 8);
+  const dejaDehors = await db.checkout.count({ where: { returnDate: null } });
+  const aEmprunter = Math.max(0, cible - dejaDehors);
+  const prets = [];
+  for (let n = 0; n < aEmprunter; n++) {
+    const item = empruntables[n];
+    const patron = adherents[n % adherents.length];
+    const enRetard = n % 3 === 0;
+    // En retard : emprunté il y a 10 à 24 jours. À l'heure : il y a 0 à 6 jours.
+    const ilYA = enRetard ? 10 + (n % 15) : n % REGLE_JOURS;
+    const depuis = new Date(Date.now() - ilYA * jour);
+    const echeance = new Date(depuis.getTime() + REGLE_JOURS * jour);
+    const joursDeRetard = Math.max(0, Math.floor((Date.now() - echeance.getTime()) / jour));
+    prets.push({
+      itemId: item.id,
+      patronId: patron.id,
+      checkoutDate: depuis,
+      dueDate: echeance,
+      fineAmount: joursDeRetard * AMENDE_PAR_JOUR,
+    });
+  }
+  if (prets.length > 0) {
+    await db.checkout.createMany({ data: prets });
+    await db.item.updateMany({
+      where: { id: { in: prets.map((p) => p.itemId) } },
+      data: { status: 'CHECKED_OUT' },
+    });
+  }
+  // ── DES PRÊTS RENDUS, POUR QUE L'HISTORIQUE EXISTE ────────────────────
+  //
+  // ⚠ Sans eux, la section « Historique des prêts » de la fiche est vide pour
+  // tout le monde : la fonctionnalité existe et ne se démontre nulle part.
+  // Même raison que les soixante adhérents — un écran ne prouve rien sur un
+  // fonds qui n'exerce pas ce qu'il montre.
+  //
+  // Un adhérent reçoit assez d'historique pour dépasser UNE page (dix lignes
+  // côté front) : sans cela, la pagination de l'historique ne s'afficherait
+  // jamais, et c'est exactement le défaut qu'on vient de corriger sur la liste.
+  const tousLesItems = await db.item.findMany({ select: { id: true }, orderBy: { barcode: 'asc' } });
+  // ⚠ On compte les prêts RENDUS, pas tous les prêts. La première rédaction
+  // comptait `_count.checkouts`, qui inclut les prêts EN COURS : les adhérents
+  // qui en avaient déjà un recevaient d'autant moins d'historique, et le
+  // premier plafonnait à dix lignes — exactement une page, donc la pagination
+  // de l'historique ne s'affichait toujours pas. Le garde mesurait autre chose
+  // que ce qu'il devait borner.
+  const lecteursPourHistorique = await db.patron.findMany({
+    select: {
+      id: true,
+      _count: { select: { checkouts: { where: { returnDate: { not: null } } } } },
+    },
+    orderBy: { barcode: 'asc' },
+    take: 12,
+  });
+  const rendus = [];
+  let curseurItem = 0;
+  lecteursPourHistorique.forEach((p, rang) => {
+    // Le premier en a quatorze : deux pages. Les suivants, de un à six.
+    const voulu = rang === 0 ? 14 : 1 + (rang % 6);
+    const dejaLa = p._count.checkouts;
+    for (let n = dejaLa; n < voulu; n++) {
+      const item = tousLesItems[curseurItem % tousLesItems.length];
+      curseurItem += 1;
+      // Emprunté il y a 30 à 400 jours, rendu 5 à 20 jours après. Un sur cinq
+      // est rendu en retard : une bibliothèque sans retard n'existe pas.
+      const ilYA = 30 + ((rang * 7 + n * 13) % 370);
+      const garde = 5 + ((n * 3) % 16);
+      const depuis = new Date(Date.now() - ilYA * jour);
+      const echeance = new Date(depuis.getTime() + REGLE_JOURS * jour);
+      const retour = new Date(depuis.getTime() + garde * jour);
+      const joursDeRetard = Math.max(
+        0,
+        Math.floor((retour.getTime() - echeance.getTime()) / jour),
+      );
+      rendus.push({
+        itemId: item.id,
+        patronId: p.id,
+        checkoutDate: depuis,
+        dueDate: echeance,
+        returnDate: retour,
+        fineAmount: joursDeRetard * AMENDE_PAR_JOUR,
+      });
+    }
+  });
+  if (rendus.length > 0) await db.checkout.createMany({ data: rendus });
+  const historiqueTotal = await db.checkout.count({ where: { returnDate: { not: null } } });
+  log(`${historiqueTotal} prêts rendus en historique (${rendus.length} ajoutés)`);
+
+  const enRetardTotal = await db.checkout.count({
+    where: { returnDate: null, dueDate: { lt: new Date() } },
+  });
+  log(
+    `${dejaDehors + prets.length} prêts en cours (${prets.length} ajoutés)` +
+      `, dont ${enRetardTotal} en retard`,
+  );
 }
 
 // ── 4. Réindexation Meilisearch (via l'API) ───────────────────

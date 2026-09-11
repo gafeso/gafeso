@@ -40,7 +40,7 @@ export default function RolesPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const canManage = myFunctions?.includes('roles.gerer');
+  const canManage = myFunctions?.includes('securite.roles');
   const libelle = (code: string) =>
     catalogue.find((f) => f.code === code)?.libelle ?? code;
 
@@ -133,7 +133,7 @@ export default function RolesPage() {
     return (
       <Alert tone="error">
         Vous n’avez pas la permission de gérer les rôles (fonction
-        «&nbsp;roles.gerer&nbsp;»).
+        «&nbsp;securite.roles&nbsp;»).
       </Alert>
     );
   }

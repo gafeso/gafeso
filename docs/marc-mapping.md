@@ -6,11 +6,19 @@ l'import : tout ce que l'application possède est écrit dans des zones stables,
 réimportables sans perte (test d'aller-retour dans `marc-export.spec.ts`).
 
 - **Export** : `apps/api/src/cataloging/marc-export.ts` (construit les zones,
-  sérialise via marcjs `.as('iso2709' | 'marcxml')`).
+  sérialise via marcjs `.as('iso2709' | 'marcxml')` — le nom marcjs de la
+  structure « MARC slim » ; les ZONES écrites sont de l'UNIMARC et l'espace de
+  noms est celui de Gafeso, voir `cataloging/unimarc-xml.ts`).
 - **Import** : `apps/api/src/cataloging/marc-mapper.ts` (`extractBiblio`), utilisé
   par `CatalogingService.importMarc`.
-- **Formats de sortie** : ISO 2709 (`.mrc`) et MARCXML (collection dans l'espace
-  de noms `http://www.loc.gov/MARC21/slim`).
+- **Formats de sortie** : ISO 2709 (`.mrc`) et **MarcXchange 2.0** (ISO 25577,
+  espace de noms `info:lc/xmlns/marcxchange-v2`, notices portant
+  `format="UNIMARC"` — voir `cataloging/unimarc-xml.ts`). ⚠ Ce n'est **pas** du
+  MARC21 : l'espace de noms de la Library of Congress a été employé à tort
+  jusqu'au 7 septembre 2026, ce qui faisait lire la zone 700 (auteur principal
+  en UNIMARC) comme une entrée secondaire. ⚠ Le `<leader>` n'est **pas** émis en
+  XML (MarcXchange 2.0 le rend facultatif) : Gafeso ne calcule aucun label
+  ISO 2709. Il reste produit pour l'export `.mrc`, où la norme l'exige.
 
 ## Zones bibliographiques
 

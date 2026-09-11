@@ -5,10 +5,14 @@ import { RemindersService } from './reminders.service';
 const config = { daysBefore: 2, overdueRepeatDays: 7, templatesRaw: null };
 const day = (iso: string) => new Date(`${iso}T12:00:00.000Z`);
 
-function service(overrides: { prisma?: any; mail?: any } = {}) {
+function service(overrides: { prisma?: any; mail?: any; modules?: any } = {}) {
   const prisma = overrides.prisma ?? {};
   const mail = overrides.mail ?? { sendCirculationReminder: vi.fn().mockResolvedValue(undefined) };
-  return new RemindersService(prisma as any, mail as any);
+  // ⚠ P4-1 : l'activation des rappels vient du REGISTRE. La doublure rend
+  // `true` par défaut — un test de planification ne doit pas échouer parce que
+  // le module serait éteint, ce qui n'est pas son sujet.
+  const modules = overrides.modules ?? { estActif: vi.fn().mockResolvedValue(true) };
+  return new RemindersService(prisma as any, mail as any, modules as any);
 }
 
 describe('RemindersService — planification (planFor)', () => {

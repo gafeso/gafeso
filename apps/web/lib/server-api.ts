@@ -13,6 +13,7 @@
 
 import { headers } from 'next/headers';
 import type { HomeTheme } from '@/lib/home-theme';
+import type { Diapositive } from '@/lib/hero-slides';
 
 const HOME_TTL = 300; // secondes — cache raisonnable, invalidé à la sauvegarde admin
 
@@ -55,9 +56,23 @@ export interface HomeContent {
     lead: string;
     searchHint: string;
     logoUrl: string | null;
+    /**
+     * ⚠ Les trois champs historiques du bandeau à image UNIQUE. Ils ne
+     * s'appliquent plus dès que `heroSlides` contient une diapositive : l'API
+     * fait alors foi de la liste (`heroSlidesEffectives`). Ne pas les lire
+     * pour AFFICHER un bandeau — c'est `heroSlides` à la racine de la charge
+     * utile qui sert cela.
+     */
     heroImageUrl: string | null;
     heroImageKicker: string;
     heroImageCaption: string;
+    /**
+     * Liste STOCKÉE des diapositives — celle qu'on édite. À ne pas confondre
+     * avec `TenantHome.heroSlides`, la liste EFFECTIVE servie à la racine :
+     * celle-ci peut être reconstruite à la volée depuis les champs
+     * historiques, et l'écrire dans `content` la ferait persister.
+     */
+    heroSlides: Diapositive[];
   };
   stats: HomeStat[];
   espaces: HomeEspace[];
@@ -83,6 +98,13 @@ export interface TenantHome {
   themeTokens: Record<string, string>;
   latticeEnabled: boolean;
   content: HomeContent;
+  /**
+   * Diapositives EFFECTIVES du bandeau, servies à la racine — à côté de
+   * `content`, jamais dedans. `content.identity.heroSlides` existe aussi dans
+   * la charge utile et porte ce qui est STOCKÉ ; les confondre ferait persister
+   * une liste reconstruite au premier PATCH de l'écran /admin/accueil.
+   */
+  heroSlides: Diapositive[];
 }
 
 export interface ConstellationDomain {
@@ -129,6 +151,47 @@ async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
 }
 
 /** Charge utile complète de la page d'accueil du tenant courant (SSR). */
+/**
+ * La notice existe-t-elle ? TROIS réponses, et la distinction est tout l'objet.
+ *
+ * ⚠ `fetchTenant` rend `null` aussi bien pour un 404 que pour une panne : c'est
+ * suffisant quand l'appelant affiche un repli, ce n'est PAS suffisant ici.
+ * Rendre 404 parce que l'API est tombée dirait au visiteur — et aux moteurs qui
+ * indexent — que la notice n'existe pas, alors qu'elle existe et qu'on ne peut
+ * simplement pas la joindre. Une panne se dit « réessayez », une absence se dit
+ * « introuvable », et les deux ne s'écrivent pas pareil.
+ *
+ * Appelée par le rendu serveur de /opac/[id] pour décider du CODE DE RÉPONSE,
+ * rien d'autre : la fiche elle-même reste chargée par le composant client, avec
+ * la session du lecteur quand il en a une.
+ */
+export type ExistenceNotice = 'existe' | 'introuvable' | 'indisponible';
+
+export async function noticeExiste(id: string): Promise<ExistenceNotice> {
+  const host = await currentHost();
+  const url = `${apiUrl()}/opac/records/${encodeURIComponent(id)}?__host=${encodeURIComponent(host)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'x-forwarded-host': host },
+      // Court : une notice supprimée doit cesser d'être annoncée vivante assez
+      // vite, et le coût d'une vérification est faible.
+      next: { revalidate: 60 },
+    });
+    if (res.status === 404) return 'introuvable';
+    if (!res.ok) {
+      console.error(`[server-api] ${url} → HTTP ${res.status} (existence de notice)`);
+      return 'indisponible';
+    }
+    return 'existe';
+  } catch (err) {
+    console.error(
+      `[server-api] échec du fetch ${url} : ${(err as Error).message}. ` +
+        `La notice n'est PAS déclarée introuvable pour autant.`,
+    );
+    return 'indisponible';
+  }
+}
+
 export async function fetchTenantHome(): Promise<TenantHome | null> {
   return fetchTenant<TenantHome>('/tenancy/home', await currentHost());
 }
@@ -138,10 +201,90 @@ export interface Constellation {
   domains: ConstellationDomain[];
 }
 
-/** Répartition du catalogue (constellation dynamique) du tenant courant. */
-export async function fetchConstellation(): Promise<Constellation> {
+/**
+ * Répartition du catalogue (constellation dynamique) du tenant courant.
+ *
+ * ⚠ Renvoie `null` quand l'API n'a pas répondu — et surtout PAS une
+ * constellation vide. La version précédente retombait sur
+ * `{ totalRecords: 0, domains: [] }`, ce qui rendait une PANNE SERVEUR
+ * indiscernable d'un catalogue réellement vide : la page d'accueil publique
+ * masquait alors sa section « Constellation des savoirs » et son entrée de
+ * navigation, et se présentait comme complète. C'est le pire endroit du
+ * produit pour ce défaut — c'est l'écran que voient un étudiant, une DSI, un
+ * bailleur.
+ *
+ * L'appelant DOIT distinguer les trois cas : `null` (on ne sait pas),
+ * `domains` vide (catalogue réellement vide), `domains` peuplé.
+ */
+export async function fetchConstellation(): Promise<Constellation | null> {
   const data = await fetchTenant<Constellation>('/opac/constellation', await currentHost());
-  return { totalRecords: data?.totalRecords ?? 0, domains: data?.domains ?? [] };
+  if (!data) return null;
+  return { totalRecords: data.totalRecords, domains: data.domains };
+}
+
+/**
+ * Chiffres du fonds — section « Chiffres » de la vitrine.
+ *
+ * ⚠ CONTRAT ATTENDU, endpoint PAS ENCORE LIVRÉ (lot backend en cours au
+ * 10 septembre 2026). Trois des quatre mesures n'existent aujourd'hui que
+ * derrière `statistiques.voir` (/stats/dashboard → 401 sans session), et la
+ * quatrième — les licences hors connexion — n'est comptée nulle part.
+ *
+ * Tant que la route répond 404, `fetchTenant` rend `null`, et la section ne se
+ * rend pas. C'est le comportement voulu, pas un contournement : « aucun
+ * chiffre, aucune section » est la règle du brief, et elle sert exactement à
+ * traverser cet intervalle sans rien afficher de faux.
+ *
+ * ⚠ LE CHEMIN EST À CONFIRMER avec le lot backend. Il est isolé ici, en une
+ * constante : le jour où l'endpoint arrive sous un autre nom, c'est une ligne.
+ */
+export const ROUTE_CHIFFRES = '/opac/chiffres';
+
+export interface ChiffresDuFonds {
+  documents: number;
+  lecteurs: number;
+  documentsNumeriques: number;
+  lecturesHorsLigne: number;
+}
+
+export async function fetchChiffres(): Promise<ChiffresDuFonds | null> {
+  return fetchTenant<ChiffresDuFonds>(ROUTE_CHIFFRES, await currentHost());
+}
+
+/**
+ * Nouveautés du catalogue — six notices, dans l'ordre servi par l'API.
+ *
+ * ⚠ CE N'EST PAS UNE DATE D'ACQUISITION. Le tri reflète l'ORDRE D'ÉCRITURE EN
+ * BASE : une notice saisie aujourd'hui pour un ouvrage acquis en 2019 remonte
+ * en tête. D'où le titre affiché « À découvrir dans le catalogue » et non
+ * « Dernières acquisitions », qui serait un fait faux. Ne pas « corriger » le
+ * libellé en croyant réparer un oubli.
+ *
+ * ⚠ Et ne pas se rabattre sur `/opac/search?limit=6` si cette route venait à
+ * disparaître : son ordre est arbitraire, ce serait la même affirmation fausse
+ * en pire. Mieux vaut pas de section.
+ */
+export const ROUTE_NOUVEAUTES = '/opac/nouveautes?limit=6';
+
+export interface NoticeANouveaute {
+  id: string;
+  title: string;
+  author: string | null;
+  publishYear: number | null;
+  recordType: string;
+  coverUrl: string | null;
+}
+
+export async function fetchNouveautes(): Promise<NoticeANouveaute[] | null> {
+  const data = await fetchTenant<{ hits: NoticeANouveaute[] }>(
+    ROUTE_NOUVEAUTES,
+    await currentHost(),
+  );
+  // `null` (pas de réponse) et liste vide sont deux faits différents, mais ici
+  // ils produisent le même rendu : aucune section. On ne les confond pas pour
+  // autant — l'appelant reçoit `null` quand on ne sait pas.
+  if (!data) return null;
+  return Array.isArray(data.hits) ? data.hits : [];
 }
 
 /** Adapte la charge utile au contrat du util de thème (lib/home-theme). */

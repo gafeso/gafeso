@@ -386,14 +386,26 @@ capture déjà tout le schéma actuel.
 Pour un **futur changement de schéma** (nouvelle colonne, nouvelle table…),
 générer le fichier de migration AVANT de déployer :
 
+> ⚠ **Ne JAMAIS passer `$DATABASE_URL` en `--shadow-database-url`.** Prisma
+> **réinitialise** la base indiquée comme shadow : il y rejoue tout
+> l'historique de migrations après avoir fait table rase. La pointer sur la
+> base de développement l'efface. Toujours une base **jetable et dédiée**,
+> créée juste avant et supprimée juste après.
+
 ```bash
 cd apps/api
+# Base shadow JETABLE (Prisma va l'effacer et la reconstruire) :
+docker compose -f ../../docker/docker-compose.yml exec -T db \
+  psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS gafeso_shadow;" \
+                                        -c "CREATE DATABASE gafeso_shadow;"
+SHADOW_URL=$(printf '%s' "$DATABASE_URL" | sed -E "s#/[^/?]+\?#/gafeso_shadow?#")
+
 # Modifier prisma/schema.prisma, puis générer le SQL de la migration
-# (sans toucher à une base réelle) :
+# (la base de développement n'est pas touchée ; la base shadow, si) :
 npx prisma migrate diff \
   --from-migrations prisma/migrations \
   --to-schema-datamodel prisma/schema.prisma \
-  --shadow-database-url "$DATABASE_URL" \
+  --shadow-database-url "$SHADOW_URL" \
   --script > /tmp/migration.sql
 
 # Créer le dossier horodaté et y placer le SQL généré
@@ -409,9 +421,20 @@ Committer le nouveau dossier `prisma/migrations/<horodatage>_.../migration.sql`
 avec le reste du changement. Il s'appliquera automatiquement au prochain
 déploiement (`docker-entrypoint.sh` → `prisma migrate deploy`).
 
-`--shadow-database-url` demande une base Postgres joignable (locale ou via
-`docker compose -f docker/docker-compose.yml exec db psql ...`) — uniquement
-pour calculer le diff, aucune donnée n'y est modifiée.
+`--shadow-database-url` demande une base Postgres joignable **et jetable**.
+Prisma s'en sert pour rejouer l'historique de migrations et comparer le
+résultat au schéma : il la **vide d'abord**. Vérifié — une table contenant une
+ligne, placée dans cette base avant l'appel, n'existe plus après ; il ne reste
+que les 36 tables du schéma reconstruit. La documentation affirmait
+auparavant qu'« aucune donnée n'y est modifiée » et donnait `$DATABASE_URL`
+en exemple : suivre cette ligne effaçait la base de développement.
+
+Une fois la migration générée, supprimer la base jetable :
+
+```bash
+docker compose -f ../../docker/docker-compose.yml exec -T db \
+  psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS gafeso_shadow;"
+```
 
 **Table PARTAGÉE (schéma `public`)** — ex. `audit_logs` (journal d'audit),
 `tenant_settings`, `collections` : la migration Prisma la crée directement dans
@@ -524,6 +547,27 @@ elle apporte deux nouveautés propagées par `sync-schema` :
 
 Après déploiement, lancer le `sync-schema` ci-dessus pour chaque école déjà
 provisionnée. Idempotent, aucune donnée touchée.
+
+**Cas concret — notice Gafeso, migration `notice_gafeso_marc_facultatif`** :
+premier cas où une migration **RELÂCHE une contrainte** sur une table tenant
+(`biblio_records.marc_data` devient nullable), en plus d'ajouter une colonne
+(`profile`, défaut `bibliographique`) et une valeur d'enum (`MarcFormat.GAFESO`).
+- `LIKE ... INCLUDING ALL` copie `NOT NULL` et `DEFAULT` **à la création
+  seulement** : une école provisionnée avant cette migration garde son
+  `marc_data NOT NULL` alors que le gabarit `public` est déjà assoupli. La
+  migration seule ne suffit donc PAS — sans `sync-schema`, la première notice
+  sans MARC échoue en production alors que tout paraît déployé.
+- `sync-schema` sait désormais **rattraper les contraintes relâchées**
+  (`buildColumnConstraintStatements`) : `DROP NOT NULL` et `SET DEFAULT`, les
+  deux seules directions sûres sur une table qui contient déjà des lignes. Le
+  durcissement (`SET NOT NULL`) reste **manuel** : il échouerait sur une seule
+  ligne nulle et ferait tomber la resynchro entière.
+- Après déploiement, lancer le `sync-schema` ci-dessus **pour chaque école déjà
+  provisionnée**. Idempotent, aucune donnée touchée.
+
+Le modèle de description lui-même — ce que sont la « notice Gafeso », le profil
+et les métadonnées natives — est décrit dans
+[docs/architecture-notice.md](docs/architecture-notice.md).
 
 **Cas concret — double authentification (2FA), migration `add_two_factor`** : elle
 touche les deux mondes à la fois.

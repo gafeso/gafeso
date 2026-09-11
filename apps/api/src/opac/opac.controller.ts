@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Headers,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { BadRequestException, Controller, Get, Header, Headers, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,7 +12,9 @@ import { AuthzService } from '../auth/authz.service';
 import { FONCTIONS } from '../auth/functions';
 import { AccessControlService } from '../access-control/access-control.service';
 import { AuthorsService } from '../authors/authors.service';
-import { OpacService } from './opac.service';
+import { CHIFFRES_TTL_SECONDS, OpacService } from './opac.service';
+import { NouveautesDto } from './dto/nouveautes.dto';
+import { ParcourirDto } from './dto/parcourir.dto';
 import { OpacSearchDto } from './dto/opac-search.dto';
 import { AuthorsIndexDto } from './dto/authors-index.dto';
 
@@ -82,7 +76,69 @@ export class OpacController {
     return this.opac.searchCatalog(this.requireTenant(tenant).slug, query);
   }
 
+  /**
+   * Chiffres publics du fonds — quatre entiers, aucune donnée nominative.
+   *
+   * `Cache-Control` annonce la fraîcheur RÉELLE : les comptages sont mis en
+   * cache côté serveur pour la même durée. C'est l'en-tête qui porte cette
+   * information, et non le corps, parce que le contrat convenu avec la page
+   * d'accueil est « quatre entiers, rien d'autre » — y ajouter un horodatage
+   * casserait le contrat pour dire ce que HTTP sait déjà exprimer.
+   */
+  @Get('chiffres')
+  @Header('Cache-Control', `public, max-age=${CHIFFRES_TTL_SECONDS}`)
+  @ApiOperation({
+    summary: 'Chiffres du fonds (public) — documents, lecteurs, numérique, hors ligne',
+  })
+  async chiffres(@CurrentTenant() tenant: ResolvedTenant | null) {
+    return this.opac.chiffresDuFonds(this.requireTenant(tenant).slug);
+  }
+
+  /**
+   * Notices les plus récemment AJOUTÉES au catalogue (public).
+   *
+   * ⚠ Le titre de section côté page est « À découvrir dans le catalogue », et
+   * non « Dernières acquisitions » : l'ordre reflète l'écriture des lignes en
+   * base, pas une date d'acquisition — qui n'existe pas dans le modèle.
+   */
+  @Get('nouveautes')
+  @Header('Cache-Control', `public, max-age=${CHIFFRES_TTL_SECONDS}`)
+  @ApiOperation({
+    summary: 'Notices récemment ajoutées au catalogue (public, ordre stable)',
+  })
+  async nouveautes(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query() query: NouveautesDto,
+  ) {
+    return this.opac.nouveautes(
+      this.requireTenant(tenant).slug,
+      query.limit,
+      query.avecFichier,
+    );
+  }
+
+  /**
+   * Parcours du catalogue (public, servi par la base) — paginé, total juste.
+   * Porte le filtre « a un fichier », que la recherche plein texte ne peut pas
+   * offrir sans que ses totaux deviennent faux.
+   */
+  @Get('parcourir')
+  @Header('Cache-Control', `public, max-age=${CHIFFRES_TTL_SECONDS}`)
+  @ApiOperation({ summary: 'Parcourir le catalogue (public, paginé)' })
+  async parcourir(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query() query: ParcourirDto,
+  ) {
+    return this.opac.parcourir(
+      this.requireTenant(tenant).slug,
+      query.page,
+      query.limit,
+      query.avecFichier,
+    );
+  }
+
   @Get('constellation')
+  @Header('Cache-Control', `public, max-age=${CHIFFRES_TTL_SECONDS}`)
   @ApiOperation({
     summary: 'Répartition du catalogue par catégorie (public, page constellation)',
   })

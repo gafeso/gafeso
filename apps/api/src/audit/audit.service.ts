@@ -67,7 +67,7 @@ export class AuditService {
       this.prisma.auditLog.count({ where }),
       this.prisma.auditLog.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (filters.page - 1) * filters.limit,
         take: filters.limit,
       }),

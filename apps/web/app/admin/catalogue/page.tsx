@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
@@ -18,6 +18,7 @@ import { KeywordsInput } from '@/components/keywords-input';
 import { ContributorsSummary } from '@/components/contributors-summary';
 import { RecordLookup, LookupCandidate } from '@/components/record-lookup';
 import { LabelsPanel } from '@/components/labels-panel';
+import { LIBELLES } from '@/lib/libelles';
 
 interface Record {
   id: string;
@@ -43,6 +44,13 @@ interface RecordsResponse {
   records: Record[];
 }
 
+/**
+ * Vingt notices par page. L'écran en demandait CENT et n'affichait rien au-delà :
+ * 252 des 352 étaient inatteignables, en silence. Vingt tient à l'écran et rend
+ * la pagination réellement utilisable.
+ */
+const PAR_PAGE = 20;
+
 const emptyForm = {
   title: '',
   titleComplement: '',
@@ -60,8 +68,15 @@ const emptyForm = {
 
 export default function CataloguePage() {
   const [data, setData] = useState<RecordsResponse | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
+  // ⚠ `null` tant qu'on ne sait pas. Avec `[]`, l'indication sous le menu des
+  // domaines affichait « Aucun domaine créé — en créer une » AVANT que la liste
+  // n'arrive : non seulement une affirmation fausse, mais une INVITATION À AGIR
+  // fondée dessus. Les 28 domaines existaient déjà.
+  const [categories, setCategories] = useState<Category[] | null>(null);
   const [category, setCategory] = useState('');
+  const [recherche, setRecherche] = useState('');
+  const [rechercheActive, setRechercheActive] = useState('');
+  const [numeroPage, setNumeroPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -70,8 +85,6 @@ export default function CataloguePage() {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [marcType, setMarcType] = useState('UNIMARC');
   // Sélection de notices pour l'impression d'étiquettes (portée « Sélection »).
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showLabels, setShowLabels] = useState(false);
@@ -82,26 +95,41 @@ export default function CataloguePage() {
     );
   }
 
-  const load = useCallback(async (cat: string) => {
+  // ⚠ PAGINÉ À VINGT, et non plus tronqué à cent en silence. La pagination a
+  // attendu le départage du tri : `createdAt` seul, sans `id`, réordonnait d'un
+  // appel à l'autre — 340 notices du fonds partagent la même seconde, et
+  // parcourir les 18 pages ramenait 20 doublons en masquant 20 notices.
+  // Départage livré et vérifié sur la requête réelle : 352 ramenées, 352
+  // distinctes, 0 doublon, 0 manquante.
+  const load = useCallback(async (cat: string, q: string, page: number) => {
     setError(null);
     try {
-      const qs = new URLSearchParams({ limit: '100' });
+      const qs = new URLSearchParams({ limit: String(PAR_PAGE), page: String(page) });
       if (cat) qs.set('category', cat);
+      if (q.trim()) qs.set('q', q.trim());
       setData(await api<RecordsResponse>(`/cataloging/records?${qs}`, {}, getToken()));
     } catch (err) {
+      // On ne retombe pas sur une page vide : une panne et un catalogue vide
+      // s'écriraient pareil, et la phrase serait fausse dans le premier cas.
+      setData(null);
       setError(err instanceof ApiError ? err.message : 'Chargement impossible.');
     }
   }, []);
 
   useEffect(() => {
-    void load('');
+    void load(category, rechercheActive, numeroPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, rechercheActive, numeroPage]);
+
+  useEffect(() => {
     api<Category[]>('/categories', {}, getToken())
       .then(setCategories)
       .catch(() => setCategories([]));
     api<{ name: string }[]>('/cataloging/keywords', {}, getToken())
       .then((list) => setKeywordSuggestions(list.map((k) => k.name)))
       .catch(() => setKeywordSuggestions([]));
-  }, [load]);
+    // Les listes de référence ne se rechargent pas à chaque page.
+  }, []);
 
   async function createRecord(event: FormEvent) {
     event.preventDefault();
@@ -160,7 +188,7 @@ export default function CataloguePage() {
       setKeywordSuggestions((prev) => Array.from(new Set([...prev, ...keywords])).sort());
       setKeywords([]);
       setShowForm(false);
-      await load(category);
+      await load(category, rechercheActive, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Création impossible.');
     } finally {
@@ -187,35 +215,8 @@ export default function CataloguePage() {
       setContributors(c.contributors.map((k) => ({ name: k.name, role: k.role })));
     }
     setNotice(
-      `Notice « ${c.title} » importée depuis ${c.source}. Relisez, ajoutez la catégorie et les mots-clés, puis enregistrez.`,
+      `Notice « ${c.title} » importée depuis ${c.source}. Relisez, ajoutez le domaine et les mots-clés, puis enregistrez.`,
     );
-  }
-
-  async function onImportMarc(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setNotice(null);
-    setError(null);
-    try {
-      const body = new FormData();
-      body.append('file', file);
-      body.append('marcFormat', marcType);
-      const res = await fetch('/api/cataloging/records/import-marc', {
-        method: 'POST',
-        credentials: 'same-origin', // auth via cookie httpOnly bc_token
-        body,
-      });
-      if (!res.ok) throw new Error((await res.json()).message ?? 'Import refusé.');
-      const result = (await res.json()) as { imported: number; skipped: number };
-      setNotice(
-        `Import MARC : ${result.imported} notice(s) importée(s), ${result.skipped} ignorée(s).`,
-      );
-      await load(category);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import impossible.');
-    } finally {
-      if (fileRef.current) fileRef.current.value = '';
-    }
   }
 
   return (
@@ -223,25 +224,6 @@ export default function CataloguePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-3xl font-bold">Catalogue</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={marcType}
-            onChange={(e) => setMarcType(e.target.value)}
-            className="rounded-md border border-line bg-white px-2 py-2 text-sm"
-            aria-label="Format MARC"
-          >
-            <option value="UNIMARC">UNIMARC</option>
-            <option value="MARC21">MARC21</option>
-          </select>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".mrc,.marc,.iso,application/marc,application/octet-stream"
-            onChange={onImportMarc}
-            className="hidden"
-          />
-          <Button variant="ghost" onClick={() => fileRef.current?.click()}>
-            Importer un fichier MARC
-          </Button>
           <a
             href="/api/cataloging/export?format=iso2709"
             download
@@ -251,12 +233,12 @@ export default function CataloguePage() {
             Export MARC
           </a>
           <a
-            href="/api/cataloging/export?format=marcxml"
+            href="/api/cataloging/export?format=marcxchange"
             download
             className="inline-flex items-center rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-line/40"
-            title="Exporter tout le catalogue en MARCXML"
+            title="Exporter tout le catalogue en MarcXchange (ISO 25577, UNIMARC)"
           >
-            Export MARCXML
+            Export MarcXchange
           </a>
           <Button variant="ghost" onClick={() => setShowLabels((v) => !v)}>
             {showLabels ? 'Masquer les étiquettes' : 'Étiquettes'}
@@ -324,21 +306,21 @@ export default function CataloguePage() {
               />
             </label>
             <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Catégorie (domaine)
+              Domaine
               <Select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               >
-                <option value="">Sans catégorie</option>
-                {categories.map((c) => (
+                <option value="">Sans domaine</option>
+                {(categories ?? []).map((c) => (
                   <option key={c.id} value={c.name} className="capitalize">
                     {c.name}
                   </option>
                 ))}
               </Select>
-              {categories.length === 0 && (
+              {categories !== null && categories.length === 0 && (
                 <span className="text-xs text-muted">
-                  Aucune catégorie créée —{' '}
+                  Aucun domaine créé —{' '}
                   <Link href="/admin/categories" className="underline hover:text-ocre">
                     en créer une
                   </Link>
@@ -433,26 +415,72 @@ export default function CataloguePage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void load(category);
+          // ⚠ Retour à la PAGE 1 : rester en page 7 d'un résultat qui en
+          // compte deux afficherait une liste vide sur une recherche qui trouve.
+          setNumeroPage(1);
+          setRechercheActive(recherche);
         }}
-        className="mt-5 flex max-w-xs gap-2"
+        className="mt-5 flex flex-wrap items-end gap-2"
       >
+        <div className="min-w-[14rem] flex-1">
+          <Input
+            className="min-h-11"
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder={LIBELLES.catalogue.rechercher}
+            aria-label={LIBELLES.catalogue.rechercheAccessible}
+          />
+        </div>
         <Select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          aria-label="Filtrer par catégorie"
+          aria-label="Filtrer par domaine"
         >
-          <option value="">Toutes les catégories</option>
-          {categories.map((c) => (
+          <option value="">Tous les domaines</option>
+          {(categories ?? []).map((c) => (
             <option key={c.id} value={c.name} className="capitalize">
               {c.name}
             </option>
           ))}
         </Select>
-        <Button type="submit">Filtrer</Button>
+        <Button type="submit" className="min-h-11">
+          {LIBELLES.catalogue.rechercher}
+        </Button>
+        {rechercheActive && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11"
+            onClick={() => {
+              setRecherche('');
+              setRechercheActive('');
+              setNumeroPage(1);
+            }}
+          >
+            {LIBELLES.catalogue.effacerRecherche}
+          </Button>
+        )}
       </form>
+      {/* ⚠ La limite des accents SE DIT. `ILIKE` ne les franchit pas, et 268 des
+          352 titres du fonds en portent un : une recherche qui ne trouve pas ce
+          qu'on sait présent fait douter du catalogue, pas de la requête — à
+          moins qu'on ne l'ait prévenu. Correctif backend prévu après P3. */}
+      <p className="mt-1 text-xs text-muted">{LIBELLES.catalogue.rechercheIndice}</p>
 
-      <p className="mt-4 text-sm text-muted">{data?.total ?? 0} notice(s)</p>
+      {/* `{data?.total ?? 0}` écrivait « 0 notice(s) » AVANT que le chargement
+          n'aboutisse, et aussi quand il ÉCHOUAIT : un catalogue vide et un
+          catalogue cassé rendaient exactement la même phrase, et cette phrase
+          était fausse dans le second cas. Tant qu'on ne sait pas, on ne dit pas
+          un nombre ; en échec, on dit l'échec. Un zéro affiché est désormais
+          une information, pas un défaut de chargement déguisé. */}
+      <p className="mt-4 text-sm text-muted">
+        {error
+          ? LIBELLES.catalogue.compteIndisponible
+          : data
+            ? LIBELLES.catalogue.compteNotices(data.total)
+            : LIBELLES.catalogue.chargementEnCours}
+      </p>
+        
       <div className="mt-2 overflow-x-auto rounded-lg border border-line">
         <table className="w-full text-sm">
           <thead>
@@ -460,7 +488,7 @@ export default function CataloguePage() {
               {showLabels && <th className="w-8 px-3 py-2.5" aria-label="Sélection" />}
               <th className="px-4 py-2.5 font-semibold">Titre</th>
               <th className="px-4 py-2.5 font-semibold">Auteur</th>
-              <th className="px-4 py-2.5 font-semibold">Catégorie</th>
+              <th className="px-4 py-2.5 font-semibold">Domaine</th>
               <th className="px-4 py-2.5 font-semibold">Type</th>
               <th className="px-4 py-2.5 font-semibold">Exemplaires</th>
             </tr>
@@ -469,7 +497,13 @@ export default function CataloguePage() {
             {data?.records.length === 0 && (
               <tr>
                 <td colSpan={showLabels ? 6 : 5} className="px-4 py-6 text-center text-muted">
-                  Aucune notice.
+                  {/* ⚠ Une recherche qui ne trouve rien N'EST PAS un catalogue
+                      vide. Les confondre ferait croire au fonds disparu — et
+                      sur un écran où les accents ne sont pas franchis, ce cas
+                      arrivera souvent. */}
+                  {rechercheActive
+                    ? LIBELLES.catalogue.aucunPourCetteRecherche
+                    : 'Aucune notice.'}
                 </td>
               </tr>
             )}
@@ -504,6 +538,31 @@ export default function CataloguePage() {
           </tbody>
         </table>
       </div>
+
+      {/* Paginée, enfin — et seulement quand il y a plus d'une page. */}
+      {data && data.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            disabled={data.page <= 1}
+            onClick={() => setNumeroPage((n) => Math.max(1, n - 1))}
+          >
+            {LIBELLES.catalogue.pagePrecedente}
+          </Button>
+          <span className="text-sm text-muted">
+            {LIBELLES.catalogue.pageSur(data.page, data.totalPages)}
+          </span>
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            disabled={data.page >= data.totalPages}
+            onClick={() => setNumeroPage((n) => n + 1)}
+          >
+            {LIBELLES.catalogue.pageSuivante}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

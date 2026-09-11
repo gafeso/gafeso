@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { HoldStatus, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PatronsService } from '../patrons/patrons.service';
 
 export type TenantDb = PrismaClient;
 
@@ -20,11 +21,6 @@ export interface OnlineRenewalPolicy {
 }
 
 /** Jours de retard entamés (0 si à jour). */
-function overdueDays(dueDate: Date, now: Date): number {
-  const late = now.getTime() - dueDate.getTime();
-  return late > 0 ? Math.ceil(late / DAY_MS) : 0;
-}
-
 /**
  * Espace lecteur (self-service). RÈGLE DE SÉCURITÉ centrale : le « lecteur » est
  * TOUJOURS l'utilisateur connecté (`userId` issu du JWT), jamais un identifiant
@@ -33,7 +29,10 @@ function overdueDays(dueDate: Date, now: Date): number {
  */
 @Injectable()
 export class ReaderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly patrons: PatronsService,
+  ) {}
 
   /** Adhérent lié à l'utilisateur connecté (ou null s'il n'a pas de carte). */
   resolvePatron(db: TenantDb, userId: string) {
@@ -177,62 +176,13 @@ export class ReaderService {
       };
     }
 
-    const page = Math.max(1, opts.historyPage ?? 1);
-    const limit = Math.min(100, Math.max(1, opts.historyLimit ?? 20));
-
-    const [openCheckouts, historyTotal, historyRows] = await Promise.all([
-      db.checkout.findMany({
-        where: { patronId: patron.id, returnDate: null },
-        include: { item: { include: { record: { select: { id: true, title: true } } } } },
-        orderBy: { dueDate: 'asc' },
-      }),
-      db.checkout.count({ where: { patronId: patron.id, returnDate: { not: null } } }),
-      db.checkout.findMany({
-        where: { patronId: patron.id, returnDate: { not: null } },
-        include: { item: { include: { record: { select: { id: true, title: true } } } } },
-        orderBy: { returnDate: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
-
-    const current = openCheckouts.map((c) => {
-      const late = overdueDays(c.dueDate, now);
-      return {
-        checkoutId: c.id,
-        recordId: c.item.record.id,
-        title: c.item.record.title,
-        itemBarcode: c.item.barcode,
-        dueDate: c.dueDate,
-        renewals: c.renewals,
-        overdue: late > 0,
-        overdueDays: late,
-      };
-    });
-
-    const history = historyRows.map((c) => ({
-      checkoutId: c.id,
-      recordId: c.item.record.id,
-      title: c.item.record.title,
-      itemBarcode: c.item.barcode,
-      checkoutDate: c.checkoutDate,
-      dueDate: c.dueDate,
-      returnDate: c.returnDate,
-    }));
-
-    return {
-      hasCard: true,
-      current,
-      history: {
-        entries: history,
-        total: historyTotal,
-        page,
-        totalPages: Math.ceil(historyTotal / limit) || 1,
-      },
-      counters: {
-        current: current.length,
-        overdue: current.filter((c) => c.overdue).length,
-      },
-    };
+    // ⚠ DÉLÈGUE À PatronsService, sans réécrire la requête. C'est la même
+    // question — « les prêts de cet adhérent » — posée sur une autre clé :
+    // ici l'adhérent est résolu depuis le compte CONNECTÉ (règle de sécurité
+    // en tête de ce fichier), là il est désigné par son identifiant derrière
+    // `adherents.gerer`. Une seconde copie aurait fini par afficher deux
+    // nombres différents pour le même prêt.
+    const prets = await this.patrons.loansOfPatron(db, patron.id, opts, now);
+    return { hasCard: true, ...prets };
   }
 }

@@ -37,7 +37,7 @@ export class LabelsController {
    */
   @Get('labels')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+  @RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Générer une planche PDF d’étiquettes code-barres' })
   async labelsPdf(

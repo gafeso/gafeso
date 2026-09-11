@@ -81,6 +81,18 @@ function startHarness(): Promise<{ proc: ChildProcess; port: number }> {
   });
 }
 
+/**
+ * Lit le corps JSON d'une réponse en le TYPANT à l'appel.
+ *
+ * ⚠ `Response.json()` rend `unknown` : sans ce lecteur, chaque accès à un champ
+ * est une erreur de compilation — et ces erreurs ne se voyaient pas, parce que
+ * le script `test` d'`apps/api` n'appelait pas `tsc` (backlog n° 4). Un
+ * `as any` les aurait TUES ; un paramètre de type les fait VÉRIFIER.
+ */
+async function corps<T>(res: Response): Promise<T> {
+  return (await res.json()) as T;
+}
+
 describe.runIf(RUN)('offline-licensing e2e (tenant_zinda réel, sans mock)', () => {
   let harness: ChildProcess;
   let base: string;
@@ -227,7 +239,7 @@ describe.runIf(RUN)('offline-licensing e2e (tenant_zinda réel, sans mock)', () 
       body: JSON.stringify({ publicKey: devicePubB64, label: 'e2e', platform: 'android' }),
     });
     expect(devRes.status).toBe(201);
-    const dev = await devRes.json();
+    const dev = await corps<{ id: string }>(devRes);
     fx.deviceId = dev.id;
     expect(dev.id).toBeTruthy();
 
@@ -238,7 +250,28 @@ describe.runIf(RUN)('offline-licensing e2e (tenant_zinda réel, sans mock)', () 
       body: JSON.stringify({ docId: fx.recordId, deviceId: dev.id }),
     });
     expect(licRes.status).toBe(201);
-    const lic = await licRes.json();
+    // ⚠ LA FORME EST CELLE DU CONTRAT MOBILE, pas une supposition : `body` est
+    // le corps SIGNÉ (c'est lui qu'on canonicalise pour vérifier la signature),
+    // et il porte le lien {user, device, tenant, expires} qui fait toute la
+    // licence. Mon premier essai l'avait oublié — et c'est le typage qui l'a
+    // dit, pas une relecture.
+    const lic = await corps<{
+      id: string;
+      signature: string;
+      licensePublicKey: string;
+      wrappedCek: string;
+      /** Identifiant du BAIL — distinct de `id` : voir la route d'émission. */
+      licenseId: string;
+      /** Clé du blob chiffré dans MinIO, pour le vérifier illisible au repos. */
+      encObjectKey: string;
+      body: {
+        tenant: string;
+        deviceId: string;
+        docId: string;
+        userId?: string;
+        expiresAt: string;
+      };
+    }>(licRes);
 
     // Licence LIÉE à {user, device, tenant, expires}.
     expect(lic.body.tenant).toBe('zinda');
@@ -288,13 +321,13 @@ describe.runIf(RUN)('offline-licensing e2e (tenant_zinda réel, sans mock)', () 
 
     // 7) Statut initial = active.
     const st1 = await fetch(`${base}/offline/licenses/${lic.licenseId}/status`, { headers: headers() });
-    expect((await st1.json()).status).toBe('active');
+    expect((await corps<{ status: string }>(st1)).status).toBe('active');
 
     // 8) RÉVOCATION par retrait du droit en base : l'étudiant perd l'accès →
     //    le re-check en ligne fait passer la licence à `revoked`.
     await pub.accessRule.delete({ where: { id: fx.accessRuleId! } });
     fx.accessRuleId = undefined;
     const st2 = await fetch(`${base}/offline/licenses/${lic.licenseId}/status`, { headers: headers() });
-    expect((await st2.json()).status).toBe('revoked');
+    expect((await corps<{ status: string }>(st2)).status).toBe('revoked');
   }, 60_000);
 });

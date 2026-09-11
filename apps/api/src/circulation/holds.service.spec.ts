@@ -5,7 +5,7 @@ import { HoldsService } from './holds.service';
 const prismaStub = { tenantSettings: { findUnique: vi.fn().mockResolvedValue({ holdPickupDays: 7 }) } };
 
 function makeService(mail: any = { sendHoldAvailable: vi.fn().mockResolvedValue(undefined) }, circulation: any = {}) {
-  return new HoldsService(prismaStub as any, mail as any, circulation as any);
+  return new HoldsService(prismaStub as any, mail as any, circulation as any, {} as any);
 }
 
 describe('HoldsService — cancelHold (anti-IDOR)', () => {

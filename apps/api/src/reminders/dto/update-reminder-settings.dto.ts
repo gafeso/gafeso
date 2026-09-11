@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ReglageDeplaceVersModule } from '../../modules/reglage-deplace-vers-module.validator';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  Validate,
   IsInt,
   IsOptional,
   IsString,
@@ -45,7 +47,29 @@ export class UpdateReminderSettingsDto {
   @ApiPropertyOptional({ description: 'Activation globale des rappels automatiques.' })
   @IsOptional()
   @IsBoolean()
-  enabled?: boolean;
+  /**
+   * ⚠ DÉMÉNAGÉ le 11 septembre 2026 — l'activation des rappels est un MODULE.
+   *
+   * Le champ reste DÉCLARÉ, et refusé, pour que le message nomme la nouvelle
+   * route : retiré, il produirait un 400 générique du `ValidationPipe`
+   * (« property enabled should not exist ») et l'appelant chercherait sa faute
+   * là où il n'y a qu'un déplacement.
+   *
+   * Il est aussi ce qui empêche la régression : deux endroits où l'on éteint la
+   * même chose est précisément la faute que l'absorption supprime.
+   */
+  @ApiPropertyOptional({
+    type: Boolean,
+    deprecated: true,
+    description:
+      '⚠ DÉMÉNAGÉ — ce champ est REFUSÉ ici. Le type est déclaré explicitement ' +
+      'parce que Swagger ne sait pas décrire un champ typé `never` : il y voit ' +
+      'une dépendance circulaire et REFUSE DE DÉMARRER l’application. Le `never` ' +
+      'reste côté TypeScript (une réutilisation ne compile pas), le type ' +
+      'annoncé ici est celui que le champ AVAIT.',
+  })
+  @Validate(ReglageDeplaceVersModule)
+  enabled?: never;
 
   @ApiPropertyOptional({ description: 'N : rappel d’échéance J-N (0 à 30).' })
   @IsOptional()

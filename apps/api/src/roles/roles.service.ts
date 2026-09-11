@@ -8,6 +8,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import {
   CATALOGUE_FONCTIONS,
   ROLES_SYSTEME,
+  FONCTIONS_RESERVEES_ADMIN,
   TOUTES_LES_FONCTIONS,
 } from '../auth/functions';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -172,11 +173,27 @@ export class RolesService {
     return role;
   }
 
+  /**
+   * ⚠ N'est atteinte que pour les rôles PERSONNALISÉS : `create` les pose
+   * toujours en `isSystem: false`, et `update` refuse un rôle système avant
+   * d'arriver ici. C'est donc le bon endroit pour le verrou d'escalade.
+   */
   private assertKnownFunctions(functions: string[]): void {
     const unknown = functions.filter((f) => !TOUTES_LES_FONCTIONS.includes(f));
     if (unknown.length > 0) {
       throw new BadRequestException(
         `Fonction(s) inconnue(s) : ${unknown.join(', ')}. Voir GET /roles/fonctions.`,
+      );
+    }
+    // `securite.roles` ouvre l'écran qui distribue toutes les autres fonctions.
+    // La poser sur un rôle personnalisé permettrait à son porteur de
+    // s'attribuer n'importe quoi : l'escalade se ferait par composition, sans
+    // qu'aucune règle ne soit enfreinte. Elle reste sur l'Administrateur seul.
+    const reservees = functions.filter((f) => FONCTIONS_RESERVEES_ADMIN.includes(f));
+    if (reservees.length > 0) {
+      throw new BadRequestException(
+        `Fonction(s) réservée(s) au rôle Administrateur : ${reservees.join(', ')}. ` +
+          'Un rôle personnalisé ne peut pas les recevoir.',
       );
     }
   }

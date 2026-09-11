@@ -79,7 +79,7 @@ export class AccountsController {
 
   @Post('expected-students/import')
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.ETUDIANTS_IMPORTER)
+  @RequiresFunctions(FONCTIONS.OUTILS_LECTEURS)
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
@@ -112,7 +112,7 @@ export class AccountsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, FunctionsGuard)
-  @RequiresFunctions(FONCTIONS.COMPTES_VOIR)
+  @RequiresFunctions(FONCTIONS.LECTEURS_VOIR)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Lister les comptes de l’école (filtre statut / recherche)',

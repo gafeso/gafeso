@@ -1,4 +1,5 @@
 import { Record as MarcRecord } from 'marcjs';
+import { MARCXCHANGE_NAMESPACE, versMarcxchange } from './unimarc-xml';
 
 /**
  * Export MARC (UNIMARC) — MIROIR EXACT de l'import (voir marc-mapper.ts et
@@ -118,12 +119,19 @@ export function catalogToIso2709(records: MarcExportRecord[]): string {
   return records.map(recordToIso2709).join('');
 }
 
-/** Fichier MARCXML pour un lot : collection dans l'espace de noms MARC slim. */
-export function catalogToMarcxml(records: MarcExportRecord[]): string {
-  const body = records.map(recordToMarcxmlElement).join('\n');
+/**
+ * Fichier MarcXchange (ISO 25577) pour un lot. Les zones sont de l'UNIMARC et
+ * chaque notice le DÉCLARE (`format="UNIMARC"`) ; l'annoncer en MARC21 était
+ * faux — le bibliothécaire téléchargeait un fichier qui mentait sur son propre
+ * contenu, exactement comme l'entrepôt OAI.
+ */
+export function catalogToMarcxchange(records: MarcExportRecord[]): string {
+  // L'espace de noms est porté par <collection> ; chaque notice déclare son
+  // dialecte (format="UNIMARC") — c'est tout l'intérêt de MarcXchange.
+  const body = records.map((r) => versMarcxchange(recordToMarcxmlElement(r), false)).join('\n');
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<collection xmlns="http://www.loc.gov/MARC21/slim">\n' +
+    `<collection xmlns="${MARCXCHANGE_NAMESPACE}">\n` +
     body +
     '\n</collection>\n'
   );
