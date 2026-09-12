@@ -109,6 +109,16 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
       'd’invitation, pas de consigne de secours. Rien n’y est promis.',
   },
   {
+    cle: 'monDepot.retirerConfirmation',
+    nature: 'promet',
+    raison:
+      'Retirer n’est PAS supprimer : le dépôt redevient un brouillon, le ' +
+      'document reste, et tout peut être resoumis. « Retirer ce dépôt ? » se ' +
+      'lirait comme une suppression, et personne ne prendrait le risque. Le ' +
+      'texte doit aussi dire que le directeur SERA PRÉVENU — c’est un effet ' +
+      'sortant, il ne se devine pas, et il se produit même si on se ravise.',
+  },
+  {
     // ⚠ RÉCLAMÉ APRÈS ÉLARGISSEMENT DU VOCABULAIRE. Le relevé ne connaissait
     // pas « présentez-vous » : un trou de forme, trouvé sur un cas réel.
     cle: 'inscription.enAttenteSuite',

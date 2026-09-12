@@ -57,7 +57,7 @@ function routesEtLeursFonctions(): { route: string; fonction: string }[] {
  */
 
 describe("L'instrument : le relevé des routes du contrôleur", () => {
-  it('⚠ il en trouve EXACTEMENT treize — une quatorzième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT quatorze — une quinzième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la route ajoutée demain sous une fonction
     // qu'on n'aura pas relue.
@@ -83,7 +83,19 @@ describe("L'instrument : le relevé des routes du contrôleur", () => {
     // fonction qui ouvre déjà le circuit au bibliothécaire. Surtout PAS sous
     // `depot.valider` — résoudre un blocage par le droit qui manque serait
     // tourner en rond.
-    expect(routesEtLeursFonctions().length).toBe(13);
+    //
+    // ⚠ PUIS DE 13 À 14 : `GET /depots/soumis`, la liste du personnel — et
+    // elle est arrivée parce que la réattribution était INUTILISABLE sans
+    // elle. Aucune route ne donnait l'identifiant d'un dépôt soumis à qui
+    // n'en est pas le directeur : `a-valider` est auto-portée, `a-cataloguer`
+    // ne rend que les validés, `mes-depots` est celle du déposant. Une route
+    // sans moyen d'atteindre son argument.
+    //
+    // ⚠ Même fonction que la réattribution, et c'est une PROPRIÉTÉ, pas une
+    // commodité — elle est éprouvée plus bas : une liste qui montre ce qu'on
+    // peut réattribuer ne doit pas vivre derrière un autre droit que la
+    // réattribution elle-même, sinon l'un des deux est inutile à qui a l'autre.
+    expect(routesEtLeursFonctions().length).toBe(14);
   });
 });
 
@@ -168,6 +180,19 @@ describe('⚠ Ce que `depot.deposer` OUVRE, exactement', () => {
     expect(reattribution!.fonction).toBe('CATALOGUE_GERER');
   });
 
+  it('⚠ la LISTE DES SOUMIS porte la MÊME fonction que la réattribution', () => {
+    // ⚠ CE N'EST PAS UNE COMMODITÉ. Une liste qui existe pour rendre la
+    // réattribution atteignable et qui vivrait derrière un AUTRE droit rendrait
+    // l'un des deux inutile à qui détient l'autre : voir sans pouvoir agir, ou
+    // pouvoir agir sans savoir sur quoi. C'est le défaut qu'on vient de payer,
+    // en plus petit.
+    const routes = routesEtLeursFonctions();
+    const liste = routes.find((r) => r.route === 'Get soumis');
+    const reattribution = routes.find((r) => r.route === 'Post :id/reattribuer');
+    expect(liste, 'la liste des dépôts soumis a disparu').toBeTruthy();
+    expect(liste!.fonction).toBe(reattribution!.fonction);
+  });
+
   it('aucune route de DÉCISION ne s’ouvre à l’étudiant', () => {
     // Valider, refuser, cataloguer, rattacher : rien de tout cela.
     const ouvertes = routesEtLeursFonctions().filter((r) => r.fonction === 'DEPOT_DEPOSER');
@@ -212,5 +237,117 @@ describe('⚠ AUTO-PORTAGE de l’étudiant — propriété testée, pas intenti
     // fuirait ce que l'autre protège.
     const { svc, db } = service({ id: 'd1', depositorId: 'un-autre', status: 'brouillon' });
     await expect(svc.soumettre(db, 'd1', 'moi')).rejects.toThrow(/introuvable/i);
+  });
+});
+
+describe('⚠ LA LISTE DES SOUMIS NE PERMET NI DE VALIDER NI DE REFUSER', () => {
+  /**
+   * ⚠ PROPRIÉTÉ EXIGÉE, ET ÉPROUVÉE PLUTÔT QUE SUPPOSÉE. La liste donne au
+   * bibliothécaire l'identifiant de N'IMPORTE QUEL dépôt soumis — y compris
+   * ceux dont il n'est pas le directeur. Si `valider` s'était contentée de la
+   * fonction `depot.valider`, un administrateur (qui les porte TOUTES) aurait
+   * pu décider à la place du directeur désigné, muni d'un identifiant que cette
+   * liste vient de lui donner.
+   *
+   * La garantie ne tient pas à l'absence de bouton : elle tient au SERVICE.
+   * C'est là qu'on la mesure.
+   */
+  function serviceAvec(depot: Record<string, unknown> | null) {
+    const db = {
+      deposit: {
+        findUnique: vi.fn(async () => depot),
+        findMany: vi.fn(async () => (depot ? [depot] : [])),
+      },
+      user: {
+        findMany: vi.fn(async () => []),
+        findUnique: vi.fn(async () => ({ id: 'etudiant', email: 'e@exemple.bf' })),
+      },
+    } as never;
+    const svc = new DepotsService(
+      {
+        sendDepositSubmitted: vi.fn(),
+        sendDepositApproved: vi.fn(async () => ({ etat: 'envoye' })),
+        sendDepositRejected: vi.fn(async () => ({ etat: 'envoye' })),
+      } as never,
+      { putObject: vi.fn(), deleteObject: vi.fn() } as never,
+      { ingestPdf: vi.fn() } as never,
+    );
+    return { svc, db };
+  }
+
+  const SOUMIS = {
+    id: 'd1',
+    status: 'soumis',
+    directorId: 'le-directeur',
+    depositorId: 'etudiant',
+    submittedAt: new Date('2026-06-10T00:00:00Z'),
+  };
+
+  it('⚠ VALIDER avec l’identifiant lu dans la liste rend « introuvable »', async () => {
+    const { svc, db } = serviceAvec(SOUMIS);
+    await expect(svc.valider(db, 'd1', 'le-bibliothecaire')).rejects.toThrow(/introuvable/i);
+  });
+
+  it('⚠ REFUSER de même — et « introuvable », pas « interdit »', async () => {
+    // La symétrie tient : un 403 confirmerait à qui n'est pas le directeur que
+    // ce dépôt existe et qu'il est dirigé par quelqu'un d'autre.
+    const { svc, db } = serviceAvec(SOUMIS);
+    await expect(svc.refuser(db, 'd1', 'le-bibliothecaire', 'motif')).rejects.toThrow(
+      /introuvable/i,
+    );
+  });
+
+  it('le directeur désigné, lui, passe — sinon le test précédent ne prouverait rien', async () => {
+    // ⚠ TÉMOIN D'ABSENCE ET TÉMOIN DE PRÉSENCE. Sans celui-ci, les deux refus
+    // ci-dessus seraient satisfaits par une méthode qui refuse TOUT LE MONDE,
+    // y compris celui qui doit passer.
+    const { svc, db } = serviceAvec(SOUMIS);
+    (db as never as { deposit: { update: ReturnType<typeof vi.fn> } }).deposit.update = vi.fn(
+      async () => ({ ...SOUMIS, status: 'valide' }),
+    );
+    await expect(svc.valider(db, 'd1', 'le-directeur')).resolves.toBeTruthy();
+  });
+});
+
+describe('⚠ L’ANCIENNETÉ : « il y a 94 jours », jamais une date à soustraire', () => {
+  function db(depots: Record<string, unknown>[]) {
+    return {
+      deposit: { findMany: vi.fn(async () => depots) },
+      user: { findMany: vi.fn(async () => [{ id: 'dir', firstName: 'Awa', lastName: 'Traoré' }]) },
+    } as never;
+  }
+  const svc = () =>
+    new DepotsService(
+      { sendDepositSubmitted: vi.fn() } as never,
+      { putObject: vi.fn() } as never,
+      { ingestPdf: vi.fn() } as never,
+    );
+
+  it('compte les jours entiers écoulés depuis la soumission', async () => {
+    const base = db([
+      { id: 'd1', title: 'T', submittedAt: new Date('2026-06-10T08:00:00Z'), directorId: 'dir' },
+    ]);
+    const [ligne] = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
+    expect(ligne.joursDepuisSoumission).toBe(94);
+    // Et le NOM du directeur, pas son identifiant : une liste d'UUID ne se lit pas.
+    expect(ligne.directeur).toBe('Awa Traoré');
+  });
+
+  it('⚠ `null` quand la date manque — JAMAIS zéro, qui voudrait dire « aujourd’hui »', async () => {
+    // Cas réel depuis que le retrait efface `submittedAt` : un dépôt resoumis
+    // sans date ne doit pas se présenter comme le plus récent de la liste.
+    const base = db([{ id: 'd2', title: 'T', submittedAt: null, directorId: null }]);
+    const [ligne] = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
+    expect(ligne.joursDepuisSoumission).toBeNull();
+    expect(ligne.directeur).toBeNull();
+  });
+
+  it('⚠ le plus ANCIEN d’abord — celui qui attend depuis trois mois, pas le dernier arrivé', async () => {
+    const base = db([]);
+    await svc().soumis(base, new Date());
+    const appel = (base as never as { deposit: { findMany: ReturnType<typeof vi.fn> } }).deposit
+      .findMany.mock.calls[0][0];
+    expect(appel.where).toEqual({ status: 'soumis' });
+    expect(appel.orderBy[0]).toEqual({ submittedAt: 'asc' });
   });
 });

@@ -86,6 +86,11 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // (/admin/categories) — donc aucun lien en circulation ne casse.
       { href: '/admin/categories', libelle: 'Domaines', fonctions: ['catalogue.gerer'] },
       { href: '/admin/collections', libelle: 'Collections', fonctions: ['collections.gerer'] },
+      // ⚠ Le dernier maillon du circuit de dépôt. Sans cette entrée, un dépôt
+      // validé par son directeur n'entre JAMAIS au catalogue : il reste dans
+      // une table que rien n'expose. `catalogue.gerer` ouvre déjà les trois
+      // entrées ci-dessus — aucun droit nouveau n'est accordé ici.
+      { href: '/admin/depots-a-cataloguer', libelle: 'Dépôts à cataloguer', fonctions: ['catalogue.gerer'] },
     ],
   },
   {

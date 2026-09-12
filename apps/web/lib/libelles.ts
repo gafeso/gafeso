@@ -306,6 +306,8 @@ export const LIBELLES = {
       'Le suivi des encadrements n’est pas ouvert à votre compte (fonction « encadrements.voir »).',
     depotsAValider:
       'La validation des dépôts n’est pas ouverte à votre compte (fonction « depot.valider »).',
+    aCataloguer:
+      'Le catalogage des dépôts n’est pas ouvert à votre compte (fonction « catalogue.gerer »).',
   },
 
   /**
@@ -459,6 +461,57 @@ export const LIBELLES = {
    * avant d'écrire. Le bloc s'affiche donc dès qu'aucun rôle ne porte la
    * fonction, ce qui est exactement le cas à corriger.
    */
+  /**
+   * « Dépôts à cataloguer » — l'écran du BIBLIOTHÉCAIRE, dernier maillon du
+   * circuit. 12 septembre 2026.
+   *
+   * ⚠ SANS LUI, UN DÉPÔT VALIDÉ N'ENTRE JAMAIS AU CATALOGUE. Le circuit
+   * s'arrêtait à un pas de son but : l'étudiant dépose, le directeur valide, et
+   * le document reste dans une table que rien n'expose.
+   *
+   * ⚠ ET LA NOTICE NE SE CRÉE PAS ICI, délibérément côté API :
+   * `POST /cataloging/records` porte ses invariants — un auteur principal, trois
+   * mots-clés — que le formulaire de dépôt ne fournit pas et n'a pas à fournir.
+   * Créer la notice depuis le dépôt demanderait un TROISIÈME chemin d'écriture
+   * aux règles plus souples, c'est-à-dire une porte ouverte sur ces invariants.
+   *
+   * L'écran doit donc rendre les DEUX temps lisibles — cataloguer par le chemin
+   * normal, puis rattacher ici — sinon le bouton « rattacher » se lit comme
+   * « créer », et son absence d'effet se lit comme une panne.
+   */
+  aCataloguer: {
+    titre: 'Dépôts à cataloguer',
+    introduction:
+      'Les mémoires et les thèses validés par leur directeur, dont la notice reste à créer.',
+    chargement: 'Chargement des dépôts…',
+    aucun: 'Aucun dépôt validé n’attend d’être catalogué.',
+    valideLe: (date: string) => `Validé le ${date}`,
+    lire: 'Lire le document',
+    sansDocument: 'Aucun document joint à ce dépôt.',
+    /**
+     * ⚠ DIT LES DEUX TEMPS, ET DANS L'ORDRE. Sans cette phrase, « Rattacher une
+     * notice » se lit comme « créer la notice », et le bibliothécaire cherche
+     * un formulaire qui n'existe pas ici.
+     */
+    marcheASuivre:
+      'Catalogez ce document par le chemin habituel, puis revenez ici rattacher la notice créée. ' +
+      'La notice n’est pas créée depuis cet écran : elle garde ses règles de saisie.',
+    allerCataloguer: 'Ouvrir le catalogue',
+    rattacher: 'Rattacher une notice',
+    chercherNotice: 'Chercher la notice dans le catalogue',
+    chercher: 'Chercher',
+    /** ⚠ Ni « aucun résultat » ni la liste tant que la recherche n'a pas répondu. */
+    rechercheEnCours: 'Recherche…',
+    aucunResultat: 'Aucune notice ne correspond.',
+    choisirCetteNotice: 'Rattacher celle-ci',
+    annuler: 'Annuler',
+    /** ⚠ Dit ce que le rattachement FAIT — le dépôt quitte cette liste. */
+    rattachee: (titre: string) =>
+      `Notice « ${titre} » rattachée : le dépôt quitte cette liste et son document est désormais au catalogue.`,
+    echec: 'Le rattachement n’a pas pu être enregistré.',
+    echecLecture: 'Le document n’a pas pu être ouvert.',
+  },
+
   porteDuDepot: {
     titre: 'Personne ne peut valider un dépôt',
     /** Dit l'ASYMÉTRIE, pas « le circuit est fermé » — il est à moitié ouvert. */
@@ -1021,6 +1074,36 @@ export const LIBELLES = {
     fichierFige:
       'Le document n’est plus remplaçable : il a été transmis à votre directeur avec le dépôt.',
     soumettre: 'Soumettre à mon directeur',
+    /**
+     * ⚠ LA SORTIE D'UN DÉPÔT SOUMIS — 12 septembre 2026, arbitrée par Jean.
+     *
+     * « Soumis » était le SEUL état dont la sortie dépendait de quelqu'un
+     * d'autre : valider et refuser sont réservés au directeur DÉSIGNÉ, et le
+     * directeur ne se change que sur un brouillon. Un directeur qui perdait la
+     * fonction — rôle changé, compte désactivé, départ — bloquait le dépôt pour
+     * toujours, et l'étudiant lisait « en attente de votre directeur »
+     * indéfiniment, ce qui était exact.
+     *
+     * C'est SON dépôt : il ne doit dépendre de personne pour en reprendre la
+     * main.
+     */
+    retirer: 'Retirer mon dépôt',
+    /**
+     * ⚠ La confirmation dit les DEUX effets. Le retrait n'est pas une
+     * suppression — c'est un retour en arrière — et il PRÉVIENT le directeur,
+     * ce qui ne se devine pas.
+     */
+    retirerConfirmation:
+      'Retirer ce dépôt de l’examen ? Il redevient un brouillon : vous pourrez le corriger, ' +
+      'changer de directeur, et le soumettre à nouveau. Rien n’est supprimé. Votre directeur ' +
+      'sera prévenu du retrait.',
+    retirerConfirmer: 'Retirer et repasser en brouillon',
+    retireEtPrevenu: 'Dépôt retiré : il est redevenu un brouillon, et votre directeur a été prévenu.',
+    /** ⚠ L'échec de l'envoi n'efface pas le succès du retrait. */
+    retireNonPrevenu:
+      'Dépôt retiré : il est redevenu un brouillon. Mais votre directeur n’a PAS pu être prévenu ' +
+      'par courriel — s’il attendait votre travail, dites-le-lui.',
+    retirerEchec: 'Le dépôt n’a pas pu être retiré.',
     /**
      * ⚠ CE TEXTE A ÉTÉ RÉÉCRIT LE 12 SEPTEMBRE 2026, ET LA RAISON COMPTE PLUS
      * QUE LE TEXTE. Il disait « votre établissement n'a pas encore ouvert la

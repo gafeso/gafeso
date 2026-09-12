@@ -269,6 +269,26 @@ export class DepotsController {
    * `outils.lecteurs` désigne les outils qui opèrent sur les LECTEURS — import
    * de la liste attendue, classes. Un dépôt bloqué n'est pas un lecteur.
    */
+  @Get('soumis')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+  @ApiOperation({
+    summary: 'Tous les dépôts en attente de décision, du plus ancien au plus récent',
+    description:
+      '⚠ SANS ELLE, LA RÉATTRIBUTION ÉTAIT INUTILISABLE : aucune route ne ' +
+      'listait les dépôts soumis pour le personnel — `a-valider` est ' +
+      'auto-portée au directeur, `a-cataloguer` ne rend que les validés, ' +
+      '`mes-depots` est celle du déposant. Le bibliothécaire ne pouvait pas ' +
+      'obtenir l’identifiant du dépôt bloqué, c’est-à-dire le cas exact que la ' +
+      'réattribution existe pour résoudre. ' +
+      'Chaque ligne porte `joursDepuisSoumission` — « il y a 94 jours » se lit, ' +
+      '« 2026-06-10 » demande un calcul. ' +
+      '⚠ Elle ne permet NI de valider NI de refuser : décider reste au ' +
+      'directeur désigné, et la propriété tient par construction.',
+  })
+  soumis(@CurrentTenant() tenant: ResolvedTenant | null) {
+    return this.depots.soumis(this.db(tenant));
+  }
+
   @Post(':id/reattribuer')
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({

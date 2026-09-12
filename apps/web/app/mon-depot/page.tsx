@@ -73,6 +73,8 @@ export default function MonDepotPage() {
   const [formOuvert, setFormOuvert] = useState(false);
   const [form, setForm] = useState({ title: '', authorName: '', documentType: 'memoire', year: '' });
   const [enCours, setEnCours] = useState<string | null>(null);
+  /** Le dépôt dont on confirme le retrait. `null` = aucune confirmation ouverte. */
+  const [retraitConfirme, setRetraitConfirme] = useState<string | null>(null);
   /**
    * ⚠ `null` TANT QU'ON NE SAIT PAS. Trois états, pas deux : afficher « aucun
    * directeur déclaré » pendant le chargement enverrait l'étudiant réclamer à
@@ -177,6 +179,35 @@ export default function MonDepotPage() {
       await charger();
     } catch (err) {
       setErreur(err instanceof ApiError ? err.message : 'Envoi du document impossible.');
+    } finally {
+      setEnCours(null);
+    }
+  }
+
+  /**
+   * ⚠ LA SORTIE D'UN DÉPÔT SOUMIS. C'est son dépôt : il ne doit dépendre de
+   * personne pour en reprendre la main. Le directeur est prévenu, et l'issue de
+   * cet envoi est LUE — jamais supposée.
+   */
+  async function retirer(id: string) {
+    setErreur(null);
+    setEnCours(id);
+    try {
+      const res = await api<Soumission>(
+        `/depots/${id}/retirer`,
+        { method: 'POST' },
+        getToken(),
+      );
+      setRetraitConfirme(null);
+      // Le retrait a ABOUTI : un échec d'envoi ne doit pas le faire douter.
+      setAvis(
+        res.notification?.sent === false
+          ? { ton: 'warning', texte: LIBELLES.monDepot.retireNonPrevenu }
+          : { ton: 'success', texte: LIBELLES.monDepot.retireEtPrevenu },
+      );
+      await charger();
+    } catch (err) {
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.retirerEchec);
     } finally {
       setEnCours(null);
     }
@@ -319,6 +350,7 @@ export default function MonDepotPage() {
       <div className="mt-5 flex flex-col gap-3">
         {depots?.map((d) => {
           const brouillon = d.status === 'brouillon';
+          const soumis = d.status === 'soumis';
           return (
             <Card key={d.id}>
               <div className="flex items-start justify-between gap-3">
@@ -451,6 +483,48 @@ export default function MonDepotPage() {
                   )}
                 </p>
               ) : null}
+              {/*
+                ⚠ LA SORTIE D'UN DÉPÔT SOUMIS, arbitrée le 12 septembre 2026.
+                « Soumis » était le seul état dont la sortie dépendait de
+                quelqu'un d'autre : un directeur qui perdait la fonction bloquait
+                le dépôt pour toujours, et l'écran disait « en attente de votre
+                directeur » indéfiniment — ce qui était exact.
+              */}
+              {soumis && (
+                <div className="mt-3">
+                  {retraitConfirme === d.id ? (
+                    <Card className="border-line !p-3">
+                      <p className="text-sm">{LIBELLES.monDepot.retirerConfirmation}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          className="min-h-11"
+                          disabled={enCours === d.id}
+                          onClick={() => void retirer(d.id)}
+                        >
+                          {LIBELLES.monDepot.retirerConfirmer}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="min-h-11"
+                          disabled={enCours === d.id}
+                          onClick={() => setRetraitConfirme(null)}
+                        >
+                          {LIBELLES.monDepot.annuler}
+                        </Button>
+                      </div>
+                    </Card>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      className="min-h-11"
+                      onClick={() => setRetraitConfirme(d.id)}
+                    >
+                      {LIBELLES.monDepot.retirer}
+                    </Button>
+                  )}
+                </div>
+              )}
+
               <div className="mt-2 text-xs text-muted">
                 Créé le {dateFr(d.createdAt)}
                 {d.submittedAt && ` · soumis le ${dateFr(d.submittedAt)}`}

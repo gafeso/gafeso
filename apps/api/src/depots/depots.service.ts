@@ -445,6 +445,67 @@ export class DepotsService {
     });
   }
 
+  /**
+   * TOUS LES DÉPÔTS SOUMIS — la vue du personnel, et sans elle la réattribution
+   * était INUTILISABLE.
+   *
+   * ⚠ AUCUNE ROUTE NE LES LISTAIT. `a-valider` est auto-portée au directeur
+   * désigné, `a-cataloguer` ne rend que les VALIDÉS, `mes-depots` est celle du
+   * déposant. Le bibliothécaire ne pouvait donc pas obtenir l'identifiant du
+   * dépôt bloqué — c'est-à-dire le cas exact que la réattribution existe pour
+   * résoudre. Une route sans moyen d'atteindre son argument.
+   *
+   * ⚠ TOUS LES SOUMIS, PAS SEULEMENT LES BLOQUÉS, et le premier motif décide :
+   * « le directeur ne peut plus agir » n'est PAS calculable de façon fiable. Un
+   * compte désactivé se voit ; un enseignant parti dont le compte tourne encore,
+   * non. Un filtre qui rate le cas réel est pire qu'une liste complète.
+   *
+   * Et la liste a une valeur propre : elle dit combien attendent et depuis
+   * quand. Triée par ancienneté, elle rend le problème VISIBLE avant qu'un
+   * étudiant se plaigne.
+   *
+   * ⚠ ELLE NE PERMET NI DE VALIDER NI DE REFUSER, et ce n'est pas une omission :
+   * décider reste au directeur. La propriété tient par CONSTRUCTION — `valider`
+   * et `refuser` passent par `exigerDepotDeSonDirecteur`, qui rend
+   * « introuvable » à quiconque n'est pas le directeur désigné, fût-il muni de
+   * l'identifiant que cette liste lui donne. Éprouvé plutôt que supposé.
+   */
+  async soumis(db: TenantDb, maintenant: Date = new Date()) {
+    const depots = await db.deposit.findMany({
+      where: { status: 'soumis' },
+      // Le plus ancien d'abord : c'est celui qui attend depuis trois mois qu'on
+      // veut voir en haut, pas le dernier arrivé.
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+    });
+
+    const directeurs = await db.user.findMany({
+      where: { id: { in: [...new Set(depots.map((d) => d.directorId).filter(Boolean))] as string[] } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const parId = new Map(directeurs.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
+
+    return depots.map((d) => ({
+      id: d.id,
+      title: d.title,
+      authorName: d.authorName,
+      documentType: d.documentType,
+      submittedAt: d.submittedAt,
+      directorId: d.directorId,
+      /** Le NOM du directeur désigné — un identifiant ne se lit pas. */
+      directeur: d.directorId ? (parId.get(d.directorId) ?? null) : null,
+      /**
+       * ⚠ L'ANCIENNETÉ, PAS SEULEMENT LA DATE. « Soumis il y a 94 jours » se
+       * lit ; « 2026-06-10 » demande un calcul, et personne ne le fait en
+       * parcourant une liste.
+       *
+       * ⚠ `null` quand la date de soumission manque — et c'est un cas réel
+       * depuis que le retrait l'efface. Zéro voudrait dire « aujourd'hui », ce
+       * qui est exactement faux pour un dépôt dont on ignore l'âge.
+       */
+      joursDepuisSoumission: d.submittedAt ? joursEntre(d.submittedAt, maintenant) : null,
+    }));
+  }
+
   /** Les dépôts validés dont la notice reste à créer — le travail du bibliothécaire. */
   async aCataloguer(db: TenantDb) {
     const valides = await db.deposit.findMany({
@@ -701,6 +762,11 @@ export class DepotsService {
     }
     return resultat;
   }
+}
+
+/** Jours calendaires entiers écoulés — l'ancienneté d'une attente. */
+function joursEntre(debut: Date, fin: Date): number {
+  return Math.max(0, Math.floor((fin.getTime() - debut.getTime()) / 86_400_000));
 }
 
 /** Neutralise les caractères à risque dans un nom de fichier utilisateur. */

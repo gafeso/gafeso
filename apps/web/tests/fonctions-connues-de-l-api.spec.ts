@@ -102,7 +102,7 @@ describe('l’administrateur voit TOUT', () => {
     // fonction que le Bibliothécaire détenait sans qu'aucune porte n'existe
     // (backlog n° 8). Ce chiffre s'écrit en dur pour qu'une entrée ajoutée ou
     // perdue par accident fasse tomber le test.
-    expect(toutes.length).toBe(20);
+    expect(toutes.length).toBe(21);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 

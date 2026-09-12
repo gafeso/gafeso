@@ -70,6 +70,8 @@ function brancher(
   depots: unknown[] | 'jamais',
   soumission?: unknown,
   directeurs: unknown[] | 'jamais' = DIRECTEURS,
+  /** ⚠ Le sort du courriel prévenant le directeur du retrait — rendu par l'API. */
+  retrait: { sent: boolean; reason?: string } = { sent: true },
 ) {
   appels = [];
   entetes = [];
@@ -90,6 +92,9 @@ function brancher(
         return depots === 'jamais' ? new Promise<Response>(() => {}) : ok(depots);
       }
       if (url.includes('/soumettre')) return ok(soumission ?? { depot: depot('soumis') });
+      if (url.includes('/retirer')) {
+        return ok({ depot: depot('brouillon'), notification: retrait });
+      }
       if (url.includes('/depots')) return ok({});
       throw new Error(`requête non couverte — ${url}`);
     }),
@@ -182,6 +187,70 @@ describe('Mon dépôt · le téléversement du document', () => {
     const ct = Object.entries(envoi.headers).find(([k]) => k.toLowerCase() === 'content-type');
     expect(ct, 'un Content-Type imposé empêche le navigateur de poser la frontière multipart').toBeUndefined();
     expect(envoi.body).toBeInstanceOf(FormData);
+  });
+});
+
+describe('Mon dépôt · retirer un dépôt soumis', () => {
+  /**
+   * ⚠ « SOUMIS » ÉTAIT LE SEUL ÉTAT DONT LA SORTIE DÉPENDAIT DE QUELQU'UN
+   * D'AUTRE. `valider` et `refuser` sont réservés au directeur DÉSIGNÉ, et le
+   * directeur ne se change que sur un brouillon. Un directeur qui perdait la
+   * fonction — rôle changé, compte désactivé, départ — bloquait le dépôt pour
+   * toujours, et l'écran disait « en attente de votre directeur »
+   * indéfiniment : c'était exact, et sans issue.
+   *
+   * Trouvé en vérifiant une remarque de Jean, arbitré par lui, livré par le
+   * backend le jour même.
+   */
+  it('un dépôt SOUMIS porte la sortie', async () => {
+    brancher([depot('soumis')]);
+    render(<PageMonDepot />);
+    expect(await screen.findByRole('button', { name: LIBELLES.monDepot.retirer })).toBeTruthy();
+  });
+
+  it('⚠ un BROUILLON n’a rien à retirer — il n’est pas parti', async () => {
+    brancher([depot('brouillon')]);
+    render(<PageMonDepot />);
+    await screen.findByText(LIBELLES.monDepot.etats.brouillon);
+    expect(screen.queryByRole('button', { name: LIBELLES.monDepot.retirer })).toBeNull();
+  });
+
+  it('⚠ rien n’est envoyé tant que la confirmation n’est pas donnée', async () => {
+    brancher([depot('soumis')]);
+    render(<PageMonDepot />);
+    fireEvent.click(await screen.findByRole('button', { name: LIBELLES.monDepot.retirer }));
+    await screen.findByText(LIBELLES.monDepot.retirerConfirmation);
+    expect(appels.some((a) => a.includes('/retirer'))).toBe(false);
+  });
+
+  it('confirmer appelle la route, puis RELIT', async () => {
+    brancher([depot('soumis')]);
+    render(<PageMonDepot />);
+    fireEvent.click(await screen.findByRole('button', { name: LIBELLES.monDepot.retirer }));
+    fireEvent.click(screen.getByRole('button', { name: LIBELLES.monDepot.retirerConfirmer }));
+    await waitFor(() => expect(appels).toContain('POST /api/depots/d-soumis/retirer'));
+    await waitFor(() =>
+      expect(appels.filter((a) => a === 'GET /api/depots/mes-depots').length).toBeGreaterThan(1),
+    );
+  });
+
+  it('⚠ le directeur NON prévenu : on le dit, sans effacer le retrait', async () => {
+    // Le retrait a ABOUTI. Dire seulement « non prévenu » ferait douter du
+    // geste entier, et recommencer une action déjà faite.
+    brancher([depot('soumis')], undefined, DIRECTEURS, { sent: false, reason: 'smtp_absent' });
+    render(<PageMonDepot />);
+    fireEvent.click(await screen.findByRole('button', { name: LIBELLES.monDepot.retirer }));
+    fireEvent.click(screen.getByRole('button', { name: LIBELLES.monDepot.retirerConfirmer }));
+    const avis = await screen.findByText(LIBELLES.monDepot.retireNonPrevenu);
+    expect(avis).toBeTruthy();
+  });
+
+  it('⚠ la confirmation dit que RIEN n’est supprimé, et que le directeur est prévenu', () => {
+    // Sa propriété, pas sa valeur. « Retirer ce dépôt ? » se lirait comme une
+    // suppression — c'est un retour en arrière, et il a un effet SORTANT.
+    expect(LIBELLES.monDepot.retirerConfirmation).toMatch(/brouillon/i);
+    expect(LIBELLES.monDepot.retirerConfirmation).toMatch(/rien n’est supprimé/i);
+    expect(LIBELLES.monDepot.retirerConfirmation).toMatch(/directeur sera prévenu|prévenu du retrait/i);
   });
 });
 

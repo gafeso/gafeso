@@ -77,14 +77,14 @@ const EXCEPTIONS: Exception[] = [
  * `PATCH /depots/:id/directeur` par la désignation du directeur — le compte a
  * fait son travail dès son premier lot, et deux fois le jour même.
  */
-const NOMBRE_D_APPELS = 128;
+const NOMBRE_D_APPELS = 131;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
  * l'écart de six qui existait au premier jet a désigné deux angles morts de
  * l'extracteur, pas six appels légitimes.
  */
-const NOMBRE_D_ECRITURES = 74;
+const NOMBRE_D_ECRITURES = 76;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {
@@ -209,6 +209,60 @@ function appelsDuFront(): Appel[] {
   return trouves;
 }
 
+/**
+ * ⚠ LE CANAL DES LIENS, fermé le 12 septembre 2026 après qu'il eut fabriqué une
+ * trouvaille. Les exports, les CSV, les PDF d'étiquettes et le QR ne passent ni
+ * par `api()` ni par `fetch()` : ce sont des `<a href="/api/…" download>`, car
+ * le cookie est same-origin et un lien suffit.
+ *
+ * Le relevé ne les voyait pas — et il déclarait donc « sans porte » des routes
+ * que le front atteint, dont `GET /encadrements/miens.csv` que je venais
+ * d'écrire moi-même.
+ */
+function liensVersLApi(): Appel[] {
+  const dejaReleves = new Set(appelsDuFront().map((a) => normaliser(a.brut)));
+  const fichiers = execFileSync('grep', ['-rl', '/api/', 'app', 'components', 'lib'], {
+    cwd: process.cwd(),
+    encoding: 'utf-8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const trouves: Appel[] = [];
+  for (const f of fichiers) {
+    if (f === PLOMBERIE) continue;
+    const src = readFileSync(resolve(process.cwd(), f), 'utf-8');
+    for (const m of src.matchAll(/['"`](\/api\/[^'"`\s]+)['"`]/g)) {
+      const brut = m[1].slice(4);
+      // ⚠ Un lien est une LECTURE — mais la même chaîne sert aussi de premier
+      // argument aux `fetch` de TÉLÉVERSEMENT, qui sont des POST. Les compter
+      // en GET fabriquait trois « routes sans porte » qui n'existaient pas :
+      // le relevé se trompait sur le verbe, pas sur le chemin. On écarte donc
+      // tout chemin déjà relevé avec son verbe par l'extraction d'appels.
+      if (dejaReleves.has(normaliser(brut))) continue;
+      trouves.push({ appel: `GET ${normaliser(brut)}`, verbe: 'GET', brut, fichier: f });
+    }
+  }
+  return trouves;
+}
+
+/**
+ * ⚠ LE CLIENT DE RENDU SERVEUR — `lib/server-api.ts` — est un SECOND client,
+ * pas de la plomberie. Il construit ses URL par `${apiUrl()}${path}` où `path`
+ * arrive d'un helper interne : l'extraction par site d'appel ne le voit pas.
+ *
+ * Six chemins, mesurés une fois et nommés ici. C'est une borne FERMÉE à la
+ * main plutôt que déclarée : le compte exact force à revenir le jour où un
+ * septième apparaît.
+ */
+const CHEMINS_DU_RENDU_SERVEUR = [
+  'GET /opac/chiffres',
+  'GET /opac/constellation',
+  'GET /opac/nouveautes',
+  'GET /opac/search',
+  'GET /opac/records/*',
+  'GET /tenancy/home',
+] as const;
+
 /** Une exception dont la route EXISTE désormais : elle ne dit plus le vrai. */
 function exceptionsPerimees(liste: Exception[], routes: Set<string>): string[] {
   return liste
@@ -283,6 +337,19 @@ describe('l’instrument, avant ce qu’il mesure', () => {
 });
 
 describe('les appels du front', () => {
+  it('⚠ les LIENS et le rendu serveur atteignent eux aussi de vraies routes', () => {
+    // Deux canaux que l'extraction par site d'appel ne voit pas. Sans eux, le
+    // garde déclare « sans porte » des routes que le front atteint — il l'a
+    // fait, sur une route que je venais d'écrire.
+    const routes = routesDeLApi();
+    const liens = liensVersLApi();
+    expect(liens.length).toBeGreaterThan(10); // témoin : le relevé a bien vu
+    const inconnus = [
+      ...new Set([...liens.map((l) => l.appel), ...CHEMINS_DU_RENDU_SERVEUR]),
+    ].filter((a) => !routes.has(a));
+    expect(inconnus).toEqual([]);
+  });
+
   it('correspondent tous à une route de l’API', () => {
     const routes = routesDeLApi();
     const declarees = new Set(EXCEPTIONS.map((e) => e.appel));

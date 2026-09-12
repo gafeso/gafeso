@@ -64,8 +64,8 @@ describe('La table des adresses ne ment pas sur le disque', () => {
     const chemins = Object.values(ECRANS).map((e) => e.fichier);
     // ⚠ Le témoin COMPTE, il ne constate pas. Le chiffre change quand la table
     // change, et c'est voulu : on le met à jour en sachant ce qu'on ajoute.
-    expect(chemins).toHaveLength(22);
-    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(22);
+    expect(chemins).toHaveLength(23);
+    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(23);
     // Aucun chemin en double : deux adresses qui pointent le même fichier
     // passeraient pour deux écrans couverts.
     expect(new Set(chemins).size).toBe(chemins.length);

@@ -57,6 +57,7 @@ import PageAdherents from '@/app/admin/adherents/page';
 import PageMonDepot from '@/app/mon-depot/page';
 import PageMesEncadrements from '@/app/mes-encadrements/page';
 import PageDepotsAValider from '@/app/depots-a-valider/page';
+import PageDepotsACataloguer from '@/app/admin/depots-a-cataloguer/page';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
 import { ouvrirSession } from './aide-session';
 import { poserAdresse } from './aide-navigation';
@@ -132,6 +133,11 @@ export const ECRANS = {
     composant: PageMesEncadrements,
     fichier: 'app/mes-encadrements/page.tsx',
     horsCoque: true,
+  },
+  // Dans la coque, lui : c'est un écran du PERSONNEL.
+  '/admin/depots-a-cataloguer': {
+    composant: PageDepotsACataloguer,
+    fichier: 'app/admin/depots-a-cataloguer/page.tsx',
   },
   // Même nature : l'écran du DIRECTEUR, hors de la coque du personnel.
   '/depots-a-valider': {

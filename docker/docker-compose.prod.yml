@@ -187,7 +187,24 @@ services:
       # QU'en IPv4 — `/proc/net/tcp6` ne montre aucun listener. wget suit la
       # résolution IPv6 en premier, se fait refuser la connexion, et
       # n'essaie pas l'IPv4 ensuite. 127.0.0.1 contourne la résolution DNS.
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      # ⚠ LA SONDE N'INTERROGE PLUS `/`, ET LES DEUX MOTIFS COMPTENT.
+      #
+      # 1. Le rendu serveur de l'accueil transmet le Host à l'API pour résoudre
+      #    l'école. La sonde parle depuis 127.0.0.1, qui n'est le domaine
+      #    d'aucun établissement : l'API journalisait un avertissement JUSTE
+      #    toutes les dix secondes — 8 640 par jour. Le message doit rester
+      #    (c'est la seule trace du domaine exact reçu le jour où un vrai
+      #    client est mal configuré) ; c'est son ÉMETTEUR qui n'avait rien à
+      #    faire là.
+      # 2. Une sonde qui rend l'accueil mesure l'API, la base et Meilisearch en
+      #    plus du serveur web : API tombée, Docker redémarrait `web`, le
+      #    conteneur qui allait bien. Une sonde ne doit mesurer que ce que son
+      #    redémarrage peut réparer.
+      #
+      # `/.well-known/sante` est un gestionnaire de route qui n'appelle rien.
+      # Le préfixe `.well-known/` est déjà public dans middleware.ts — aucune
+      # surface publique nouvelle.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/.well-known/sante"]
       interval: 10s
       timeout: 5s
       retries: 5

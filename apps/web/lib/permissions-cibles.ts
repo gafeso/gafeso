@@ -86,6 +86,15 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
   '/admin/catalogue': { actuelle: ['catalogue.gerer'], cible: 'catalogue.gerer', nature: 'inchangee' },
   '/admin/auteurs': { actuelle: ['catalogue.gerer'], cible: 'catalogue.gerer', nature: 'inchangee' },
   '/admin/categories': { actuelle: ['catalogue.gerer'], cible: 'catalogue.gerer', nature: 'inchangee' },
+  // ⚠ AUCUN ÉLARGISSEMENT. `catalogue.gerer` ouvre déjà Notices, Auteurs et
+  // Domaines : cet écran ajoute une PORTE à une fonction que ses détenteurs ont
+  // déjà, il n'en donne à personne de nouvelle. C'est le dernier maillon du
+  // circuit de dépôt — sans lui, un dépôt validé n'entre jamais au catalogue.
+  '/admin/depots-a-cataloguer': {
+    actuelle: ['catalogue.gerer'],
+    cible: 'catalogue.gerer',
+    nature: 'inchangee',
+  },
   '/admin/collections': {
     actuelle: ['collections.gerer'],
     cible: 'collections.gerer',
