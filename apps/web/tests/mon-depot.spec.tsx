@@ -42,6 +42,7 @@ const depot = (etat: string, extra: Record<string, unknown> = {}) => ({
   fileName: 'memoire.pdf',
   fileSize: 120000,
   refusalReason: null,
+  recordId: null,
   submittedAt: null,
   decidedAt: null,
   createdAt: '2026-09-01T00:00:00.000Z',
@@ -187,6 +188,67 @@ describe('Mon dépôt · le téléversement du document', () => {
     const ct = Object.entries(envoi.headers).find(([k]) => k.toLowerCase() === 'content-type');
     expect(ct, 'un Content-Type imposé empêche le navigateur de poser la frontière multipart').toBeUndefined();
     expect(envoi.body).toBeInstanceOf(FormData);
+  });
+});
+
+it('⚠ notification ABSENTE : on ne dit RIEN de l’envoi', async () => {
+    // ⚠ POSÉ AVANT QUE L'API NE CHANGE. Le backend cessera de prévenir le
+    // directeur à la RESOUMISSION, et OMETTRA `notification` plutôt que de
+    // rendre `{ sent: false }` — « déjà prévenu » n'est pas « pas pu être
+    // prévenu », et un écran qui lit `sent: false` dirait à l'étudiant que son
+    // directeur n'a pas été joint, ce qui serait faux.
+    //
+    // Sans ce troisième état, l'écran tombait sur « votre directeur a été
+    // prévenu » : une affirmation tirée d'une ABSENCE.
+    brancher([depot('brouillon')], { depot: depot('soumis') });
+    render(<PageMonDepot />);
+    fireEvent.click(await screen.findByRole('button', { name: LIBELLES.monDepot.soumettre }));
+    expect(await screen.findByText(LIBELLES.monDepot.soumisSansNouvelEnvoi)).toBeTruthy();
+    expect(screen.queryByText(LIBELLES.monDepot.soumisEtPrevenu)).toBeNull();
+    expect(screen.queryByText(LIBELLES.monDepot.soumisNonPrevenu)).toBeNull();
+  });
+
+  describe('Mon dépôt · la fin du circuit', () => {
+  /**
+   * ⚠ TROUVÉ EN RECETTE LE 12 SEPTEMBRE 2026, et c'est la troisième « colonne
+   * servie que personne ne montre » de la journée.
+   *
+   * `mes-depots` rend la ligne entière, donc `recordId` partait vers l'étudiant
+   * depuis toujours — et le front ne le déclarait même pas dans son type.
+   * `valide` couvre pourtant DEUX situations très différentes pour le
+   * déposant : sa thèse attend le catalogage, ou elle est AU CATALOGUE.
+   *
+   * Sans cette distinction, « Validé par votre directeur » était le dernier mot
+   * qu'il lisait. Il ne savait ni qu'une étape manquait, ni, une fois faite, que
+   * son travail était consultable — la dernière chose qu'il attend.
+   */
+  it('⚠ validé SANS notice : on dit que la dernière étape reste', async () => {
+    brancher([depot('valide', { recordId: null })]);
+    render(<PageMonDepot />);
+    expect(await screen.findByText(LIBELLES.monDepot.valideEnAttenteDeCatalogage)).toBeTruthy();
+    expect(screen.queryByText(LIBELLES.monDepot.voirAuCatalogue)).toBeNull();
+  });
+
+  it('⚠ validé AVEC notice : on l’annonce, et on ouvre la porte', async () => {
+    brancher([depot('valide', { recordId: 'r-42' })]);
+    render(<PageMonDepot />);
+    const lien = (await screen.findByText(LIBELLES.monDepot.voirAuCatalogue)) as HTMLAnchorElement;
+    expect(lien.getAttribute('href')).toBe('/opac/r-42');
+    expect(screen.queryByText(LIBELLES.monDepot.valideEnAttenteDeCatalogage)).toBeNull();
+  });
+
+  it('l’état affiché distingue les deux', async () => {
+    brancher([depot('valide', { recordId: 'r-42' })]);
+    render(<PageMonDepot />);
+    expect(await screen.findByText(LIBELLES.monDepot.etats.valideEtCatalogue)).toBeTruthy();
+    expect(screen.queryByText(LIBELLES.monDepot.etats.valide)).toBeNull();
+  });
+
+  it('⚠ le texte d’attente dit que ça ne dépend PLUS de lui', () => {
+    // Sa propriété, pas sa valeur. « En attente de catalogage » serait exact et
+    // laisserait croire qu'il manque encore quelque chose de sa part.
+    expect(LIBELLES.monDepot.valideEnAttenteDeCatalogage).toMatch(/bibliothèque/i);
+    expect(LIBELLES.monDepot.valideEnAttenteDeCatalogage).toMatch(/ne dépend plus de vous/i);
   });
 });
 

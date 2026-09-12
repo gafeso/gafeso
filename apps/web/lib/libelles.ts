@@ -1056,6 +1056,18 @@ export const LIBELLES = {
       brouillon: 'Brouillon',
       soumis: 'Soumis — en attente de votre directeur',
       valide: 'Validé par votre directeur',
+      /**
+       * ⚠ QUATRIÈME ÉTAT, TROUVÉ EN RECETTE LE 12 SEPTEMBRE 2026. La base n'en
+       * connaît que quatre — `valide` couvre donc DEUX situations très
+       * différentes pour le déposant : sa thèse attend le catalogage, ou elle
+       * est AU CATALOGUE. `recordId` les distingue, et il était servi depuis
+       * toujours sans que l'écran le déclare.
+       *
+       * Troisième « colonne servie que personne ne montre » de la journée, et
+       * la plus tardive du circuit : c'est la dernière chose que l'étudiant
+       * attend, et il ne l'apprenait jamais.
+       */
+      valideEtCatalogue: 'Au catalogue',
       refuse: 'Refusé',
     } as Record<string, string>,
     /**
@@ -1104,6 +1116,16 @@ export const LIBELLES = {
       'Dépôt retiré : il est redevenu un brouillon. Mais votre directeur n’a PAS pu être prévenu ' +
       'par courriel — s’il attendait votre travail, dites-le-lui.',
     retirerEchec: 'Le dépôt n’a pas pu être retiré.',
+    /** ⚠ Le geste qui MANQUAIT : voir sa thèse là où le public la trouvera. */
+    voirAuCatalogue: 'Voir la notice au catalogue',
+    /**
+     * ⚠ Dit l'ATTENTE quand la notice n'est pas encore là. Sans elle, « Validé
+     * par votre directeur » est le dernier mot que l'étudiant lit, et il ne
+     * sait pas qu'une étape reste — ni qu'elle ne dépend plus de lui.
+     */
+    valideEnAttenteDeCatalogage:
+      'Votre directeur a validé. La bibliothèque doit encore créer la notice : c’est la dernière ' +
+      'étape, et elle ne dépend plus de vous.',
     /**
      * ⚠ CE TEXTE A ÉTÉ RÉÉCRIT LE 12 SEPTEMBRE 2026, ET LA RAISON COMPTE PLUS
      * QUE LE TEXTE. Il disait « votre établissement n'a pas encore ouvert la
@@ -1138,6 +1160,21 @@ export const LIBELLES = {
      * de la notification exprès pour que l'écran puisse le dire : sinon
      * l'étudiant attend une réponse d'un directeur qui n'a jamais été prévenu.
      */
+    /**
+     * ⚠ TROISIÈME ÉTAT, POSÉ LE 12 SEPTEMBRE 2026 AVANT QUE L'API NE CHANGE.
+     *
+     * Le backend cessera de prévenir le directeur à la RESOUMISSION — une
+     * resoumission après retrait n'est pas une information nouvelle — et il
+     * OMETTRA `notification` plutôt que de rendre `{ sent: false }`. La
+     * distinction est celle de Jean, et elle est juste : « déjà prévenu » n'est
+     * pas « pas pu être prévenu ».
+     *
+     * ⚠ Sans ce troisième état, l'écran tombait sur « votre directeur a été
+     * prévenu » — une affirmation tirée d'une ABSENCE. On ne dit donc RIEN de
+     * l'envoi quand l'API n'en dit rien : le dépôt est soumis, c'est tout ce
+     * qu'on sait.
+     */
+    soumisSansNouvelEnvoi: 'Dépôt soumis.',
     soumisEtPrevenu: 'Dépôt soumis : votre directeur a été prévenu.',
     soumisNonPrevenu:
       'Dépôt soumis, MAIS votre directeur n’a pas pu être prévenu par courriel. Signalez-le-lui, ou prévenez votre bibliothèque : le dépôt, lui, est bien enregistré.',

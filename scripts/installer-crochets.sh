@@ -128,6 +128,46 @@ fi
 exit 0
 CROCHET
 
+# ══════════════════════════════════════════════════════════ reference-transaction
+#
+# ⚠ BARRE `git stash push`. CLAUDE.md l'interdit « pour LIRE » depuis le
+# 11 septembre 2026, et la règle a tenu tant qu'on y pensait : le 12 au soir,
+# une session l'a employé pour un diagnostic, sans y penser, et ne s'en est
+# tirée que parce que l'arbre était propre. Troisième fois dans la journée
+# qu'une forme rapide se présente d'elle-même et gagne.
+#
+# La leçon tirée le même soir dit pourquoi une règle écrite ne suffisait pas :
+# elle protège contre l'ignorance, pas contre la pente. Ce qui protège contre
+# la pente est un point de passage — le voici.
+#
+# ⚠ IL NE BARRE QUE LA MISE EN RÉSERVE, JAMAIS LA RÉCUPÉRATION. Mesuré :
+#   push        → ancien=0000000  nouveau=<sha>   (création)
+#   pop / drop  → ancien=<sha>    nouveau=0000000 (suppression)
+# On refuse donc sur `nouveau` non nul. Un `pop` reste toujours possible :
+# barrer la sortie de réserve emprisonnerait le travail qu'on veut protéger.
+cat > "$CROCHETS/reference-transaction" <<'CROCHET'
+#!/usr/bin/env bash
+# Refuse `git stash push`. Contournement : GAFESO_STASH=je-sais git stash push
+[ "$1" = "prepared" ] || exit 0
+[ -n "${GAFESO_STASH:-}" ] && exit 0
+
+ROUGE=$'\033[0;31m'; GRIS=$'\033[0;90m'; FIN=$'\033[0m'
+while read -r ancien nouveau ref; do
+  [ "$ref" = "refs/stash" ] || continue
+  # Suppression (pop/drop) : on laisse TOUJOURS passer.
+  case "$nouveau" in *[!0]*) ;; *) continue ;; esac
+
+  printf '%s✗%s `git stash push` est refusé : il DÉPLACE votre travail.\n' "$ROUGE" "$FIN" >&2
+  printf '   %sPour LIRE une version antérieure, rien n’a besoin de bouger :%s\n' "$GRIS" "$FIN" >&2
+  printf '   %sgit show HEAD:<fichier>      — le contenu d’avant%s\n' "$GRIS" "$FIN" >&2
+  printf '   %sgit grep <motif> HEAD        — chercher dans l’arbre committé%s\n' "$GRIS" "$FIN" >&2
+  printf '   %sgit diff HEAD -- <fichier>   — ce qui a changé depuis%s\n' "$GRIS" "$FIN" >&2
+  printf '   %sSi vous voulez vraiment mettre de côté : GAFESO_STASH=je-sais git stash push%s\n' "$GRIS" "$FIN" >&2
+  exit 1
+done
+exit 0
+CROCHET
+
 # ══════════════════════════════════════════════════════════ pre-push
 cat > "$CROCHETS/pre-push" <<'CROCHET'
 #!/usr/bin/env bash
@@ -282,11 +322,12 @@ CROCHET
 
 chmod +x "$CROCHETS/post-merge" "$CROCHETS/post-rewrite"
 
-chmod +x "$CROCHETS/pre-commit" "$CROCHETS/pre-push"
+chmod +x "$CROCHETS/pre-commit" "$CROCHETS/pre-push" "$CROCHETS/reference-transaction"
 
 printf '\n%s✓%s Crochets posés dans .git/hooks/\n' "$VERT" "$FIN"
 printf '  pre-commit  secrets, .env, clés, documents à la racine, marqueurs de conflit, compte\n'
 printf '  pre-push    destination interne, suite verte\n'
 printf '  post-merge  client Prisma régénéré SI une migration est arrivée\n'
 printf '  post-rewrite  idem après un rebase (donc après git pull --rebase)\n'
+printf '  reference-transaction  refuse git stash push (pop/drop restent libres)\n'
 printf '\n  Contournement : --no-verify sur commit ou push.\n\n'

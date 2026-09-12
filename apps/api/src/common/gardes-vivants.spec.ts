@@ -59,13 +59,19 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement TROIS', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement QUATRE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
-    // signale le quatrième, écrit demain par quelqu'un qui n'aura pas lu ceci
+    // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
+    //
+    // ⚠ PASSÉ DE TROIS À QUATRE le 12 septembre 2026, et le compte a fait son
+    // office : il a fallu revenir ici et vérifier que le garde neuf respecte
+    // les deux promesses de ce fichier — nom en `-en-base`, et ROUGE quand la
+    // base ne répond pas plutôt que vert sur rien.
     expect(VIVANTS.map((f) => f.replace(RACINE + '/', '')).sort()).toEqual([
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
+      'roles/roles-systeme-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
     ]);
   });

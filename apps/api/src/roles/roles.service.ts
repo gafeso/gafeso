@@ -17,31 +17,118 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 /** Client Prisma lié au schéma d'un tenant (obtenu via PrismaService.forTenant). */
 export type TenantDb = PrismaClient;
 
+/** Ce qu'une réconciliation a changé sur UN rôle. */
+export interface RoleReconcilie {
+  name: string;
+  /** Le rôle n'existait pas du tout dans cette école. */
+  cree: boolean;
+  ajoutees: string[];
+  retirees: string[];
+  /** Seul le libellé divergeait — le compte de fonctions serait alors nul. */
+  descriptionMaj: boolean;
+}
+
+/**
+ * Le compte rendu d'une école. ⚠ `roles` ne contient QUE ce qui a changé : une
+ * liste vide veut dire « rien ne divergeait », et c'est le cas normal.
+ */
+export interface ReconciliationEcole {
+  roles: RoleReconcilie[];
+  ajoutees: number;
+  retirees: number;
+}
+
 @Injectable()
 export class RolesService {
   /**
-   * Seed idempotent des rôles système de l'école (upsert par nom). Leurs
-   * fonctions sont réaffirmées à chaque passage : une mise à jour de
-   * l'application (nouvelle fonction accordée à un rôle système) se propage
-   * ainsi sans migration — les rôles système ne sont pas personnalisables.
+   * Seed des rôles système de l'école.
+   *
+   * ⚠ UN SEUL CHEMIN D'ÉCRITURE, ET C'EST DÉLIBÉRÉ. Cette méthode délègue à
+   * `reconcilierRolesSysteme` plutôt que de refaire l'upsert de son côté : deux
+   * mécanismes qui écrivent la même chose finissent par diverger, et l'accord
+   * qu'on observe entre eux est une coïncidence jusqu'au jour où l'un change.
    */
   async ensureSystemRoles(db: TenantDb): Promise<void> {
+    await this.reconcilierRolesSysteme(db);
+  }
+
+  /**
+   * RÉCONCILIE LES RÔLES SYSTÈME DE L'ÉCOLE AVEC LEUR DÉFINITION, et rend le
+   * compte de ce qu'elle a changé.
+   *
+   * ⚠ POURQUOI ELLE EXISTE. Les fonctions étaient réaffirmées à chaque passage,
+   * et le commentaire d'origine annonçait « une mise à jour se propage ainsi
+   * sans migration ». C'était vrai de la MÉTHODE et faux du PRODUIT : ses deux
+   * seuls appelants étaient le provisioning d'une école et l'ouverture de
+   * l'écran des rôles. Une école restait donc figée à la dernière visite de cet
+   * écran — mesuré le 12 septembre 2026 : `Étudiant` portait `{}` en base sur
+   * les DEUX écoles là où le code lui donnait `depot.deposer`, et le circuit de
+   * dépôt était inerte pour tout le monde.
+   *
+   * ⚠ Une propagation qui attend une visite n'est pas une propagation, et le
+   * mécanisme garantissait que les écoles les moins visitées soient les plus
+   * périmées — l'inverse de ce qu'on veut.
+   *
+   * ⚠ ELLE N'ÉCRIT QUE CE QUI DIVERGE. L'ancienne forme réécrivait les cinq
+   * rôles à chaque passage ; appelée au démarrage, elle produirait une écriture
+   * à chaque redémarrage, sans rien changer. Un rapport qui dit « réconcilié »
+   * alors que rien ne divergeait est un faux événement, et un journal rempli de
+   * faux événements ne se lit plus.
+   */
+  async reconcilierRolesSysteme(db: TenantDb): Promise<ReconciliationEcole> {
+    // ⚠ Lus par NOM, sans filtrer sur `isSystem` : un rôle personnalisé qui
+    // occuperait le nom d'un rôle système doit être vu, pas contourné par un
+    // `create` qui violerait la contrainte d'unicité.
+    const existants = await db.role.findMany({
+      select: { name: true, description: true, functions: true, isSystem: true },
+    });
+    const parNom = new Map(existants.map((r) => [r.name, r]));
+
+    const changes: RoleReconcilie[] = [];
     for (const def of ROLES_SYSTEME) {
-      await db.role.upsert({
-        where: { name: def.name },
-        create: {
+      const actuel = parNom.get(def.name);
+
+      if (!actuel) {
+        await db.role.create({
+          data: {
+            name: def.name,
+            description: def.description,
+            functions: def.functions,
+            isSystem: true,
+          },
+        });
+        changes.push({
           name: def.name,
-          description: def.description,
-          functions: def.functions,
-          isSystem: true,
-        },
-        update: {
-          description: def.description,
-          functions: def.functions,
-          isSystem: true,
-        },
+          cree: true,
+          ajoutees: [...def.functions],
+          retirees: [],
+          descriptionMaj: false,
+        });
+        continue;
+      }
+
+      const porte = new Set(actuel.functions);
+      const ajoutees = def.functions.filter((f) => !porte.has(f));
+      const retirees = actuel.functions.filter((f) => !def.functions.includes(f as string));
+      const descriptionMaj = actuel.description !== def.description;
+      const flagPerdu = !actuel.isSystem;
+
+      // ⚠ L'IDEMPOTENCE EST ICI, et elle est la seule chose qui empêche un
+      // redémarrage d'écrire pour rien.
+      if (!ajoutees.length && !retirees.length && !descriptionMaj && !flagPerdu) continue;
+
+      await db.role.update({
+        where: { name: def.name },
+        data: { description: def.description, functions: def.functions, isSystem: true },
       });
+      changes.push({ name: def.name, cree: false, ajoutees, retirees, descriptionMaj });
     }
+
+    return {
+      roles: changes,
+      ajoutees: changes.reduce((n, r) => n + r.ajoutees.length, 0),
+      retirees: changes.reduce((n, r) => n + r.retirees.length, 0),
+    };
   }
 
   /** Rôles de l'école (système + personnalisés) avec le nombre de comptes assignés. */

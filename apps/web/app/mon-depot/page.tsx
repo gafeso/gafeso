@@ -37,6 +37,13 @@ interface Depot {
   fileName: string | null;
   fileSize: number | null;
   refusalReason: string | null;
+  /**
+   * ⚠ SERVI DEPUIS TOUJOURS, JAMAIS DÉCLARÉ ICI — trouvé en recette le
+   * 12 septembre 2026. `mesDepots` rend la ligne entière ; ce champ distingue
+   * « validé, la notice reste à créer » de « au catalogue », et c'est la
+   * dernière chose que l'étudiant attend.
+   */
+  recordId: string | null;
   submittedAt: string | null;
   decidedAt: string | null;
   createdAt: string;
@@ -226,9 +233,15 @@ export default function MonDepotPage() {
         jamais été prévenu — un faux qui ne trompe pas seulement, il immobilise.
       */
       setAvis(
-        res.notification?.sent === false
-          ? { ton: 'warning', texte: LIBELLES.monDepot.soumisNonPrevenu }
-          : { ton: 'success', texte: LIBELLES.monDepot.soumisEtPrevenu },
+        // ⚠ TROIS ÉTATS. `notification` ABSENTE ne veut pas dire « prévenu » :
+        // le backend l'omettra à la resoumission, parce qu'il ne renvoie rien.
+        // Tirer « votre directeur a été prévenu » d'une absence serait une
+        // affirmation sans mesure — on ne dit alors rien de l'envoi.
+        res.notification === undefined
+          ? { ton: 'success', texte: LIBELLES.monDepot.soumisSansNouvelEnvoi }
+          : res.notification.sent === false
+            ? { ton: 'warning', texte: LIBELLES.monDepot.soumisNonPrevenu }
+            : { ton: 'success', texte: LIBELLES.monDepot.soumisEtPrevenu },
       );
       await charger();
     } catch (err) {
@@ -365,8 +378,18 @@ export default function MonDepotPage() {
                     {d.fileName ? `${LIBELLES.monDepot.fichier} : ${d.fileName}` : LIBELLES.monDepot.aucunFichier}
                   </div>
                 </div>
+                {/*
+                  ⚠ `valide` COUVRE DEUX SITUATIONS, et la base n'a que quatre
+                  états. « Validé par votre directeur » et « au catalogue » sont
+                  très différents pour le déposant : dans le premier cas une
+                  étape reste, dans le second son travail est publié.
+                  `recordId` les distingue — servi depuis toujours, déclaré ici
+                  seulement depuis la recette du 12 septembre 2026.
+                */}
                 <Badge tone={d.status === 'refuse' ? 'ocre' : d.status === 'valide' ? 'green' : 'neutral'}>
-                  {LIBELLES.monDepot.etats[d.status] ?? d.status}
+                  {d.status === 'valide' && d.recordId
+                    ? LIBELLES.monDepot.etats.valideEtCatalogue
+                    : (LIBELLES.monDepot.etats[d.status] ?? d.status)}
                 </Badge>
               </div>
 
@@ -375,6 +398,25 @@ export default function MonDepotPage() {
                 redépose la même chose — et la suite dit ce qu'il FAUT faire,
                 parce qu'un refus sans issue laisse devant une porte close.
               */}
+              {/*
+                ⚠ LA FIN DU CIRCUIT, DITE À CELUI QUI L'ATTEND. Sans ce bloc,
+                « Validé par votre directeur » restait le dernier mot : l'étudiant
+                ne savait ni qu'une étape manquait, ni, une fois faite, que sa
+                thèse était consultable.
+              */}
+              {d.status === 'valide' &&
+                (d.recordId ? (
+                  <p className="mt-2 text-sm">
+                    <a className="text-ocre hover:underline" href={`/opac/${d.recordId}`}>
+                      {LIBELLES.monDepot.voirAuCatalogue}
+                    </a>
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-muted">
+                    {LIBELLES.monDepot.valideEnAttenteDeCatalogage}
+                  </p>
+                ))}
+
               {d.status === 'refuse' && (
                 <div className="mt-3 rounded-md border border-line bg-paper px-3 py-2 text-sm">
                   <div className="font-semibold">{LIBELLES.monDepot.motifDuRefus}</div>

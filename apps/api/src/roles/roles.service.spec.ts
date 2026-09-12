@@ -26,13 +26,25 @@ function makeDb() {
 }
 
 describe('RolesService — rôles système', () => {
-  it('ensureSystemRoles seed les 5 rôles système (upsert idempotent par nom)', async () => {
+  it('ensureSystemRoles crée les 5 rôles système dans une école vide', async () => {
+    // ⚠ CE TEST A CHANGÉ DE FORME LE 12 SEPTEMBRE 2026, et pas par commodité.
+    // Il vérifiait `upsert` appelé cinq fois — une assertion sur le MOYEN. Le
+    // moyen est devenu « comparer, puis n'écrire que ce qui diverge », parce
+    // qu'un upsert aveugle appelé au démarrage produit une écriture à chaque
+    // redémarrage sans rien changer. L'assertion porte désormais sur l'EFFET :
+    // les cinq rôles existent.
+    //
+    // L'idempotence, elle, est éprouvée dans
+    // `reconciliation-au-demarrage.spec.ts` — sur deux passages de suite.
     const db = makeDb();
     await new RolesService().ensureSystemRoles(db);
-    expect(db.role.upsert).toHaveBeenCalledTimes(ROLES_SYSTEME.length);
-    const names = db.role.upsert.mock.calls.map((c: any) => c[0].where.name);
+    expect(db.role.create).toHaveBeenCalledTimes(ROLES_SYSTEME.length);
+    const names = db.role.create.mock.calls.map((c: any) => c[0].data.name);
     expect(names).toContain('Bibliothécaire');
     expect(names).toContain('Administrateur');
+    // ⚠ Et plus aucun `upsert` : deux chemins d'écriture pour une même
+    // propriété finissent par diverger.
+    expect(db.role.upsert).not.toHaveBeenCalled();
   });
 });
 
