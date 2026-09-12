@@ -1,5 +1,6 @@
 'use client';
 
+import { LIBELLES } from '@/lib/libelles';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -229,7 +230,30 @@ export default function MyLoansPage() {
                           </td>
                           <td className="py-2 pr-3">
                             {h.status === 'AVAILABLE' ? (
-                              <Badge tone="green">Disponible — à retirer</Badge>
+                              <>
+                                <Badge tone="green">Disponible — à retirer</Badge>
+                                {/*
+                                  ⚠ L'ÉCHÉANCE, ENFIN DITE. L'API la sert depuis
+                                  toujours ; l'écran la taisait. Le courriel qui
+                                  annonce une mise de côté peut échouer sans
+                                  bruit — défaut mesuré, pas hypothèse — et cet
+                                  écran est alors le SEUL recours du lecteur.
+                                  Sans date, il ne sait pas qu'il va le perdre.
+
+                                  Trois états : sans date servie, on n'invente
+                                  pas d'échéance.
+                                */}
+                                {h.expiryDate && (
+                                  <p className="mt-1 text-xs text-muted">
+                                    {LIBELLES.reservations.aRetirerAvant(
+                                      new Intl.DateTimeFormat('fr-FR', {
+                                        dateStyle: 'long',
+                                      }).format(new Date(h.expiryDate)),
+                                    )}{' '}
+                                    {LIBELLES.reservations.apresEcheance}
+                                  </p>
+                                )}
+                              </>
                             ) : (
                               <Badge tone="ocre">En file · position {h.position}</Badge>
                             )}

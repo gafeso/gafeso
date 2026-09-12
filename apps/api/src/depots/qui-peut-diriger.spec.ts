@@ -439,3 +439,205 @@ describe('⚠ LIRE LE DOCUMENT DÉPOSÉ — la lacune qui rendait la validation 
     );
   });
 });
+
+describe('⚠ LES DEUX SORTIES DE « SOUMIS » — l’état qui dépendait de quelqu’un d’autre', () => {
+  // 🔴 LE DÉFAUT DE CONCEPTION. `soumis` avait deux sorties — valider, refuser —
+  // toutes deux réservées au directeur DÉSIGNÉ, et le directeur ne se changeait
+  // que sur un brouillon. Un directeur qui perd `depot.valider` — rôle changé,
+  // compte désactivé, départ de l'établissement — laissait le dépôt SANS AUCUNE
+  // SORTIE : le déposant ne pouvait pas le retirer, personne ne pouvait
+  // réattribuer, et l'étudiant lisait « en attente de votre directeur » pour
+  // toujours.
+  //
+  // ⚠ C'était le SEUL état du circuit dont la sortie dépendait d'un tiers. Un
+  // cas rare qui n'a aucune sortie n'est pas rare pour celui qui le vit — et un
+  // enseignant qui part est ordinaire dans une université.
+
+  // ⚠ LE COMPTE PORTE UN COURRIEL. Sans lui, `notifierDirecteurDuRetrait` sort
+  // sur `aucun_destinataire` et l'envoi n'est jamais tenté : le test dirait
+  // « le directeur n'est pas prévenu » alors que c'est le jeu d'essai qui n'a
+  // pas d'adresse. Cinquième lecture d'une mutation qui ne casse rien, prise
+  // avant qu'elle ne coûte.
+  const AVEC_COURRIEL = { ...POPULATION[1], email: 'ens@exemple.bf' };
+
+  function service(depot: Record<string, unknown>, compte: unknown = AVEC_COURRIEL) {
+    const update = vi.fn(async (a: { where: unknown; data: Record<string, unknown> }) => ({
+      ...depot,
+      ...a.data,
+    }));
+    const sendDepositWithdrawn = vi.fn(async () => ({ sent: true }) as never);
+    const sendDepositSubmitted = vi.fn(async () => ({ sent: true }) as never);
+    const db = {
+      deposit: { findUnique: vi.fn(async () => depot), update },
+      user: { findUnique: vi.fn(async () => compte) },
+    } as never;
+    const svc = new DepotsService(
+      { sendDepositWithdrawn, sendDepositSubmitted } as never,
+      {} as never,
+      {} as never,
+    );
+    return { svc, db, update, sendDepositWithdrawn };
+  }
+
+  const SOUMIS = {
+    id: 'd1',
+    depositorId: 'moi',
+    directorId: 'u-ens',
+    status: 'soumis',
+    title: 'Le droit foncier',
+    authorName: 'Zongo, Moussa',
+  };
+
+  describe('1 · le DÉPOSANT retire — il reprend la main sans personne', () => {
+    it('le dépôt repasse en brouillon', async () => {
+      const { svc, db, update } = service(SOUMIS);
+      await svc.retirer(db, 'd1', 'moi');
+      expect(update.mock.calls[0][0].data.status).toBe('brouillon');
+    });
+
+    it('⚠ `submittedAt` est EFFACÉ — un brouillon n’a pas été soumis', async () => {
+      // Laisser la date en ferait une ligne vraie hier et fausse aujourd'hui.
+      // La trace de la soumission vit au journal d'audit, qui est fait pour ça.
+      const { svc, db, update } = service(SOUMIS);
+      await svc.retirer(db, 'd1', 'moi');
+      expect(update.mock.calls[0][0].data.submittedAt).toBeNull();
+    });
+
+    it('⚠ le DIRECTEUR est prévenu — sinon le dépôt s’évapore de sa liste', async () => {
+      // Il aurait examiné un document qui disparaît sans un mot. C'est un
+      // silence de plus, et le circuit en a déjà corrigé assez.
+      const { svc, db, sendDepositWithdrawn } = service(SOUMIS);
+      await svc.retirer(db, 'd1', 'moi');
+      expect(sendDepositWithdrawn).toHaveBeenCalled();
+    });
+
+    it('⚠ et l’issue de l’envoi est RENDUE, jamais écrite en dur', async () => {
+      const { svc, db } = service(SOUMIS);
+      const r = await svc.retirer(db, 'd1', 'moi');
+      expect(r.notification).toHaveProperty('sent');
+    });
+
+    it('un dépôt qui n’est pas SOUMIS ne se retire pas', async () => {
+      const { svc, db } = service({ ...SOUMIS, status: 'valide' });
+      await expect(svc.retirer(db, 'd1', 'moi')).rejects.toThrow(/valide/);
+    });
+
+    it('⚠ le dépôt d’un AUTRE rend « introuvable », comme partout ailleurs', async () => {
+      const { svc, db } = service({ ...SOUMIS, depositorId: 'un-autre' });
+      await expect(svc.retirer(db, 'd1', 'moi')).rejects.toThrow(/introuvable/i);
+    });
+  });
+
+  describe('2 · le BIBLIOTHÉCAIRE réattribue — quand le déposant ne peut plus agir', () => {
+    it('le directeur change, et le dépôt RESTE soumis', async () => {
+      const { svc, db, update } = service(SOUMIS);
+      await svc.reattribuer(db, 'd1', 'u-admin');
+      expect(update.mock.calls[0][0].data).toEqual({ directorId: 'u-admin' });
+    });
+
+    it('⚠ la réponse NOMME l’ancien directeur — « réattribué » seul ne raconte rien', async () => {
+      const { svc, db } = service(SOUMIS, AVEC_COURRIEL);
+      const r = await svc.reattribuer(db, 'd1', 'u-admin');
+      expect(r.ancienDirecteur).toEqual({ id: 'u-ens', nom: 'Salif Ouédraogo' });
+    });
+
+    it('⚠ le nouveau directeur doit porter `depot.valider`', async () => {
+      // Sans ce garde, on débloquerait un dépôt en le rattachant à quelqu'un
+      // qui ne peut pas davantage le valider — on déplacerait l'impasse.
+      const { svc, db, update } = service(SOUMIS, POPULATION[4]);
+      await expect(svc.reattribuer(db, 'd1', 'u-camarade')).rejects.toThrow(
+        /ne peut pas diriger/i,
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('un dépôt qui n’est pas SOUMIS ne se réattribue pas', async () => {
+      const { svc, db } = service({ ...SOUMIS, status: 'brouillon' });
+      await expect(svc.reattribuer(db, 'd1', 'u-admin')).rejects.toThrow(/brouillon/);
+    });
+
+    it('réattribuer au MÊME directeur est refusé, pas silencieusement accepté', async () => {
+      const { svc, db } = service(SOUMIS);
+      await expect(svc.reattribuer(db, 'd1', 'u-ens')).rejects.toThrow(/déjà attribué/);
+    });
+  });
+});
+
+describe('⚠ LA DÉCISION SE DIT — ni `valider` ni `refuser` n’envoyaient rien', () => {
+  // 🔴 L'étudiant n'apprenait la décision qu'en revenant de lui-même sur « Mon
+  // dépôt » — c'est-à-dire en se demandant chaque jour si quelque chose a
+  // changé. Et pour un REFUS, la décision demande une ACTION et porte un motif
+  // que le directeur a pris la peine d'écrire.
+
+  function service(depot: Record<string, unknown>) {
+    const sendDepositApproved = vi.fn(async () => ({ sent: true }) as never);
+    const sendDepositRefused = vi.fn(
+      async (_e: string, _i: { titre: string; motif: string }) => ({ sent: true }) as never,
+    );
+    const db = {
+      deposit: {
+        findUnique: vi.fn(async () => depot),
+        update: vi.fn(async (a: { data: Record<string, unknown> }) => ({ ...depot, ...a.data })),
+      },
+      user: { findUnique: vi.fn(async () => ({ id: 'moi', email: 'etu@exemple.bf' })) },
+    } as never;
+    const svc = new DepotsService(
+      { sendDepositApproved, sendDepositRefused } as never,
+      {} as never,
+      {} as never,
+    );
+    return { svc, db, sendDepositApproved, sendDepositRefused };
+  }
+
+  const SOUMIS = {
+    id: 'd1',
+    depositorId: 'moi',
+    directorId: 'u-ens',
+    status: 'soumis',
+    title: 'Le droit foncier',
+    authorName: 'Zongo, Moussa',
+  };
+
+  it('⚠ VALIDER prévient le déposant', async () => {
+    const { svc, db, sendDepositApproved } = service(SOUMIS);
+    const r = await svc.valider(db, 'd1', 'u-ens');
+    expect(sendDepositApproved).toHaveBeenCalled();
+    expect(r.notification).toHaveProperty('sent');
+  });
+
+  it('⚠ REFUSER prévient le déposant AVEC LE MOTIF — c’est tout l’objet de l’envoi', async () => {
+    // Un refus demande une action, et le motif est ce qui permet de la faire.
+    // Le laisser découvrir en revenant sur l'écran ferait dépendre une
+    // correction du hasard d'une visite.
+    const { svc, db, sendDepositRefused } = service(SOUMIS);
+    await svc.refuser(db, 'd1', 'u-ens', '  Le chapitre 3 n’est pas la version soutenue.  ');
+    expect(sendDepositRefused.mock.calls[0][1]).toEqual({
+      titre: 'Le droit foncier',
+      motif: 'Le chapitre 3 n’est pas la version soutenue.',
+    });
+  });
+
+  it('⚠ et l’issue REMONTE, jamais un « envoyé » écrit en dur', async () => {
+    const { svc, db } = service(SOUMIS);
+    const r = await svc.refuser(db, 'd1', 'u-ens', 'motif');
+    expect(r.notification).toHaveProperty('sent');
+  });
+
+  it('un déposant sans courriel : « aucun destinataire », pas un faux succès', async () => {
+    const { svc, db } = service(SOUMIS);
+    (db as unknown as { user: { findUnique: ReturnType<typeof vi.fn> } }).user.findUnique =
+      vi.fn(async () => ({ id: 'moi', email: null }));
+    const r = await svc.valider(db, 'd1', 'u-ens');
+    expect(r.notification).toEqual({ sent: false, reason: 'aucun_destinataire' });
+  });
+
+  it('⚠ un échec d’envoi ne DÉFAIT pas la décision', async () => {
+    // La décision du directeur est prise ; la refuser parce qu'un courriel ne
+    // part pas la lui ferait reprendre, et le dépôt resterait soumis.
+    const { svc, db, sendDepositApproved } = service(SOUMIS);
+    sendDepositApproved.mockResolvedValue({ sent: false, reason: 'smtp_absent' } as never);
+    const r = await svc.valider(db, 'd1', 'u-ens');
+    expect(r.depot.status).toBe('valide');
+    expect(r.notification).toMatchObject({ sent: false });
+  });
+});

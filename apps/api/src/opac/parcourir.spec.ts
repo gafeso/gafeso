@@ -54,7 +54,7 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
     // annoncerait 25 résultats et en montrerait 4 — exactement le mensonge que
     // cette route existe pour éviter.
     const { count, findMany, service } = fauxCatalogue(fonds);
-    const r = await service.parcourir('buc', 1, 20, true);
+    const r = await service.parcourir('amani', 1, 20, true);
     // ⚠ Pas de `!` : si le comptage n'avait pas lieu, on veut un échec qui le
     // DIT, pas un accès sur `undefined`.
     expect(count.mock.calls[0][0], 'le comptage doit recevoir un filtre').toBeDefined();
@@ -66,7 +66,7 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
 
   it('sans filtre, le total est celui du fonds entier', async () => {
     const { service } = fauxCatalogue(fonds);
-    const r = await service.parcourir('buc', 1, 20, false);
+    const r = await service.parcourir('amani', 1, 20, false);
     expect(r.totalHits).toBe(25);
     expect(r.hits).toHaveLength(20);
     expect(r.totalPages).toBe(2);
@@ -74,7 +74,7 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
 
   it('la deuxième page reprend là où la première s’arrête', async () => {
     const { findMany, service } = fauxCatalogue(fonds);
-    const r = await service.parcourir('buc', 2, 20, false);
+    const r = await service.parcourir('amani', 2, 20, false);
     expect(findMany.mock.calls[0][0].skip).toBe(20);
     expect(r.hits).toHaveLength(5);
     expect(r.page).toBe(2);
@@ -83,7 +83,7 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
   it('une page au-delà de la fin rend une liste vide AVEC le vrai total', async () => {
     // « il n'y a rien ici » et « il n'y a rien du tout » restent distincts.
     const { service } = fauxCatalogue(fonds);
-    const r = await service.parcourir('buc', 99, 20, false);
+    const r = await service.parcourir('amani', 99, 20, false);
     expect(r.hits).toEqual([]);
     expect(r.totalHits).toBe(25);
   });
@@ -100,7 +100,7 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
 
   it('l’ordre stable est le même que celui des nouveautés', async () => {
     const { findMany, service } = fauxCatalogue(fonds);
-    await service.parcourir('buc', 1, 20, false);
+    await service.parcourir('amani', 1, 20, false);
     expect(findMany.mock.calls[0][0].orderBy).toEqual([
       { createdAt: 'desc' },
       { id: 'desc' },
@@ -111,13 +111,13 @@ describe('parcourir — pagination et total ne peuvent pas se contredire', () =>
 describe('parcourir — le cache ne confond pas deux pages', () => {
   it('page, limite et filtre entrent tous dans la clé', async () => {
     const { findMany, service } = fauxCatalogue(fonds);
-    await service.parcourir('buc', 1, 20, false);
-    await service.parcourir('buc', 2, 20, false);
-    await service.parcourir('buc', 1, 10, false);
-    await service.parcourir('buc', 1, 20, true);
+    await service.parcourir('amani', 1, 20, false);
+    await service.parcourir('amani', 2, 20, false);
+    await service.parcourir('amani', 1, 10, false);
+    await service.parcourir('amani', 1, 20, true);
     expect(findMany).toHaveBeenCalledTimes(4);
     // …et une répétition à l'identique ne recalcule pas.
-    await service.parcourir('buc', 1, 20, false);
+    await service.parcourir('amani', 1, 20, false);
     expect(findMany).toHaveBeenCalledTimes(4);
   });
 });
@@ -153,8 +153,8 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
 
   it('⚠ deux visites, UN appel de CHAQUE sorte — la garantie couvre les deux sources', async () => {
     const { search, count, service } = fauxMoteur();
-    const a = await service.constellation('buc');
-    const b = await service.constellation('buc');
+    const a = await service.constellation('amani');
+    const b = await service.constellation('amani');
 
     expect(search).toHaveBeenCalledTimes(1);
     // ⚠ SANS CETTE LIGNE, LA GARANTIE AURAIT ÉTÉ VIDÉE EN SILENCE. Le total
@@ -169,15 +169,15 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
 
   it('deux écoles ne partagent pas leur répartition', async () => {
     const { search, count, service } = fauxMoteur();
-    await service.constellation('buc');
-    await service.constellation('ujkz');
+    await service.constellation('amani');
+    await service.constellation('tamaro');
     expect(search).toHaveBeenCalledTimes(2);
     expect(count).toHaveBeenCalledTimes(2);
   });
 
   it('la forme de la réponse est inchangée', async () => {
     const { service } = fauxMoteur();
-    const r = await service.constellation('buc');
+    const r = await service.constellation('amani');
     expect(Object.keys(r).sort()).toEqual(['domains', 'totalRecords']);
     expect(r.domains[0]).toEqual({ category: 'droit', count: 2 });
     // Forme inchangée, SOURCE changée : c'est exactement ce que ce lot promet.

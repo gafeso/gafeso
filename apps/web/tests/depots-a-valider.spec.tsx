@@ -56,6 +56,8 @@ let corps: Record<string, unknown>[] = [];
 function brancher(
   liste: unknown[] | 'jamais' | 'panne',
   fonctions: string[] = ENSEIGNANT,
+  /** ⚠ Le sort du courriel au déposant : rendu par l'API, jamais supposé. */
+  notif: { sent: boolean; reason?: string } = { sent: true },
 ) {
   appels = [];
   corps = [];
@@ -70,7 +72,9 @@ function brancher(
         Promise.resolve({ ok: true, json: () => Promise.resolve(c) } as Response);
       if (url.includes('/auth/me/functions')) return ok({ functions: fonctions });
       if (url.includes('/document')) return ok({ url: 'https://exemple.test/signee' });
-      if (url.includes('/valider') || url.includes('/refuser')) return ok({});
+      if (url.includes('/valider') || url.includes('/refuser')) {
+        return ok({ depot: { id: 'd1', status: 'refuse' }, notification: notif });
+      }
       if (url.includes('/depots/a-valider')) {
         if (liste === 'jamais') return new Promise<Response>(() => {});
         if (liste === 'panne')
@@ -174,6 +178,41 @@ describe('Dépôts à valider · la décision', () => {
   });
 });
 
+describe('Dépôts à valider · le déposant est-il prévenu ?', () => {
+  /**
+   * ⚠ LE BACKEND A LIVRÉ L'ENVOI AU DÉPOSANT LE 12 SEPTEMBRE 2026, et la forme
+   * de la réponse a changé : `{ depot, notification }`.
+   *
+   * Avant, l'étudiant n'apprenait la décision qu'en revenant sur « Mon dépôt » —
+   * « il voit votre motif » était donc exact. Maintenant un courriel part, et il
+   * peut échouer. Dire « prévenu » sans le savoir serait le faux qu'on a corrigé
+   * partout ailleurs ; ne rien dire laisserait le directeur croire son étudiant
+   * informé alors qu'il ne sait rien.
+   */
+  it('courriel parti : on le dit', async () => {
+    brancher([depot()], ENSEIGNANT, { sent: true });
+    render(<PageDepotsAValider />);
+    fireEvent.click(await screen.findByRole('button', { name: T.valider }));
+    expect(await screen.findByText(new RegExp(T.deposantPrevenu))).toBeTruthy();
+  });
+
+  it('⚠ courriel NON parti : on le dit AUSSI, et on dit la sortie', async () => {
+    brancher([depot()], ENSEIGNANT, { sent: false, reason: 'smtp_absent' });
+    render(<PageDepotsAValider />);
+    fireEvent.click(await screen.findByRole('button', { name: T.valider }));
+    expect(await screen.findByText(new RegExp(T.deposantNonPrevenu))).toBeTruthy();
+  });
+
+  it('⚠ un échec de courriel n’efface pas le succès de la décision', async () => {
+    // Le geste a ABOUTI. Dire seulement « non prévenu » ferait douter du tout,
+    // et refaire une décision déjà prise.
+    brancher([depot()], ENSEIGNANT, { sent: false, reason: 'smtp_error' });
+    render(<PageDepotsAValider />);
+    fireEvent.click(await screen.findByRole('button', { name: T.valider }));
+    expect(await screen.findByText(new RegExp(T.validerSuite))).toBeTruthy();
+  });
+});
+
 describe('Dépôts à valider · ce que les textes DOIVENT dire', () => {
   it('⚠ la validation dit que la notice reste À CRÉER', () => {
     // Sa propriété, pas sa valeur. « Dépôt validé. » serait exact et ferait
@@ -182,12 +221,22 @@ describe('Dépôts à valider · ce que les textes DOIVENT dire', () => {
     expect(LIBELLES.depotsAValider.validerSuite).toMatch(/reste à créer|pas fait automatiquement/i);
   });
 
+  it('⚠ l’échec de courriel DIT la sortie, pas seulement la panne', () => {
+    // Le directeur est le seul à pouvoir relayer. Et il doit savoir que la
+    // décision EST visible côté étudiant — sinon il croit le geste perdu.
+    expect(LIBELLES.depotsAValider.deposantNonPrevenu).toMatch(/Mon dépôt|consultant/i);
+    expect(LIBELLES.depotsAValider.deposantNonPrevenu).toMatch(/dites-le-lui|signalez/i);
+    expect(LIBELLES.depotsAValider.deposantNonPrevenu).toMatch(/enregistrée/i);
+  });
+
   it('⚠ le refus dit que RIEN n’est supprimé, et que le motif sera LU', () => {
     // « Refus envoyé. » laisserait croire qu'on vient de faire disparaître un
     // travail, ou que le motif reste entre le directeur et la bibliothèque.
     expect(LIBELLES.depotsAValider.refuseSuite).toMatch(/conservés?/i);
-    expect(LIBELLES.depotsAValider.refuseSuite).toMatch(/étudiant/i);
     expect(LIBELLES.depotsAValider.refuseSuite).toMatch(/motif/i);
+    // ⚠ Il ne dit PLUS « l'étudiant voit votre motif » : c'est le sort du
+    // courriel, désormais rendu par l'API, qui décide de ce qu'il sait.
+    expect(LIBELLES.depotsAValider.refuseSuite).not.toMatch(/l’étudiant voit/i);
   });
 
   it('⚠ l’aide du motif prévient qu’il sera lu, AVANT qu’on l’écrive', () => {

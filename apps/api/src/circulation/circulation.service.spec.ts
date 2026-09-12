@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CirculationService } from './circulation.service';
+import { HoldsService } from './holds.service';
 
 const DAY = 24 * 3600 * 1000;
 const NOW = new Date('2026-07-05T12:00:00Z');
@@ -677,5 +678,76 @@ describe('⚠ `servable` — une file qui attend un document qui n’existe plus
     expect(base.item.findMany.mock.calls[0][0].where.recordId.in).toEqual([
       'rec-0', 'rec-1', 'rec-2', 'rec-3',
     ]);
+  });
+});
+
+describe('⚠ LA MISE À DISPOSITION QUI N’ARRIVE PAS — l’issue remonte au guichet', () => {
+  // ⚠ `notifyAvailable` MESURAIT déjà son issue — c'était l'un des quatre
+  // mensonges corrigés le matin — mais ses TROIS appelants la JETAIENT. Le
+  // journal la portait ; personne ne lit le journal au comptoir.
+  //
+  // La chaîne complète : un courriel qui échoue sans bruit, plus un écran qui
+  // ne dit pas l'échéance de retrait, et le document repart à la personne
+  // suivante sans que celui qui l'attendait ait jamais rien su.
+
+  function service(issue: unknown, email: string | null = 'awa@exemple.bf') {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const db: any = {
+      hold: {
+        findMany: vi.fn(async () => [
+          {
+            id: 'h-1',
+            expiryDate: new Date('2026-07-12'),
+            record: { title: 'Droit foncier' },
+            patron: { user: email ? { email, firstName: 'Awa', lastName: 'Traoré' } : null },
+          },
+        ]),
+        updateMany,
+      },
+    };
+    const mail = { sendHoldAvailable: vi.fn(async () => issue) };
+    const prisma = { tenantSettings: { findUnique: vi.fn(async () => null) } };
+    return {
+      svc: new HoldsService(prisma as any, mail as any, {} as any, {} as any),
+      db,
+      mail,
+      updateMany,
+    };
+  }
+
+  it('envoi réussi : rien à signaler', async () => {
+    const { svc, db } = service({ sent: true });
+    const r = await svc.notifyAvailable(db, 't1');
+    expect(r.sent).toBe(1);
+    expect(r.nonPrevenus).toEqual([]);
+  });
+
+  it('⚠ SMTP absent : le lecteur est NOMMÉ comme non prévenu', async () => {
+    const { svc, db } = service({ sent: false, reason: 'smtp_absent' });
+    const r = await svc.notifyAvailable(db, 't1');
+    expect(r.sent).toBe(0);
+    expect(r.nonPrevenus).toEqual([
+      { holdId: 'h-1', titre: 'Droit foncier', motif: 'smtp_absent' },
+    ]);
+  });
+
+  it('⚠ AUCUNE ADRESSE : le cas le plus silencieux des trois, et il remonte', async () => {
+    // Aucun échec technique, aucune exception — et un lecteur qui ne sera
+    // JAMAIS prévenu, sans nouvelle tentative puisqu'on garde `notifiedAt`.
+    const { svc, db, mail } = service({ sent: true }, null);
+    const r = await svc.notifyAvailable(db, 't1');
+    expect(mail.sendHoldAvailable).not.toHaveBeenCalled();
+    expect(r.nonPrevenus).toEqual([
+      { holdId: 'h-1', titre: 'Droit foncier', motif: 'aucun_destinataire' },
+    ]);
+  });
+
+  it('⚠ un échec RELÂCHE la réservation pour retenter — sauf sans adresse', async () => {
+    const { svc, db, updateMany } = service({ sent: false, reason: 'smtp_error' });
+    await svc.notifyAvailable(db, 't1');
+    // 1er appel : réservation du droit d'envoi. 2e : relâche.
+    expect((updateMany.mock.calls[1] as unknown as [{ data: unknown }])[0].data).toEqual({
+      notifiedAt: null,
+    });
   });
 });

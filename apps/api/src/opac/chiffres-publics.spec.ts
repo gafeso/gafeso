@@ -34,11 +34,11 @@ function service(prisma: unknown) {
   return new OpacService({} as never, {} as never, {} as never, prisma as never);
 }
 
-const BUC = { notices: 1240, lecteurs: 312, numeriques: 87, licences: 45 };
+const AMANI = { notices: 1240, lecteurs: 312, numeriques: 87, licences: 45 };
 
 describe('chiffres publics — cas 1 : un établissement avec du fonds', () => {
   it('rend les quatre nombres, conformes à la base', async () => {
-    const chiffres = await service(fauxPrisma({ buc: BUC })).chiffresDuFonds('buc');
+    const chiffres = await service(fauxPrisma({ amani: AMANI })).chiffresDuFonds('amani');
     expect(chiffres).toEqual({
       documents: 1240,
       lecteurs: 312,
@@ -48,7 +48,7 @@ describe('chiffres publics — cas 1 : un établissement avec du fonds', () => {
   });
 
   it('rend QUATRE clés, pas une de plus — c’est le contrat du front', async () => {
-    const chiffres = await service(fauxPrisma({ buc: BUC })).chiffresDuFonds('buc');
+    const chiffres = await service(fauxPrisma({ amani: AMANI })).chiffresDuFonds('amani');
     expect(Object.keys(chiffres).sort()).toEqual([
       'documents',
       'documentsNumeriques',
@@ -58,11 +58,11 @@ describe('chiffres publics — cas 1 : un établissement avec du fonds', () => {
   });
 
   it('les lecteurs excluent le personnel de la bibliothèque, sans se restreindre aux étudiants', async () => {
-    const prisma = fauxPrisma({ buc: BUC });
-    const db = prisma.forTenant('buc');
+    const prisma = fauxPrisma({ amani: AMANI });
+    const db = prisma.forTenant('amani');
     const s = new OpacService({} as never, {} as never, {} as never,
       { forTenant: () => db } as never);
-    await s.chiffresDuFonds('buc');
+    await s.chiffresDuFonds('amani');
     const where = (db.user.count as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
     // Exclusion, jamais inclusion : un enseignant ou un chercheur est un
     // lecteur. `role = STUDENT` donnerait un chiffre étroit, faux en public.
@@ -89,17 +89,17 @@ describe('chiffres publics — cas 2 : un établissement vide', () => {
 describe('chiffres publics — cas 5 : deux établissements ne se voient pas', () => {
   it('chacun ses chiffres, y compris à travers le cache', async () => {
     const prisma = fauxPrisma({
-      buc: BUC,
-      ujkz: { notices: 7, lecteurs: 3, numeriques: 1, licences: 0 },
+      amani: AMANI,
+      tamaro: { notices: 7, lecteurs: 3, numeriques: 1, licences: 0 },
     });
     const s = service(prisma);
-    const a = await s.chiffresDuFonds('buc');
-    const b = await s.chiffresDuFonds('ujkz');
+    const a = await s.chiffresDuFonds('amani');
+    const b = await s.chiffresDuFonds('tamaro');
     expect(a.documents).toBe(1240);
     expect(b.documents).toBe(7);
     // Et le cache ne rend pas la première école à la seconde au second passage.
-    expect((await s.chiffresDuFonds('ujkz')).documents).toBe(7);
-    expect((await s.chiffresDuFonds('buc')).documents).toBe(1240);
+    expect((await s.chiffresDuFonds('tamaro')).documents).toBe(7);
+    expect((await s.chiffresDuFonds('amani')).documents).toBe(1240);
   });
 });
 
@@ -108,16 +108,16 @@ describe('chiffres publics — cas 6 : CONTRÔLE NÉGATIF', () => {
     // Si un comptage était remplacé par une constante, l'appel correspondant
     // disparaîtrait de cette liste — et le même fonds rendrait le même chiffre
     // quel que soit son contenu, ce que le second volet vérifie.
-    const prisma = fauxPrisma({ buc: BUC });
-    await service(prisma).chiffresDuFonds('buc');
-    expect(prisma.appels.filter((a) => a === 'buc:notices')).toHaveLength(2);
-    expect(prisma.appels).toContain('buc:lecteurs');
-    expect(prisma.appels).toContain('buc:licences');
+    const prisma = fauxPrisma({ amani: AMANI });
+    await service(prisma).chiffresDuFonds('amani');
+    expect(prisma.appels.filter((a) => a === 'amani:notices')).toHaveLength(2);
+    expect(prisma.appels).toContain('amani:lecteurs');
+    expect(prisma.appels).toContain('amani:licences');
   });
 
   it('deux fonds différents ne peuvent pas rendre les mêmes chiffres', async () => {
     const petit = await service(fauxPrisma({ a: { notices: 3, lecteurs: 2, numeriques: 1, licences: 0 } })).chiffresDuFonds('a');
-    const grand = await service(fauxPrisma({ a: BUC })).chiffresDuFonds('a');
+    const grand = await service(fauxPrisma({ a: AMANI })).chiffresDuFonds('a');
     expect(petit).not.toEqual(grand);
   });
 });
@@ -140,12 +140,12 @@ describe('chiffres publics — la route est publique et dit sa fraîcheur', () =
 
   it('cas 4 : répond sans authentification', async () => {
     // Aucun utilisateur, aucun jeton : le tenant seul suffit.
-    const c = controleur(fauxPrisma({ buc: BUC }));
-    await expect(c.chiffres({ slug: 'buc' } as never)).resolves.toMatchObject({ documents: 1240 });
+    const c = controleur(fauxPrisma({ amani: AMANI }));
+    await expect(c.chiffres({ slug: 'amani' } as never)).resolves.toMatchObject({ documents: 1240 });
   });
 
   it('cas 3 : domaine inconnu → refus explicite, comme les autres routes publiques', async () => {
-    const c = controleur(fauxPrisma({ buc: BUC }));
+    const c = controleur(fauxPrisma({ amani: AMANI }));
     await expect(c.chiffres(null)).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -165,18 +165,18 @@ describe('cache mémoire — ce qu’il garantit', () => {
     let t = 1_000;
     const cache = new CacheMemoireTTL<number>(60_000, () => t);
     const calcul = vi.fn(async () => 42);
-    await cache.valeur('buc', calcul);
-    await cache.valeur('buc', calcul);
+    await cache.valeur('amani', calcul);
+    await cache.valeur('amani', calcul);
     expect(calcul).toHaveBeenCalledTimes(1);
     t += 60_001;
-    await cache.valeur('buc', calcul);
+    await cache.valeur('amani', calcul);
     expect(calcul).toHaveBeenCalledTimes(2);
   });
 
   it('dix visites simultanées sur un cache froid ne déclenchent QU’UN comptage', async () => {
     const cache = new CacheMemoireTTL<number>(60_000, () => 0);
     const calcul = vi.fn(async () => 7);
-    const resultats = await Promise.all(Array.from({ length: 10 }, () => cache.valeur('buc', calcul)));
+    const resultats = await Promise.all(Array.from({ length: 10 }, () => cache.valeur('amani', calcul)));
     expect(calcul).toHaveBeenCalledTimes(1);
     expect(resultats).toEqual(Array(10).fill(7));
   });
@@ -189,8 +189,8 @@ describe('cache mémoire — ce qu’il garantit', () => {
       .fn()
       .mockRejectedValueOnce(new Error('base indisponible'))
       .mockResolvedValueOnce(99);
-    await expect(cache.valeur('buc', calcul)).rejects.toThrow('base indisponible');
-    await expect(cache.valeur('buc', calcul)).resolves.toBe(99);
+    await expect(cache.valeur('amani', calcul)).rejects.toThrow('base indisponible');
+    await expect(cache.valeur('amani', calcul)).resolves.toBe(99);
     expect(calcul).toHaveBeenCalledTimes(2);
   });
 });
@@ -234,7 +234,7 @@ const notice = (n: number, extra: Record<string, unknown> = {}) => ({
 describe('nouveautés — cas 1 : le tri par récence', () => {
   it('demande created_at décroissant, DÉPARTAGÉ par id', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6);
+    await serviceCatalogue(prisma).nouveautes('amani', 6);
     // ⚠ Sans le second critère, des notices à la même seconde sortent dans un
     // ordre INDÉFINI : les six changent d'un appel à l'autre sans qu'aucune
     // donnée n'ait bougé. C'est le cas de tout fonds repris par import.
@@ -246,13 +246,13 @@ describe('nouveautés — cas 1 : le tri par récence', () => {
 
   it('rend les notices dans l’ordre servi par la base, sans les retrier', async () => {
     const { prisma } = fauxCatalogue([notice(3), notice(2), notice(1)]);
-    const { hits } = await serviceCatalogue(prisma).nouveautes('buc', 6);
+    const { hits } = await serviceCatalogue(prisma).nouveautes('amani', 6);
     expect(hits.map((h: { id: string }) => h.id)).toEqual(['r3', 'r2', 'r1']);
   });
 
   it('sert les six champs du contrat, et seulement eux', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6);
+    await serviceCatalogue(prisma).nouveautes('amani', 6);
     const appel = findMany.mock.calls[0][0];
     expect(appel.select, 'la route doit projeter explicitement').toBeDefined();
     expect(Object.keys(appel.select ?? {}).sort()).toEqual([
@@ -269,7 +269,7 @@ describe('nouveautés — cas 1 : le tri par récence', () => {
 describe('nouveautés — cas 2 et 3 : moins que demandé, ou rien', () => {
   it('rend ce qu’il y a — pas d’erreur, pas de remplissage', async () => {
     const { prisma } = fauxCatalogue([notice(1), notice(2)]);
-    const { hits } = await serviceCatalogue(prisma).nouveautes('buc', 6);
+    const { hits } = await serviceCatalogue(prisma).nouveautes('amani', 6);
     expect(hits).toHaveLength(2);
   });
 
@@ -284,7 +284,7 @@ describe('nouveautés — cas 2 et 3 : moins que demandé, ou rien', () => {
 describe('nouveautés — cas 4 : une notice sans couverture', () => {
   it('est rendue quand même, coverUrl à null — c’est au front d’afficher un repli', async () => {
     const { prisma } = fauxCatalogue([notice(1, { coverUrl: null, author: null, publishYear: null })]);
-    const { hits } = await serviceCatalogue(prisma).nouveautes('buc', 6);
+    const { hits } = await serviceCatalogue(prisma).nouveautes('amani', 6);
     expect(hits).toHaveLength(1);
     // `null`, PAS un champ absent : le front type `string | null`, et un champ
     // omis l'obligerait à distinguer « pas de couverture » de « jamais servi ».
@@ -296,15 +296,15 @@ describe('nouveautés — cas 4 : une notice sans couverture', () => {
 describe('nouveautés — la limite et l’isolement', () => {
   it('la limite demandée est celle passée à la base', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 3);
+    await serviceCatalogue(prisma).nouveautes('amani', 3);
     expect(findMany.mock.calls[0][0].take).toBe(3);
   });
 
   it('deux limites différentes ne se confondent pas dans le cache', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1), notice(2), notice(3)]);
     const s = serviceCatalogue(prisma);
-    expect((await s.nouveautes('buc', 1)).hits).toHaveLength(1);
-    expect((await s.nouveautes('buc', 3)).hits).toHaveLength(3);
+    expect((await s.nouveautes('amani', 1)).hits).toHaveLength(1);
+    expect((await s.nouveautes('amani', 3)).hits).toHaveLength(3);
     expect(findMany).toHaveBeenCalledTimes(2);
   });
 
@@ -318,9 +318,9 @@ describe('nouveautés — la limite et l’isolement', () => {
       },
     };
     const s = serviceCatalogue(prisma);
-    await s.nouveautes('buc', 6);
-    await s.nouveautes('ujkz', 6);
-    expect(vus).toEqual(['buc', 'ujkz']);
+    await s.nouveautes('amani', 6);
+    await s.nouveautes('tamaro', 6);
+    expect(vus).toEqual(['amani', 'tamaro']);
   });
 });
 
@@ -329,7 +329,7 @@ describe('nouveautés — cas 5 : CONTRÔLE NÉGATIF', () => {
     // Ce que le cas 1 vérifie vraiment : que `orderBy` porte les DEUX critères.
     // Retirer le tri, ou son départage, fait tomber ce test — et lui seul.
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6);
+    await serviceCatalogue(prisma).nouveautes('amani', 6);
     const orderBy = findMany.mock.calls[0][0].orderBy;
     expect(orderBy, 'un tri absent rendrait un ordre arbitraire').toBeDefined();
     expect(Array.isArray(orderBy) && orderBy.length, 'le départage manque').toBe(2);
@@ -360,13 +360,13 @@ describe('recherche — plusieurs types de document (recordType=a,b)', () => {
 
   it('une seule valeur reste une égalité simple', async () => {
     const { search, service } = serviceRecherche();
-    await service.searchCatalog('buc', { recordType: 'book' } as never);
+    await service.searchCatalog('amani', { recordType: 'book' } as never);
     expect(filtres(search)).toContain('recordType = "book"');
   });
 
   it('plusieurs valeurs deviennent un groupe OU — la forme que les DEUX moteurs savent déjà lire', async () => {
     const { search, service } = serviceRecherche();
-    await service.searchCatalog('buc', { recordType: 'book,these' } as never);
+    await service.searchCatalog('amani', { recordType: 'book,these' } as never);
     // Exactement la forme produite par le filtre catégories, donc celle que
     // meili-filter.ts traduit déjà pour Elasticsearch. Aucune réindexation.
     expect(filtres(search)).toContain('(recordType = "book" OR recordType = "these")');
@@ -374,7 +374,7 @@ describe('recherche — plusieurs types de document (recordType=a,b)', () => {
 
   it('tolère les espaces et les vides sans fabriquer de filtre impossible', async () => {
     const { search, service } = serviceRecherche();
-    await service.searchCatalog('buc', { recordType: 'book, ,these' } as never);
+    await service.searchCatalog('amani', { recordType: 'book, ,these' } as never);
     expect(filtres(search)).toContain('(recordType = "book" OR recordType = "these")');
   });
 
@@ -382,13 +382,13 @@ describe('recherche — plusieurs types de document (recordType=a,b)', () => {
     // Un filtre vide rendrait zéro résultat en silence — « rien ne correspond »
     // là où l'utilisateur n'a rien demandé.
     const { search, service } = serviceRecherche();
-    await service.searchCatalog('buc', { recordType: ' , ' } as never);
+    await service.searchCatalog('amani', { recordType: ' , ' } as never);
     expect(filtres(search).some((f) => f.includes('recordType'))).toBe(false);
   });
 
   it('les valeurs sont échappées, comme les autres filtres', async () => {
     const { search, service } = serviceRecherche();
-    await service.searchCatalog('buc', { recordType: 'a"b,c' } as never);
+    await service.searchCatalog('amani', { recordType: 'a"b,c' } as never);
     expect(filtres(search)).toContain('(recordType = "a\\"b" OR recordType = "c")');
   });
 });
@@ -396,13 +396,13 @@ describe('recherche — plusieurs types de document (recordType=a,b)', () => {
 describe('nouveautés — filtre « a un fichier », lu dans la base', () => {
   it('sans le filtre, aucune clause where n’est posée', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6, false);
+    await serviceCatalogue(prisma).nouveautes('amani', 6, false);
     expect(findMany.mock.calls[0][0].where).toBeUndefined();
   });
 
   it('avec le filtre, c’est le prédicat qui compte déjà les documents numériques', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6, true);
+    await serviceCatalogue(prisma).nouveautes('amani', 6, true);
     expect(findMany.mock.calls[0][0].where).toEqual({ digitalCopy: { isNot: null } });
   });
 
@@ -412,8 +412,8 @@ describe('nouveautés — filtre « a un fichier », lu dans la base', () => {
     // des notices sans fichier, ou l'inverse.
     const { prisma, findMany } = fauxCatalogue([notice(1), notice(2)]);
     const s = serviceCatalogue(prisma);
-    await s.nouveautes('buc', 6, false);
-    await s.nouveautes('buc', 6, true);
+    await s.nouveautes('amani', 6, false);
+    await s.nouveautes('amani', 6, true);
     expect(findMany).toHaveBeenCalledTimes(2);
     expect(findMany.mock.calls[0][0].where).toBeUndefined();
     expect(findMany.mock.calls[1][0].where).toEqual({ digitalCopy: { isNot: null } });
@@ -421,7 +421,7 @@ describe('nouveautés — filtre « a un fichier », lu dans la base', () => {
 
   it('le tri et son départage survivent au filtre', async () => {
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
-    await serviceCatalogue(prisma).nouveautes('buc', 6, true);
+    await serviceCatalogue(prisma).nouveautes('amani', 6, true);
     expect(findMany.mock.calls[0][0].orderBy).toEqual([
       { createdAt: 'desc' },
       { id: 'desc' },
@@ -457,8 +457,8 @@ describe('cache mémoire — il est BORNÉ, et il doit l’être', () => {
   it('le plafond n’abîme pas le cas courant : une clé redemandée reste servie', async () => {
     const cache = new CacheMemoireTTL<number>(60_000, () => 0, 50);
     const calcul = vi.fn(async () => 7);
-    await cache.valeur('buc', calcul);
-    await cache.valeur('buc', calcul);
+    await cache.valeur('amani', calcul);
+    await cache.valeur('amani', calcul);
     expect(calcul).toHaveBeenCalledTimes(1);
   });
 });

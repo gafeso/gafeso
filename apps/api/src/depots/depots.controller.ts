@@ -23,6 +23,9 @@ import { ModuleRequis } from '../modules/module-requis.decorator';
 import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
 import { AuthzService } from '../auth/authz.service';
+import { ClientIp } from '../audit/client-ip.decorator';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { DepotsService } from './depots.service';
@@ -78,7 +81,18 @@ export class DepotsController {
     private readonly depots: DepotsService,
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
+    private readonly audit: AuditService,
   ) {}
+
+  /** Le tenant, ou un refus explicable — la trace d'audit en a besoin. */
+  private tenantRequis(tenant: ResolvedTenant | null): ResolvedTenant {
+    if (!tenant) {
+      throw new BadRequestException(
+        'Tenant non résolu : domaine inconnu ou école non provisionnée.',
+      );
+    }
+    return tenant;
+  }
 
   private db(tenant: ResolvedTenant | null): PrismaClient {
     if (!tenant) {
@@ -217,6 +231,86 @@ export class DepotsController {
     const db = this.db(tenant);
     const fonctions = await this.authz.getFunctions(db, user.sub);
     return this.depots.urlDeLectureDuDocument(db, id, user.sub, fonctions);
+  }
+
+  @Post(':id/retirer')
+  @RequiresFunctions(FONCTIONS.DEPOT_DEPOSER)
+  @ApiOperation({
+    summary: 'Retirer mon dépôt soumis — il repasse en brouillon',
+    description:
+      '⚠ SANS ELLE, UN DÉPÔT SOUMIS N’AVAIT AUCUNE SORTIE QUI NE DÉPENDE D’UN ' +
+      'AUTRE : valider et refuser sont réservés au directeur DÉSIGNÉ, et le ' +
+      'directeur ne se change que sur un brouillon. Un directeur qui perd ' +
+      '`depot.valider` — rôle changé, compte désactivé, départ — laissait le ' +
+      'dépôt bloqué pour toujours. C’est SON dépôt : il ne doit dépendre de ' +
+      'personne pour en reprendre la main. Le directeur est PRÉVENU, et ' +
+      '`notification` dit ce qui est réellement arrivé à cet envoi.',
+  })
+  retirer(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.depots.retirer(this.db(tenant), id, user.sub);
+  }
+
+  // ── Le bibliothécaire ─────────────────────────────────────────────────────
+
+  /**
+   * ⚠ SOUS `catalogue.gerer`, ET LE CHOIX SE DISCUTE — je l'écris pour qu'il
+   * puisse être repris en une ligne.
+   *
+   * La consigne était « `outils.lecteurs` ou une fonction voisine — pas
+   * `depot.valider`, sinon on résout un blocage par le droit qui manque ».
+   * `catalogue.gerer` est la fonction qui ouvre DÉJÀ le circuit de dépôt au
+   * bibliothécaire (`a-cataloguer`, `:id/notice`) : c'est la même personne, au
+   * même écran, et aucune fonction nouvelle n'est créée.
+   *
+   * `outils.lecteurs` désigne les outils qui opèrent sur les LECTEURS — import
+   * de la liste attendue, classes. Un dépôt bloqué n'est pas un lecteur.
+   */
+  @Post(':id/reattribuer')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+  @ApiOperation({
+    summary: 'Réattribuer un dépôt soumis à un autre directeur',
+    description:
+      'La seconde porte hors de « soumis », pour le cas où le déposant ne peut ' +
+      'plus agir — parti, compte suspendu. Le dépôt reste SOUMIS : seul son ' +
+      'directeur change, et le nouveau le voit apparaître dans sa liste. La ' +
+      'réponse NOMME l’ancien directeur — « réattribué » sans dire de qui à qui ' +
+      'ne raconte rien.',
+  })
+  async reattribuer(
+    @CurrentTenant() tenantOrNull: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: DesignerDirecteurDto,
+    @ClientIp() ip?: string,
+  ) {
+    const tenant = this.tenantRequis(tenantOrNull);
+    const result = await this.depots.reattribuer(
+      this.db(tenantOrNull),
+      id,
+      dto.directorId,
+    );
+    void this.audit.log({
+      tenantId: tenant.id,
+      actorId: user.sub,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: AUDIT_ACTIONS.DEPOSIT_REASSIGN,
+      targetType: 'deposit',
+      targetId: id,
+      targetLabel: result.depot.title,
+      ip,
+      // ⚠ L'ANCIEN ET LE NOUVEAU, tous les deux. « Réattribué » seul ne se
+      // relit pas six mois plus tard.
+      metadata: {
+        ancienDirecteur: result.ancienDirecteur,
+        nouveauDirecteurId: dto.directorId,
+      },
+    });
+    return result;
   }
 
   // ── Le directeur ──────────────────────────────────────────────────────────

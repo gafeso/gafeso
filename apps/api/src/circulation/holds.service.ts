@@ -76,14 +76,21 @@ export class HoldsService {
     const patron = await this.ensurePatron(db, userId);
     const pickupDays = await this.holdPickupDays(tenantId);
     const result = await this.circulation.placeHoldForPatron(db, recordId, patron.id, now, pickupDays);
+    let notification: Awaited<ReturnType<typeof this.notifyAvailable>> | null = null;
     // Mis de côté immédiatement (un exemplaire était libre) → email au lecteur.
     if (result.readyForPickup) {
-      await this.notifyAvailable(db, tenantId, now);
+      notification = await this.notifyAvailable(db, tenantId, now);
     }
     return {
       readyForPickup: result.readyForPickup,
       queuePosition: result.queuePosition,
       pickupDays: result.readyForPickup ? pickupDays : undefined,
+      /**
+       * ⚠ CE QUI N'A PAS PU ÊTRE ENVOYÉ. Vide dans le cas courant. Non vide,
+       * l'écran doit le DIRE : sans ça, le lecteur n'est jamais prévenu et son
+       * document repart au suivant à l'expiration.
+       */
+      nonPrevenus: notification?.nonPrevenus ?? [],
     };
   }
 
@@ -121,8 +128,10 @@ export class HoldsService {
       throw new NotFoundException('Réservation active introuvable.');
     }
     const result = await this.circulation.cancelHold(db, holdId, now);
-    await this.notifyAvailable(db, tenantId, now);
-    return result;
+    // ⚠ Annuler PROMEUT le suivant : c'est lui qu'on notifie, et c'est lui qui
+    // peut n'être jamais prévenu.
+    const notification = await this.notifyAvailable(db, tenantId, now);
+    return { ...result, nonPrevenus: notification.nonPrevenus };
   }
 
   /**
@@ -141,6 +150,16 @@ export class HoldsService {
       },
     });
     let sent = 0;
+    // ⚠ CE QUI N'A PAS PU ÊTRE ENVOYÉ REMONTE, il ne se contente pas d'être
+    // journalisé. Le service mesurait déjà son issue — c'était l'un des quatre
+    // mensonges corrigés le matin — mais ses TROIS appelants la jetaient : le
+    // guichet ne savait pas que le lecteur n'avait pas été prévenu.
+    //
+    // Or la chaîne complète est celle-ci : un courriel qui échoue sans bruit,
+    // plus un écran qui ne dit pas l'échéance de retrait, et le document repart
+    // à la personne suivante sans que celui qui l'attendait ait jamais rien su.
+    // Le journal ne suffit pas : personne ne le lit au comptoir.
+    const nonPrevenus: { holdId: string; titre: string; motif: string }[] = [];
     for (const hold of ready) {
       // Réservation atomique du droit d'envoi (anti-double-envoi).
       const claimed = await db.hold.updateMany({
@@ -154,6 +173,16 @@ export class HoldsService {
       if (!email || !isValidEmail(email)) {
         // Pas d'email exploitable : on garde `notifiedAt` posé (retrait au
         // guichet), on ne rescanne pas indéfiniment.
+        //
+        // ⚠ MAIS ON LE DIT. C'est le cas le plus silencieux des trois : aucun
+        // échec technique, aucune exception, et un lecteur qui ne sera JAMAIS
+        // prévenu — sans nouvelle tentative, puisqu'on garde `notifiedAt`. Le
+        // guichet doit le savoir au moment où il met le document de côté.
+        nonPrevenus.push({
+          holdId: hold.id,
+          titre: hold.record.title,
+          motif: 'aucun_destinataire',
+        });
         continue;
       }
       try {
@@ -171,6 +200,11 @@ export class HoldsService {
         // réservation pour retenter.
         if (!resultat.sent) {
           await db.hold.updateMany({ where: { id: hold.id }, data: { notifiedAt: null } });
+          nonPrevenus.push({
+            holdId: hold.id,
+            titre: hold.record.title,
+            motif: resultat.reason,
+          });
           this.logger.warn(
             `Email de réservation NON envoyé à ${email} (hold ${hold.id}) : ` +
               `${resultat.reason}${resultat.detail ? ` — ${resultat.detail}` : ''} — sera retenté.`,
@@ -181,13 +215,18 @@ export class HoldsService {
       } catch (error) {
         // Échec SMTP : on relâche la réservation pour retenter plus tard.
         await db.hold.updateMany({ where: { id: hold.id }, data: { notifiedAt: null } });
+        nonPrevenus.push({
+          holdId: hold.id,
+          titre: hold.record.title,
+          motif: 'smtp_error',
+        });
         this.logger.warn(
           `Email de réservation non envoyé à ${email} (hold ${hold.id}) : ` +
             `${(error as Error).message} — sera retenté.`,
         );
       }
     }
-    return { sent };
+    return { sent, nonPrevenus };
   }
 
   /**

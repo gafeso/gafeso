@@ -57,7 +57,7 @@ function routesEtLeursFonctions(): { route: string; fonction: string }[] {
  */
 
 describe("L'instrument : le relevé des routes du contrôleur", () => {
-  it('⚠ il en trouve EXACTEMENT onze — une douzième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT treize — une quatorzième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la route ajoutée demain sous une fonction
     // qu'on n'aura pas relue.
@@ -75,7 +75,15 @@ describe("L'instrument : le relevé des routes du contrôleur", () => {
     // faut pour adresser son mémoire à quelqu'un, et rien qui ressemble à un
     // annuaire. La seconde, `PATCH /depots/:id/directeur`, est auto-portée
     // comme les autres.
-    expect(routesEtLeursFonctions().length).toBe(11);
+    //
+    // ⚠ PUIS DE 11 À 13 : les deux SORTIES de l'état `soumis`. Le compte a
+    // encore fait son office — il a fallu revenir ici et constater que
+    // `:id/retirer` est AUTO-PORTÉE (le déposant, son propre dépôt) et que
+    // `:id/reattribuer` ne l'est pas : elle est sous `catalogue.gerer`, la
+    // fonction qui ouvre déjà le circuit au bibliothécaire. Surtout PAS sous
+    // `depot.valider` — résoudre un blocage par le droit qui manque serait
+    // tourner en rond.
+    expect(routesEtLeursFonctions().length).toBe(13);
   });
 });
 
@@ -123,7 +131,7 @@ describe('⚠ Ce que le rôle ÉTUDIANT porte, et rien de plus', () => {
 });
 
 describe('⚠ Ce que `depot.deposer` OUVRE, exactement', () => {
-  it('six routes, et ce sont les six routes de l’étudiant', () => {
+  it('sept routes, et ce sont les sept routes de l’étudiant', () => {
     const ouvertes = routesEtLeursFonctions()
       .filter((r) => r.fonction === 'DEPOT_DEPOSER')
       .map((r) => r.route)
@@ -135,8 +143,29 @@ describe('⚠ Ce que `depot.deposer` OUVRE, exactement', () => {
       'Patch :id/directeur',
       'Post /',
       'Post :id/document',
+      'Post :id/retirer',
       'Post :id/soumettre',
     ]);
+  });
+
+  it('⚠ la RÉATTRIBUTION n’est PAS sous `depot.valider` — sinon on tourne en rond', () => {
+    // ⚠ CONTRAINTE EXPLICITE, ET ELLE N'ÉTAIT COUVERTE PAR RIEN : un contrôle
+    // négatif qui faisait passer cette route sous `depot.valider` ne cassait
+    // aucun test.
+    //
+    // Le motif : cette route existe pour DÉBLOQUER un dépôt dont le directeur
+    // a perdu `depot.valider`. La placer sous ce même droit reviendrait à
+    // exiger, pour réparer le blocage, exactement la fonction qui manque.
+    //
+    // Elle est sous `catalogue.gerer` — la fonction qui ouvre DÉJÀ le circuit
+    // au bibliothécaire (`a-cataloguer`, `:id/notice`). Même personne, même
+    // écran, aucune fonction nouvelle.
+    const reattribution = routesEtLeursFonctions().find(
+      (r) => r.route === 'Post :id/reattribuer',
+    );
+    expect(reattribution, 'la route de réattribution a disparu').toBeTruthy();
+    expect(reattribution!.fonction).not.toBe('DEPOT_VALIDER');
+    expect(reattribution!.fonction).toBe('CATALOGUE_GERER');
   });
 
   it('aucune route de DÉCISION ne s’ouvre à l’étudiant', () => {

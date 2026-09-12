@@ -80,13 +80,23 @@ docs/cahier-des-charges-*.md
 # scripts de provisionnement — c'est le JUGEMENT porté sur son fonctionnement
 # interne. Cinq passages ont été reformulés à ce titre.
 #
-# ⚠ UNE SEULE EXCLUSION SUBSISTE, et elle est nommée. `buc-ujkz-accueil.html`
-# est la maquette du site RÉEL d'un établissement identifié : son nom de
-# fichier, le nom de l'établissement (27 fois) et son DOMAINE DE PRODUCTION
-# (15 fois, absent de tout fichier versionné). Reformuler une phrase est une
-# chose ; réécrire 600 lignes de maquette en changeant son identité en est une
-# autre, et ce n'est pas une décision d'outillage.
-docs/maquettes/buc-ujkz-accueil.html
+# ⚠ CE DOSSIER EST EXCLU PAR DÉFAUT, ET LES MAQUETTES DE TRAVAIL Y SONT
+# RÉADMISES UNE À UNE.
+#
+# Il a contenu — et contient toujours, hors dépôt — la maquette du site RÉEL
+# d'un établissement identifié : son nom de fichier, le nom de l'établissement
+# et son domaine de production. Reformuler une phrase est une chose ; réécrire
+# 600 lignes de maquette en changeant son identité en est une autre.
+#
+# La règle était NOMMÉE, et le nom de fichier est parti dans l'instantané
+# public — il désignait l'établissement aussi sûrement que son contenu. Elle
+# est donc devenue une LISTE BLANCHE : tout ce qui arrive ici est ignoré, et
+# seules les maquettes de travail (`maquette-*.html`) et leurs briefs sont
+# réadmis. Une maquette client déposée demain est exclue sans qu'on ait à la
+# nommer — ni à y penser.
+docs/maquettes/*
+!docs/maquettes/maquette-*.html
+!docs/maquettes/brief-*.md
 amendement-*.md
 spike-*.md
 reconciliation-*.md

@@ -222,15 +222,113 @@ export class DepotsService {
     return { depot: soumis, notification: await this.notifierDirecteur(db, soumis) };
   }
 
-  /** Le directeur valide le CONTENU. Aucune notice n'est créée ici. */
+  /**
+   * LE DÉPOSANT RETIRE SON DÉPÔT SOUMIS — il reprend la main.
+   *
+   * ⚠ SANS ELLE, UN DÉPÔT SOUMIS N'AVAIT AUCUNE SORTIE QUI NE DÉPENDE D'UN
+   * AUTRE. Ses deux sorties — valider, refuser — étaient réservées au directeur
+   * DÉSIGNÉ, et `designerDirecteur` refusait tout ce qui n'est pas un
+   * brouillon. Un directeur qui perd `depot.valider` — rôle changé, compte
+   * désactivé, départ de l'établissement — laissait le dépôt bloqué pour
+   * toujours, et l'étudiant lisait « en attente de votre directeur » sans
+   * recours.
+   *
+   * ⚠ C'EST SON DÉPÔT, et il ne doit dépendre de personne pour en reprendre la
+   * main. Il repasse en brouillon : il redésigne, il resoumet.
+   *
+   * ⚠ ET LE DIRECTEUR EST PRÉVENU. Le dépôt disparaît de sa liste « à
+   * valider » ; sans un mot, c'est un silence de plus — il aurait examiné un
+   * document qui s'évapore. La notification suit la règle du circuit : l'issue
+   * est RENDUE telle quelle, jamais un « envoyé » écrit en dur, et un échec de
+   * courriel ne fait pas échouer le retrait.
+   */
+  async retirer(db: TenantDb, id: string, deposantId: string) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.depositorId !== deposantId) {
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+    this.exigerTransition(depot.status as EtatDepot, 'brouillon', 'deposant');
+
+    // ⚠ `submittedAt` EST EFFACÉ : un brouillon n'a pas été soumis, et laisser
+    // la date en ferait une ligne vraie hier et fausse aujourd'hui. La trace de
+    // la soumission vit au journal d'audit, qui est fait pour ça.
+    const retire = await db.deposit.update({
+      where: { id },
+      data: { status: 'brouillon', submittedAt: null },
+    });
+
+    return {
+      depot: retire,
+      notification: await this.notifierDirecteurDuRetrait(db, depot),
+    };
+  }
+
+  /**
+   * LE BIBLIOTHÉCAIRE RÉATTRIBUE un dépôt soumis à un autre directeur.
+   *
+   * ⚠ LA SECONDE PORTE, et elle sert quand le déposant ne peut plus agir — un
+   * étudiant parti, un compte suspendu. Le dépôt reste `soumis` : seul son
+   * directeur change, et le nouveau le voit apparaître dans sa liste.
+   *
+   * ⚠ PAS SOUS `depot.valider`, et c'est la consigne : résoudre un blocage par
+   * le droit qui manque serait tourner en rond. Voir le contrôleur pour la
+   * fonction retenue et son motif.
+   *
+   * ⚠ LA TRACE NOMME L'ANCIEN DIRECTEUR. « Réattribué » sans dire de qui à qui
+   * ne raconte rien — et c'est précisément ce qu'on veut relire six mois plus
+   * tard, quand quelqu'un demande pourquoi ce dépôt a changé de mains.
+   */
+  async reattribuer(db: TenantDb, id: string, nouveauDirecteurId: string) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.status !== 'soumis') {
+      throw new BadRequestException(
+        `Ce dépôt est « ${depot.status} » : seule une soumission en attente se réattribue.`,
+      );
+    }
+    if (depot.directorId === nouveauDirecteurId) {
+      throw new BadRequestException('Ce dépôt est déjà attribué à cette personne.');
+    }
+    await this.exigerDirecteur(db, nouveauDirecteurId);
+
+    const ancien = depot.directorId
+      ? await db.user.findUnique({
+          where: { id: depot.directorId },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : null;
+
+    const misAJour = await db.deposit.update({
+      where: { id },
+      data: { directorId: nouveauDirecteurId },
+    });
+
+    return {
+      depot: misAJour,
+      /** ⚠ RENDU POUR LA TRACE : « réattribué » sans dire de qui ne raconte rien. */
+      ancienDirecteur: ancien
+        ? { id: ancien.id, nom: `${ancien.firstName} ${ancien.lastName}`.trim() }
+        : null,
+      notification: await this.notifierDirecteur(db, misAJour),
+    };
+  }
+
+  /**
+   * Le directeur valide le CONTENU. Aucune notice n'est créée ici.
+   *
+   * ⚠ ET LE DÉPOSANT EST PRÉVENU. Ni `valider` ni `refuser` n'envoyaient rien :
+   * l'étudiant n'apprenait la décision qu'en revenant de lui-même sur « Mon
+   * dépôt », c'est-à-dire en se demandant chaque jour si quelque chose a
+   * changé. L'issue de l'envoi est RENDUE, jamais écrite en dur.
+   */
   async valider(db: TenantDb, id: string, directeurId: string) {
     const depot = await this.exigerDepotDeSonDirecteur(db, id, directeurId);
     this.exigerTransition(depot.status as EtatDepot, 'valide', 'directeur');
 
-    return db.deposit.update({
+    const valide = await db.deposit.update({
       where: { id },
       data: { status: 'valide', decidedAt: new Date(), decidedById: directeurId },
     });
+    return { depot: valide, notification: await this.notifierDeposant(db, valide, null) };
   }
 
   /**
@@ -251,7 +349,7 @@ export class DepotsService {
       throw new BadRequestException('Indiquez le motif du refus.');
     }
 
-    return db.deposit.update({
+    const refuse = await db.deposit.update({
       where: { id },
       data: {
         status: 'refuse',
@@ -260,6 +358,11 @@ export class DepotsService {
         decidedById: directeurId,
       },
     });
+    // ⚠ LE MOTIF PART AVEC LE COURRIEL. C'est tout l'objet de cet envoi : un
+    // refus demande une ACTION, et le directeur a pris la peine d'écrire
+    // pourquoi. Le laisser découvrir en revenant sur l'écran ferait dépendre
+    // une correction du hasard d'une visite.
+    return { depot: refuse, notification: await this.notifierDeposant(db, refuse, propre) };
   }
 
   /**
@@ -516,6 +619,65 @@ export class DepotsService {
     }
     await this.exigerDirecteur(db, directorId);
     return db.deposit.update({ where: { id }, data: { directorId } });
+  }
+
+  /**
+   * Prévient le DÉPOSANT de la décision, et rend ce qui est arrivé à l'envoi.
+   *
+   * ⚠ UNE SEULE MÉTHODE POUR LES DEUX DÉCISIONS : la différence tient au motif,
+   * pas au chemin. Deux méthodes jumelles auraient divergé au premier
+   * changement — l'une prévenant, l'autre non.
+   */
+  private async notifierDeposant(
+    db: TenantDb,
+    depot: { id: string; title: string; depositorId: string },
+    motifDeRefus: string | null,
+  ): Promise<MailOutcome> {
+    const deposant = await db.user.findUnique({ where: { id: depot.depositorId } });
+    if (!deposant?.email) return { sent: false, reason: 'aucun_destinataire' };
+
+    const resultat = motifDeRefus
+      ? await this.mail.sendDepositRefused(deposant.email, {
+          titre: depot.title,
+          motif: motifDeRefus,
+        })
+      : await this.mail.sendDepositApproved(deposant.email, { titre: depot.title });
+
+    if (!resultat.sent) {
+      this.logger.warn(
+        `Déposant non prévenu de la décision sur ${depot.id} : ${resultat.reason}` +
+          `${resultat.detail ? ` — ${resultat.detail}` : ''}`,
+      );
+    }
+    return resultat;
+  }
+
+  /**
+   * Prévient le directeur qu'un dépôt a été RETIRÉ de sa liste.
+   *
+   * ⚠ Même forme que la notification de soumission : l'issue est RENDUE, et un
+   * échec n'interrompt rien. Le dépôt est retiré dans tous les cas — refuser le
+   * retrait parce qu'un courriel ne part pas remettrait l'étudiant dans
+   * l'impasse qu'on vient d'ouvrir.
+   */
+  private async notifierDirecteurDuRetrait(
+    db: TenantDb,
+    depot: { id: string; title: string; authorName: string; directorId: string | null },
+  ): Promise<MailOutcome> {
+    if (!depot.directorId) return { sent: false, reason: 'aucun_destinataire' };
+    const directeur = await db.user.findUnique({ where: { id: depot.directorId } });
+    if (!directeur?.email) return { sent: false, reason: 'aucun_destinataire' };
+
+    const resultat = await this.mail.sendDepositWithdrawn(directeur.email, {
+      titre: depot.title,
+      auteur: depot.authorName,
+    });
+    if (!resultat.sent) {
+      this.logger.warn(
+        `Directeur non prévenu du retrait du dépôt ${depot.id} : ${resultat.reason}`,
+      );
+    }
+    return resultat;
   }
 
   /** Prévient le directeur, et rend CE QUI EST ARRIVÉ à l'envoi. */

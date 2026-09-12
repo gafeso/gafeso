@@ -109,6 +109,19 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
       'd’invitation, pas de consigne de secours. Rien n’y est promis.',
   },
   {
+    // ⚠ RÉCLAMÉ APRÈS ÉLARGISSEMENT DU VOCABULAIRE. Le relevé ne connaissait
+    // pas « présentez-vous » : un trou de forme, trouvé sur un cas réel.
+    cle: 'inscription.enAttenteSuite',
+    nature: 'promet',
+    raison:
+      'L’écran NE PEUT PAS savoir si un gestionnaire a été prévenu : l’issue de ' +
+      'la notification est journalisée puis avalée côté API, et le cas « aucun ' +
+      'gestionnaire actif » est reconnu dans le code sans jamais sortir. Le ' +
+      'texte doit donc nommer une SORTIE — se présenter à la bibliothèque — et ' +
+      'dire qu’il ne peut pas confirmer que la demande a été signalée. Un ' +
+      'inscrit n’a aucun autre canal : il n’a pas encore de compte.',
+  },
+  {
     // ⚠ TROISIÈME TEXTE RÉCLAMÉ PAR LE GARDE LE JOUR DE SA NAISSANCE.
     cle: 'depotsAValider.refuseSuite',
     nature: 'promet',

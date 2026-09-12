@@ -154,12 +154,22 @@ export default function InscriptionPage() {
               </>
             ) : (
               <>
-                <p className="font-semibold">Compte créé, en attente de validation.</p>
+                {/*
+                  ⚠ L'ÉCRAN NE PEUT PAS SAVOIR SI QUELQU'UN A ÉTÉ PRÉVENU.
+                  L'issue de la notification aux gestionnaires est journalisée
+                  puis avalée côté API — le cas « aucun gestionnaire actif » est
+                  reconnu dans le code et n'atteint jamais la réponse.
+
+                  On ne peut donc pas rendre la phrase vraie. On lui donne une
+                  SORTIE : si rien ne vient, se présenter à la bibliothèque. Un
+                  inscrit n'a aucun autre canal — il n'a pas encore de compte.
+                */}
+                <p className="font-semibold">{LIBELLES.inscription.enAttenteTitre}</p>
                 <p className="mt-1">
                   {profil === 'etudiant'
-                    ? 'Votre matricule n’est pas dans la liste pré-chargée : le gestionnaire de votre établissement doit activer votre compte.'
-                    : 'Le gestionnaire de votre établissement doit activer votre compte et définira votre rôle à cette occasion.'}{' '}
-                  Vous recevrez alors un email pour définir votre mot de passe.
+                    ? LIBELLES.inscription.enAttenteEtudiant
+                    : LIBELLES.inscription.enAttentePersonnel}{' '}
+                  {LIBELLES.inscription.enAttenteSuite}
                 </p>
               </>
             )}

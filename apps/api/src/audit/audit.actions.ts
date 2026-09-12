@@ -67,6 +67,12 @@ export const AUDIT_ACTIONS = {
    * et une panne de stockage se ressemblent exactement.
    */
   DEPOSIT_FILE_PURGE: 'deposit.file.purge',
+  /**
+   * Réattribution d'un dépôt soumis à un autre directeur. Tracée avec L'ANCIEN
+   * et le NOUVEAU : « réattribué » sans dire de qui à qui ne raconte rien, et
+   * c'est précisément ce qu'on relit six mois plus tard.
+   */
+  DEPOSIT_REASSIGN: 'deposit.reassign',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -111,6 +117,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   [AUDIT_ACTIONS.OFFLINE_DEVICE_REGISTER]: 'Enregistrement d’un appareil (lecture hors-ligne)',
   [AUDIT_ACTIONS.OFFLINE_LICENSE_ISSUE]: 'Émission d’une licence hors-ligne',
   [AUDIT_ACTIONS.DEPOSIT_FILE_PURGE]: 'Purge du document d’un dépôt refusé',
+  [AUDIT_ACTIONS.DEPOSIT_REASSIGN]: 'Réattribution d’un dépôt à un autre directeur',
   [AUDIT_ACTIONS.OFFLINE_LICENSE_REVOKE]: 'Révocation d’une licence hors-ligne',
 };
 

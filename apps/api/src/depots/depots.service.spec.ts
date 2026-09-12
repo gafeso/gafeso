@@ -94,7 +94,16 @@ function service(depot: Partial<typeof DEPOT> = {}, mailIssue: unknown = { sent:
       }),
     ),
   } as never;
-  const mail = { sendDepositSubmitted: vi.fn().mockResolvedValue(mailIssue) };
+    // ⚠ LES TROIS ENVOIS DU CIRCUIT. `valider` et `refuser` n'en faisaient AUCUN :
+  // l'étudiant n'apprenait la décision qu'en revenant de lui-même sur son
+  // écran. La doublure les porte tous les trois pour que le jour où l'un
+  // disparaît, c'est un test qui le dise — pas un étudiant.
+  const mail = {
+    sendDepositSubmitted: vi.fn().mockResolvedValue(mailIssue),
+    sendDepositApproved: vi.fn().mockResolvedValue(mailIssue),
+    sendDepositRefused: vi.fn().mockResolvedValue(mailIssue),
+    sendDepositWithdrawn: vi.fn().mockResolvedValue(mailIssue),
+  };
   // Stockage et ingestion : doublures inertes pour les cas qui ne téléversent
   // pas. Le téléversement a ses propres tests, avec des doublures qui parlent.
   const storage = { putObject: vi.fn(), deleteObject: vi.fn().mockResolvedValue(undefined) };
@@ -140,7 +149,7 @@ describe('⚠ La NOTICE naît au catalogage — c’est ce qui protège I1', () 
     // la table que ces licences indexent.
     const { svc, db, update } = service({ status: 'soumis' });
 
-    const valide = await svc.valider(db, 'd1', 'directeur');
+    const { depot: valide } = await svc.valider(db, 'd1', 'directeur');
 
     expect(valide.status).toBe('valide');
     expect(update.mock.calls[0][0].data).not.toHaveProperty('recordId');
@@ -210,7 +219,7 @@ describe('Le refus conserve tout, et exige son motif', () => {
   it('le motif est conservé, et rien n’est supprimé', async () => {
     const { svc, db, update } = service({ status: 'soumis' });
 
-    const refuse = await svc.refuser(db, 'd1', 'directeur', 'Version non soutenue.');
+    const { depot: refuse } = await svc.refuser(db, 'd1', 'directeur', 'Version non soutenue.');
 
     expect(refuse.status).toBe('refuse');
     expect(refuse.refusalReason).toBe('Version non soutenue.');

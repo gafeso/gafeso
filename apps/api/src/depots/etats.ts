@@ -3,9 +3,15 @@
  *
  * ```
  *   brouillon ──soumettre──▶ soumis ──valider──▶ valide ──cataloguer──▶ (notice)
- *   (étudiant)               (étudiant)          (directeur)   (bibliothécaire)
- *                                │
- *                                └──refuser──▶ refuse  (avec son motif, jamais effacé)
+ *   (étudiant)      ▲        (étudiant)          (directeur)   (bibliothécaire)
+ *                   │            │
+ *                   │            └──refuser──▶ refuse  (motif, jamais effacé)
+ *                   │            │
+ *                   └──retirer───┘  (le DÉPOSANT reprend la main)
+ *
+ * ⚠ Et hors machine à états : le BIBLIOTHÉCAIRE peut RÉATTRIBUER un dépôt
+ * soumis à un autre directeur — le dépôt reste `soumis`, seul son directeur
+ * change.
  * ```
  *
  * ⚠ QUATRE ÉTATS, ET `recordId` N'EN EST PAS UN CINQUIÈME.
@@ -60,6 +66,19 @@ export const TRANSITIONS: Transition[] = [
   { de: 'brouillon', vers: 'soumis', par: 'deposant', geste: 'soumettre' },
   { de: 'soumis', vers: 'valide', par: 'directeur', geste: 'valider' },
   { de: 'soumis', vers: 'refuse', par: 'directeur', geste: 'refuser' },
+  // ⚠ LA SORTIE QUI MANQUAIT, ET C'ÉTAIT UN DÉFAUT DE CONCEPTION.
+  //
+  // `soumis` avait deux sorties, toutes deux réservées au DIRECTEUR DÉSIGNÉ —
+  // et `PATCH :id/directeur` refusait tout ce qui n'est pas un brouillon. Si
+  // ce directeur perdait `depot.valider` — rôle changé, compte désactivé,
+  // départ de l'établissement — le dépôt n'avait PLUS AUCUNE SORTIE. Le
+  // déposant ne pouvait pas le retirer, personne ne pouvait réattribuer, et
+  // l'étudiant lisait « en attente de votre directeur » pour toujours.
+  //
+  // ⚠ C'était le SEUL état du circuit dont la sortie dépendait de QUELQU'UN
+  // D'AUTRE. Un cas rare qui n'a aucune sortie n'est pas rare pour celui qui
+  // le vit — et un enseignant qui part est ordinaire dans une université.
+  { de: 'soumis', vers: 'brouillon', par: 'deposant', geste: 'retirer' },
 ];
 
 /**

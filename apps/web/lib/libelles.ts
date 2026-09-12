@@ -412,9 +412,30 @@ export const LIBELLES = {
     motifObligatoire: 'Un refus sans motif laisse redéposer la même chose : écrivez-en un.',
     refuserConfirmer: 'Envoyer le refus',
     annuler: 'Annuler',
-    /** ⚠ Aucune donnée n'est supprimée — l'API le garantit, l'écran le dit. */
+    /**
+     * ⚠ Aucune donnée n'est supprimée — l'API le garantit, l'écran le dit.
+     *
+     * ⚠ SCINDÉ LE 12 SEPTEMBRE 2026, quand le backend a livré la notification
+     * du déposant. Avant, l'étudiant n'apprenait la décision qu'en revenant :
+     * « l'étudiant voit votre motif » était donc exact. Maintenant un courriel
+     * part — et il peut échouer. Dire « prévenu » sans le savoir serait le faux
+     * qu'on a corrigé partout ailleurs ; ne rien dire laisserait le directeur
+     * croire son étudiant informé.
+     */
     refuseSuite:
-      'Refus envoyé. Le dépôt et son document sont conservés, et l’étudiant voit votre motif.',
+      'Refus envoyé. Le dépôt et son document sont conservés, et votre motif reste attaché au dépôt.',
+    /** Le courriel est parti : l'étudiant est prévenu sans avoir à revenir. */
+    deposantPrevenu: 'Votre étudiant a été prévenu par courriel.',
+    /**
+     * ⚠ L'ÉCHEC DIT LA SORTIE EN MÊME TEMPS QUE L'ÉCHEC. Le directeur est le
+     * seul à pouvoir relayer : lui dire « non parti » sans lui dire que la
+     * décision est VISIBLE sur l'écran de l'étudiant le ferait douter du geste
+     * entier, qui a pourtant abouti.
+     */
+    deposantNonPrevenu:
+      'Votre étudiant n’a PAS pu être prévenu par courriel. La décision est bien enregistrée et ' +
+      'il la verra en consultant « Mon dépôt » — mais tant qu’il n’y retourne pas, il ne sait rien. ' +
+      'Dites-le-lui, ou signalez-le à votre bibliothèque.',
     echec: 'La décision n’a pas pu être enregistrée.',
   },
 
@@ -461,6 +482,27 @@ export const LIBELLES = {
     nomPropose: 'Enseignant',
     descriptionProposee:
       'Dirige des mémoires et des thèses : valide ou refuse les dépôts dont il est le directeur désigné.',
+  },
+
+  /**
+   * MES RÉSERVATIONS — l'échéance d'une mise de côté. 12 septembre 2026.
+   *
+   * ⚠ POURQUOI CE TEXTE EXISTE, et c'est « le silence qui coûte, pas l'échec ».
+   * `GET /reader/holds` sert `expiryDate` DEPUIS TOUJOURS ; l'écran ne
+   * l'affichait pas. Le lecteur lisait « Disponible — à retirer » sans aucune
+   * date.
+   *
+   * Or la mise de côté a un délai, et le courriel qui l'annonce peut échouer
+   * sans bruit — c'est un défaut mesuré côté API, pas une hypothèse. Un lecteur
+   * non prévenu ne sait donc ni qu'un document l'attend, ni qu'il va le perdre.
+   * L'écran est son SEUL recours, et il se taisait sur la moitié qui compte.
+   *
+   * ⚠ Trois états, pas deux : sans date servie, on n'invente pas d'échéance.
+   */
+  reservations: {
+    aRetirerAvant: (date: string) => `À retirer avant le ${date}`,
+    /** ⚠ Dit ce qui arrive si on ne vient pas — sinon la date n'est qu'un chiffre. */
+    apresEcheance: 'Passé ce délai, le document repart à la personne suivante.',
   },
 
   /** Collections de documents. */
@@ -1027,6 +1069,36 @@ export const LIBELLES = {
 
   inscription: {
     compteActive: 'Compte activé !',
+    /**
+     * ⚠ CE BLOC EXISTE PARCE QUE L'ÉCRAN NE PEUT PAS SAVOIR. `register`
+     * notifie les gestionnaires, mais l'issue de cet envoi est JOURNALISÉE PUIS
+     * AVALÉE côté API : elle n'atteint jamais la réponse. Le cas
+     * `aucun_destinataire` — une école sans gestionnaire actif — est
+     * explicitement reconnu dans le code, et personne à l'extérieur ne
+     * l'apprend.
+     *
+     * L'ancienne phrase disait « le gestionnaire doit activer votre compte.
+     * Vous recevrez alors un email. » Exacte SI quelqu'un a été prévenu. Sinon,
+     * l'inscrit attend indéfiniment une activation que personne n'a été invité
+     * à faire — et il n'a aucun autre canal : il n'a pas encore de compte.
+     *
+     * ⚠ On ne peut pas rendre la phrase vraie, on peut lui donner une SORTIE.
+     * C'est la règle : « si c'est faux, que peut faire la personne ? » Ici,
+     * se présenter à la bibliothèque.
+     */
+    enAttenteTitre: 'Compte créé, en attente de validation.',
+    enAttenteEtudiant:
+      'Votre matricule n’est pas dans la liste pré-chargée : un gestionnaire de votre ' +
+      'établissement doit activer votre compte.',
+    enAttentePersonnel:
+      'Un gestionnaire de votre établissement doit activer votre compte, et définira votre ' +
+      'rôle à cette occasion.',
+    /** ⚠ Ce qui suit, et le recours — jamais une promesse qu'on ne peut pas tenir. */
+    enAttenteSuite:
+      'Une fois votre compte activé, vous recevrez un email pour définir votre mot de passe. ' +
+      'Si rien ne vient sous quelques jours, présentez-vous à la bibliothèque de votre ' +
+      'établissement avec votre email : nous ne pouvons pas vous confirmer ici que votre ' +
+      'demande a bien été signalée.',
     emailParti:
       'Un email vous a été envoyé avec un lien sécurisé pour définir votre mot de passe (valable 24 h).',
     /** ⚠ Dit l'échec ET la sortie : sans recours, l'information ne sert à rien. */

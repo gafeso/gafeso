@@ -229,6 +229,89 @@ export class MailService {
     return this.send(email, subject, text, html);
   }
 
+  /**
+   * Le déposant a RETIRÉ son dépôt — le directeur ne le verra plus.
+   *
+   * ⚠ CE COURRIEL EXISTE POUR ÉVITER UN SILENCE. Le dépôt disparaît de la liste
+   * « à valider » du directeur ; sans un mot, il aurait examiné un document qui
+   * s'évapore. Et le message DIT que ce n'est pas un refus ni une erreur : un
+   * étudiant reprend la main sur son propre travail, ce qui est son droit.
+   */
+  async sendDepositWithdrawn(
+    email: string,
+    info: { titre: string; auteur: string },
+  ): Promise<MailOutcome> {
+    const subject = `Dépôt retiré : « ${info.titre} »`;
+    const text =
+      `Bonjour,\n\n${info.auteur} a retiré « ${info.titre} » : ce dépôt n'attend ` +
+      `plus votre décision et n'apparaît plus dans votre liste.\n\nCe n'est ni un ` +
+      `refus ni une erreur — un déposant peut reprendre son travail tant qu'il ` +
+      `n'est pas validé. Il vous sera peut-être soumis de nouveau.`;
+    const html =
+      `<p>Bonjour,</p><p><strong>${escapeHtml(info.auteur)}</strong> a retiré ` +
+      `« ${escapeHtml(info.titre)} » : ce dépôt n'attend plus votre décision et ` +
+      `n'apparaît plus dans votre liste.</p><p>Ce n'est ni un refus ni une ` +
+      `erreur — un déposant peut reprendre son travail tant qu'il n'est pas ` +
+      `validé. Il vous sera peut-être soumis de nouveau.</p>`;
+    return this.send(email, subject, text, html);
+  }
+
+  /**
+   * Le dépôt a été VALIDÉ par son directeur.
+   *
+   * ⚠ CE COURRIEL MANQUAIT, ET C'EST LE PLUS ATTENDU DU CIRCUIT. L'étudiant
+   * n'apprenait la décision qu'en revenant de lui-même sur « Mon dépôt » —
+   * c'est-à-dire en se demandant chaque jour si quelque chose a changé.
+   */
+  async sendDepositApproved(
+    email: string,
+    info: { titre: string },
+  ): Promise<MailOutcome> {
+    const subject = `Dépôt validé : « ${info.titre} »`;
+    const text =
+      `Bonjour,\n\nVotre directeur a validé « ${info.titre} ».\n\nLa bibliothèque ` +
+      `va maintenant le cataloguer : il rejoindra le fonds dès que sa notice ` +
+      `sera créée. Vous n'avez rien d'autre à faire.`;
+    const html =
+      `<p>Bonjour,</p><p>Votre directeur a validé ` +
+      `« ${escapeHtml(info.titre)} ».</p><p>La bibliothèque va maintenant le ` +
+      `cataloguer : il rejoindra le fonds dès que sa notice sera créée. Vous ` +
+      `n'avez rien d'autre à faire.</p>`;
+    return this.send(email, subject, text, html);
+  }
+
+  /**
+   * Le dépôt a été REFUSÉ — avec le motif écrit par le directeur.
+   *
+   * ⚠ LE MOTIF EST DANS LE CORPS, ET C'EST TOUT L'OBJET DE CE COURRIEL. Un
+   * refus demande une ACTION — reprendre le document et redéposer — et le
+   * directeur a pris la peine d'écrire pourquoi. Laisser l'étudiant le
+   * découvrir en revenant sur l'écran, c'est faire dépendre une correction du
+   * hasard d'une visite.
+   *
+   * ⚠ ET LE MESSAGE DIT QUOI FAIRE. « Refusé » seul est une porte fermée ;
+   * « créez un nouveau dépôt » est une sortie.
+   */
+  async sendDepositRefused(
+    email: string,
+    info: { titre: string; motif: string },
+  ): Promise<MailOutcome> {
+    const subject = `Dépôt refusé : « ${info.titre} »`;
+    const text =
+      `Bonjour,\n\nVotre directeur a refusé « ${info.titre} ».\n\nMotif :\n` +
+      `${info.motif}\n\nVotre dépôt et son document sont conservés. Pour ` +
+      `répondre à cette remarque, créez un NOUVEAU dépôt : les deux resteront ` +
+      `visibles, ce qui permet de montrer le travail accompli.`;
+    const html =
+      `<p>Bonjour,</p><p>Votre directeur a refusé ` +
+      `« ${escapeHtml(info.titre)} ».</p><p><strong>Motif :</strong><br>` +
+      `${escapeHtml(info.motif)}</p><p>Votre dépôt et son document sont ` +
+      `conservés. Pour répondre à cette remarque, créez un <strong>nouveau ` +
+      `dépôt</strong> : les deux resteront visibles, ce qui permet de montrer ` +
+      `le travail accompli.</p>`;
+    return this.send(email, subject, text, html);
+  }
+
   async notifyManagerPendingAccount(
     managerEmails: string[],
     accountEmail: string,

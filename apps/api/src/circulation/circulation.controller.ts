@@ -122,10 +122,15 @@ export class CirculationController {
     );
     // Si le retour a mis un exemplaire de côté pour une réservation, prévenir le
     // premier de la file (email idempotent via holds.notifiedAt).
-    if (result.holdReady) {
-      await this.holds.notifyAvailable(db, tenant.id);
-    }
-    return result;
+    // ⚠ L'ISSUE DE LA NOTIFICATION REMONTE AU GUICHET. Elle était mesurée et
+    // journalisée — et jetée ici. Or personne ne lit le journal au comptoir :
+    // la bibliothécaire met un document de côté, croit le lecteur prévenu, et
+    // le document repart au suivant à l'expiration sans que celui qui
+    // l'attendait ait jamais rien su.
+    const notification = result.holdReady
+      ? await this.holds.notifyAvailable(db, tenant.id)
+      : null;
+    return { ...result, nonPrevenus: notification?.nonPrevenus ?? [] };
   }
 
   @Post('checkouts/:id/renew')

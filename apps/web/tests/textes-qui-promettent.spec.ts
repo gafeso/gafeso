@@ -139,7 +139,12 @@ describe('⚠ un texte qui promet est éprouvé sur sa propriété', () => {
    */
   it('témoin — le registre couvre tous les textes de cette forme', () => {
     const source = readFileSync(join(process.cwd(), 'lib', 'libelles.ts'), 'utf8');
-    const GESTE = /\b(contactez|demandez|réactivez|cherchez|adressez|transmettez)\b/i;
+    // ⚠ ÉLARGI LE 12 SEPTEMBRE 2026, SUR UN CAS RÉEL. « présentez-vous à la
+    // bibliothèque » est un geste adressé au lecteur, et le relevé ne le voyait
+    // pas : son vocabulaire présumait une forme, et ce qui s'en écarte lui est
+    // invisible. Le texte qui l'a révélé porte le recours d'un inscrit qui n'a
+    // AUCUN autre canal.
+    const GESTE = /\b(contactez|demandez|réactivez|cherchez|adressez|transmettez|présentez|rendez-vous|passez)\b/i;
     const RASSURE = /(aucune donnée|n[’']a été supprim|sont conservé|rien n[’']est supprim|est conservé)/i;
     const trouves = libellesDeLaSource(source)
       .filter((l) => GESTE.test(l.texte) || RASSURE.test(l.texte))

@@ -32,6 +32,15 @@ const TYPES: Record<string, string> = {
   these_unique: 'Thèse unique',
 };
 
+/** Ce qui est RÉELLEMENT arrivé au courriel du déposant — rendu par l'API. */
+type MailOutcome = { sent: true } | { sent: false; reason: string };
+
+/** La réponse de `valider` / `refuser` depuis le 12 septembre 2026. */
+interface Decision {
+  depot: { id: string; status: string };
+  notification?: MailOutcome;
+}
+
 interface Depot {
   id: string;
   status: string;
@@ -94,19 +103,25 @@ export default function DepotsAValiderPage() {
       // `/depots/*/*`, invérifiable — donc exactement la forme par laquelle un
       // renommage de route passerait sans que rien ne le dise. Première fois
       // que ce garde reprend du code neuf.
-      if (geste === 'valider') {
-        await api(`/depots/${id}/valider`, { method: 'POST' }, getToken());
-      } else {
-        await api(
-          `/depots/${id}/refuser`,
-          { method: 'POST', body: JSON.stringify({ motif }) },
-          getToken(),
-        );
-      }
+      // ⚠ L'ISSUE DE LA NOTIFICATION EST LUE, JAMAIS SUPPOSÉE. Le backend a
+      // livré l'envoi au déposant le 12 septembre 2026 ; sans lire son sort,
+      // l'écran ferait croire au directeur que son étudiant est prévenu.
+      const res =
+        geste === 'valider'
+          ? await api<Decision>(`/depots/${id}/valider`, { method: 'POST' }, getToken())
+          : await api<Decision>(
+              `/depots/${id}/refuser`,
+              { method: 'POST', body: JSON.stringify({ motif }) },
+              getToken(),
+            );
       setRefus(null);
       // ⚠ On RELIT : la liste fait foi, pas ce qu'on croit avoir fait.
       await charger();
-      setAvis(geste === 'valider' ? T.validerSuite : T.refuseSuite);
+      // Le sort du courriel se dit APRÈS ce qui persiste, et il vient de l'API.
+      const suite = geste === 'valider' ? T.validerSuite : T.refuseSuite;
+      const courriel =
+        res.notification?.sent === false ? T.deposantNonPrevenu : T.deposantPrevenu;
+      setAvis(`${suite} ${courriel}`);
     } catch (err) {
       setErreur(err instanceof ApiError ? err.message : T.echec);
     } finally {
