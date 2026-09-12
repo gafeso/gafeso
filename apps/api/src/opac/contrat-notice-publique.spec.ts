@@ -54,13 +54,18 @@ function service() {
 const ORDRE_ANONYME = [
   'id', 'marcData', 'marcFormat', 'profile', 'recordType', 'title',
   'titleComplement', 'author', 'isbn', 'publishYear', 'language', 'publisher',
-  'publicationCity', 'defenseUniversity', 'defensePlace', 'summary', 'coverUrl',
+  'publicationCity', 'defenseUniversity', 'defensePlace', 'embargoUntil', 'summary', 'coverUrl',
   'category', 'createdAt', 'updatedAt', 'contributors', 'keywords',
   'items', 'availability', 'digitalCopy', 'membersOnly',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
-  it('⚠ visiteur ANONYME : 26 clés, dans CET ordre', async () => {
+  // ⚠ PASSÉ DE 26 À 27 CLÉS le 12 septembre 2026 : `embargoUntil` (P6-4) entre
+  // au contrat. Ajout DÉLIBÉRÉ et additif — un client mobile qui ignore une clé
+  // inconnue n'est pas affecté, et I7 tient. La date est SERVIE parce qu'une
+  // notice dont le fichier refuse sans dire pourquoi serait le faux silencieux
+  // qu'on corrige partout ailleurs : le lecteur conclurait à une panne.
+  it('⚠ visiteur ANONYME : 27 clés, dans CET ordre', async () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);

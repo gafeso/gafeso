@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { AccountStatus, ItemStatus, PrismaClient, UserRole } from '@prisma/client';
 import { SearchService } from '../search/search.service';
 import { DigitalCopyService } from '../cataloging/digital-copy.service';
@@ -10,6 +15,28 @@ import { NOUVEAUTES_PAR_DEFAUT } from './dto/nouveautes.dto';
 import { PARCOURIR_PAR_DEFAUT } from './dto/parcourir.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheMemoireTTL } from './cache-memoire';
+
+/**
+ * La réponse d'une surface publique quand le moteur de recherche ne répond pas.
+ *
+ * ⚠ 503 ET NON 200, ET LE CODE EST LA MOITIÉ DU CORRECTIF. Ces routes rendaient
+ * un 200 portant une liste vide : une panne s'écrivait alors comme une
+ * bibliothèque sans documents. Un faux qui QUITTE l'application par un code
+ * HTTP ne se corrige pas au rechargement suivant — il est archivé par des
+ * tiers : un moteur d'indexation désindexe un catalogue qui existe, un
+ * vérificateur de liens le déclare mort. 503 est le seul code que ces outils
+ * traitent comme « reviens plus tard ».
+ *
+ * ⚠ LE MOTIF TECHNIQUE N'EST PAS DANS LE MESSAGE. Il part au journal
+ * (`SearchService.search`), pas au visiteur : l'adresse d'un Meilisearch ou le
+ * texte d'une erreur de connexion n'ont rien à faire sur une surface publique.
+ */
+function rechercheIndisponible(): ServiceUnavailableException {
+  return new ServiceUnavailableException(
+    'La recherche est momentanément indisponible. Le catalogue n’est pas vide : ' +
+      'réessayez dans un instant.',
+  );
+}
 import { COLONNES_SERVIES, selectNoticePublique } from './contrat-notice-publique';
 import { lireChampsDeProfil } from '../cataloging/champs-de-profil';
 
@@ -333,7 +360,15 @@ export class OpacService {
     } else if (query.dans === 'categorie' && q?.trim()) {
       const matching = await this.matchingCategories(slug, q);
       if (matching.length === 0) {
-        return { hits: [], totalHits: 0, page: query.page ?? 1, totalPages: 0, facets: {} };
+        // Vrai zéro, connu et non plafonné : aucune catégorie ne porte ce nom.
+        return {
+          hits: [],
+          totalHits: 0,
+          page: query.page ?? 1,
+          totalPages: 0,
+          facets: {},
+          totalPlafonne: false,
+        };
       }
       filter.push(
         `(${matching.map((c) => `category = ${JSON.stringify(c)}`).join(' OR ')})`,
@@ -341,7 +376,7 @@ export class OpacService {
       q = undefined; // on liste les notices des catégories, sans plein-texte
     }
 
-    const result = await this.search.search(slug, {
+    const reponse = await this.search.search(slug, {
       q,
       filter,
       page: query.page ?? 1,
@@ -349,6 +384,15 @@ export class OpacService {
       facets: FACETS,
       attributesToSearchOn,
     });
+    // ⚠ MOTEUR INJOIGNABLE : ON LE DIT, ON NE REND PAS UN CATALOGUE VIDE.
+    //
+    // Cette route rendait auparavant `totalHits: 0` et une liste vide, ce qui
+    // présentait une PANNE comme une bibliothèque sans documents — sur la
+    // surface publique la plus consultée. Un 503 est la seule réponse vraie, et
+    // c'est aussi la seule que les moteurs d'indexation traitent correctement :
+    // un 200 portant une liste vide fait désindexer un catalogue qui existe.
+    if (reponse.etat === 'indisponible') throw rechercheIndisponible();
+    const result = reponse;
 
     // ⚠ ZÉRO RÉSULTAT A DEUX CAUSES, ET ELLES NE S'ÉCRIVENT PAS PAREIL.
     //
@@ -372,6 +416,18 @@ export class OpacService {
       totalHits: result.totalHits,
       page: result.page,
       totalPages: result.totalPages,
+      // ⚠ LA MARQUE SORT JUSQU'À L'ÉCRAN, ET ELLE EST TOUJOURS PRÉSENTE.
+      //
+      // Le total d'une recherche plein texte ne peut PAS venir de SQL : seul le
+      // moteur sait combien de notices répondent à « droit foncier ». On ne
+      // peut donc pas le rendre exact — mais on peut refuser de le présenter
+      // comme exact. L'interface écrit alors « plus de 100 000 résultats » au
+      // lieu de « 100 000 résultats ».
+      //
+      // Champ NON conditionnel, contrairement à `filtresInconnus` juste en
+      // dessous : absent, il vaudrait `undefined` chez le client, donc « pas
+      // plafonné » à la lecture — l'affirmation fausse rétablie par omission.
+      totalPlafonne: result.totalPlafonne,
       facets: result.facetDistribution ?? {},
       // Absent quand tout est connu : le contrat du chemin nominal est inchangé.
       ...(filtresInconnus && Object.keys(filtresInconnus).length > 0
@@ -406,6 +462,16 @@ export class OpacService {
       hitsPerPage: 1,
       facets: FACETS,
     });
+    // ⚠ ICI L'INDISPONIBILITÉ SE TRADUIT PAR UN SILENCE, ET C'EST JUSTE.
+    //
+    // Cette méthode est un ENRICHISSEMENT : elle sert à dire « ce type de
+    // document n'existe nulle part dans ce catalogue » plutôt que d'afficher un
+    // écran vide sans un mot. Elle n'est appelée que lorsque la recherche a
+    // déjà abouti avec zéro résultat. Si le moteur tombe entre les deux appels,
+    // ne rien dire est honnête — affirmer « cette valeur est inconnue du
+    // catalogue » alors qu'on n'a pas pu regarder serait précisément la faute
+    // qu'on corrige, une octave plus bas.
+    if (complet.etat === 'indisponible') return {};
     const distribution = (complet.facetDistribution ?? {}) as Record<
       string,
       Record<string, number>
@@ -432,6 +498,10 @@ export class OpacService {
       hitsPerPage: 0,
       facets: ['category'],
     });
+    // ⚠ ON PROPAGE, ON NE REND PAS UNE LISTE VIDE. Rendre `[]` ferait conclure
+    // à l'appelant « aucune catégorie ne porte ce nom », donc zéro résultat
+    // annoncé comme un fait — le défaut d'origine, déplacé d'un cran.
+    if (facetRes.etat === 'indisponible') throw rechercheIndisponible();
     const distribution = (facetRes.facetDistribution as Record<string, Record<string, number>>) ?? {};
     const categories = Object.keys(distribution.category ?? {});
     const needle = normalizeAuthorName(q);
@@ -535,7 +605,7 @@ export class OpacService {
     if (!record) throw new NotFoundException('Notice introuvable.');
 
     if (ctx !== null) {
-      const access = await this.accessControl.getRecordAccessStatus(ctx, id);
+      const access = await this.accessControl.getRecordAccessStatus(db, ctx, id);
       if (!access.granted) throw new ForbiddenException(access.message);
     }
 
@@ -559,13 +629,41 @@ export class OpacService {
   }
 
   private async calculerConstellation(slug: string) {
-    const result = await this.search.search(slug, {
-      q: '',
-      page: 1,
-      hitsPerPage: 1,
-      facets: ['category'],
-    });
+    // ⚠ LE TOTAL VIENT DE LA BASE, PLUS DU MOTEUR, ET CE N'EST PAS UN DÉTAIL
+    // D'IMPLÉMENTATION.
+    //
+    // Il venait de `result.totalHits`, donc plafonné à 1 000 : la page
+    // d'accueil affirmait « 1 000 ressources » pour un fonds de 8 000, à des
+    // étudiants et à des moteurs de recherche. Pire, elle se contredisait dans
+    // le même écran — la répartition par domaine, elle, N'EST PAS plafonnée,
+    // et ses domaines totalisaient bien 8 000.
+    //
+    // Ici le total EXISTE ailleurs, exact et sans plafond : `count()` sur la
+    // table. Le prendre là n'est pas « un plafond plus loin », c'est pas de
+    // plafond du tout — et c'est moins cher que la recherche.
+    //
+    // ⚠ CE QUE CE CHOIX CHANGE, ET QU'IL FAUT SAVOIR : le total et la
+    // répartition viennent désormais de deux sources. Ils s'accordent quand
+    // l'index est à jour, et divergent quand il a dérivé — une divergence qui
+    // devient alors le SIGNE d'une réindexation à lancer, là où l'ancienne
+    // version la masquait derrière deux chiffres faux du même côté. Rendre
+    // cette dérive visible est un lot à part (backlog n°19).
+    const [totalRecords, result] = await Promise.all([
+      this.prisma.forTenant(slug).biblioRecord.count(),
+      this.search.search(slug, {
+        q: '',
+        page: 1,
+        hitsPerPage: 1,
+        facets: ['category'],
+      }),
+    ]);
 
+    // ⚠ 503, ET NON UNE CONSTELLATION VIDE. Le total vient de la base et reste
+    // exact même moteur éteint — mais la RÉPARTITION est tout l'objet de cette
+    // route. La servir vide ferait dire à la page d'accueil publique « cette
+    // bibliothèque n'a pas de domaines », ce qui est exactement le faux que
+    // `fetchConstellation` a déjà eu à corriger côté front.
+    if (result.etat === 'indisponible') throw rechercheIndisponible();
     const distribution = (result.facetDistribution?.category ?? {}) as Record<
       string,
       number
@@ -574,6 +672,6 @@ export class OpacService {
       .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count);
 
-    return { totalRecords: result.totalHits, domains };
+    return { totalRecords, domains };
   }
 }

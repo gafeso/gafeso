@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
@@ -34,6 +34,20 @@ export default function ModulesPage() {
   const [error, setError] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ModuleEtat | null>(null);
+
+  /**
+   * Le focus va à la confirmation dès qu'elle apparaît.
+   *
+   * ⚠ Et il ne revient PAS au bouton à la fermeture, délibérément : ce bouton
+   * n'existe plus tel quel après une bascule réussie — il est devenu
+   * « Activer … ». Le renvoyer là demanderait de distinguer l'annulation de la
+   * confirmation, pour un gain nul : dans les deux cas la liste est juste
+   * au-dessous.
+   */
+  const boiteConfirmation = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (confirmation) boiteConfirmation.current?.focus();
+  }, [confirmation]);
 
   const charger = useCallback(async () => {
     setError(null);
@@ -91,9 +105,34 @@ export default function ModulesPage() {
         <p className="mt-5 text-sm text-muted">{T.aucunModule}</p>
       )}
 
+      {/*
+        ⚠ LA CONFIRMATION APPARAISSAIT SANS QUE PERSONNE NE L'APPRENNE AU CLAVIER.
+        Elle se rend EN TÊTE de page ; le bouton qui la déclenche est plus bas
+        dans la liste. À la souris on voit la page bouger — au clavier, et au
+        lecteur d'écran, il ne se passait rien : le focus restait sur un bouton
+        inchangé, et la demande de confirmation était hors de vue.
+        C'est le même défaut que le menu qui ne se mettait pas à jour après une
+        bascule : un geste dont l'effet n'est pas perceptible se lit comme un
+        geste qui a échoué, et on le refait.
+
+        Ce n'est PAS une boîte modale, et on ne prétend pas que c'en est une :
+        le reste de la page reste utilisable, donc pas de `aria-modal`, pas de
+        piège à focus. Un groupe nommé, qui reçoit le focus, et qu'Échap annule.
+      */}
       {confirmation && (
-        <Card className="mt-4 border-red-200">
-          <p className="font-semibold">{T.confirmerTitre(confirmation.libelle)}</p>
+        <Card
+          ref={boiteConfirmation}
+          role="group"
+          aria-labelledby="titre-confirmation"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setConfirmation(null);
+          }}
+          className="mt-4 border-red-200"
+        >
+          <p id="titre-confirmation" className="font-semibold">
+            {T.confirmerTitre(confirmation.libelle)}
+          </p>
           {/* ⚠ La confirmation LISTE ce qui disparaît. « Êtes-vous sûr ? » ne dit
               pas ce qu'on perd, et c'est précisément ce qu'il faut relire. */}
           {confirmation.ecrans.length > 0 ? (

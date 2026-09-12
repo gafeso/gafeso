@@ -126,36 +126,53 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
   function fauxMoteur() {
     const search = vi.fn().mockResolvedValue({
       hits: [],
+      // ⚠ 12 ET 3 DIVERGENT EXPRÈS. Depuis le 11 septembre 2026 le total vient
+      // de la BASE (`count`), et la répartition du MOTEUR : deux sources, donc
+      // deux nombres, et un test qui les prendrait égaux ne saurait pas dire
+      // laquelle il lit. Ici `totalRecords` doit valoir 3, jamais 12.
       totalHits: 12,
       page: 1,
       totalPages: 1,
       facetDistribution: { category: { droit: 2, arts: 1 } },
+      totalPlafonne: false,
     });
+    // Le comptage en base est mesuré comme la recherche : la garantie de coût
+    // de cet écran porte désormais sur DEUX appels, pas un.
+    const count = vi.fn().mockResolvedValue(3);
     return {
       search,
+      count,
       service: new OpacService(
         { search } as never,
         {} as never,
         {} as never,
-        {} as never,
+        { forTenant: () => ({ biblioRecord: { count } }) } as never,
       ),
     };
   }
 
-  it('⚠ deux visites, UNE requête — c’était le seul appel non borné de l’accueil', async () => {
-    const { search, service } = fauxMoteur();
+  it('⚠ deux visites, UN appel de CHAQUE sorte — la garantie couvre les deux sources', async () => {
+    const { search, count, service } = fauxMoteur();
     const a = await service.constellation('buc');
     const b = await service.constellation('buc');
+
     expect(search).toHaveBeenCalledTimes(1);
+    // ⚠ SANS CETTE LIGNE, LA GARANTIE AURAIT ÉTÉ VIDÉE EN SILENCE. Le total
+    // vient de la base depuis le 11 septembre ; un `count()` hors du cache
+    // rendrait l'écran à nouveau non borné, et le test serait resté vert en
+    // ne surveillant que l'appel qu'on venait de cesser de faire seul.
+    expect(count).toHaveBeenCalledTimes(1);
     expect(a).toEqual(b);
-    expect(a.totalRecords).toBe(12);
+    // Le total est celui de la BASE (3), pas celui du moteur (12).
+    expect(a.totalRecords).toBe(3);
   });
 
   it('deux écoles ne partagent pas leur répartition', async () => {
-    const { search, service } = fauxMoteur();
+    const { search, count, service } = fauxMoteur();
     await service.constellation('buc');
     await service.constellation('ujkz');
     expect(search).toHaveBeenCalledTimes(2);
+    expect(count).toHaveBeenCalledTimes(2);
   });
 
   it('la forme de la réponse est inchangée', async () => {
@@ -163,5 +180,7 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
     const r = await service.constellation('buc');
     expect(Object.keys(r).sort()).toEqual(['domains', 'totalRecords']);
     expect(r.domains[0]).toEqual({ category: 'droit', count: 2 });
+    // Forme inchangée, SOURCE changée : c'est exactement ce que ce lot promet.
+    expect(r.totalRecords).toBe(3);
   });
 });

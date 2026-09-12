@@ -47,6 +47,22 @@ export const FONCTIONS_SANS_ECRAN: FonctionSansEcran[] = [
       'normal : le catalogue public n’est pas derrière le menu du personnel.',
   },
   {
+    // ⚠ DÉCLARÉE PAR LA SESSION BACKEND le 12 septembre 2026, et à contrecœur :
+    // c'est un fichier du front. Le garde « aucune fonction sans porte » a
+    // refusé mon push, et son message disait exactement quoi faire. Laisser
+    // `main` rouge pour tout le monde aurait été pire que d'écrire ici une
+    // entrée additive de six lignes — mais elle vous revient dès que l'écran
+    // existe, et sa suppression se fera par le même test.
+    fonction: 'depot.deposer',
+    nature: 'exercee-ailleurs',
+    raison:
+      'S’exerce dans /mon-depot, l’espace de l’étudiant — pas dans une entrée ' +
+      'du menu professionnel, que l’étudiant ne voit pas. Le lien vit dans ' +
+      'l’en-tête, conditionné à cette même fonction. Écran livré le ' +
+      '12 septembre 2026 : la dette n° 24 est levée, et c’est ce test qui ' +
+      'l’aurait refusée si elle était restée déclarée en défaut.',
+  },
+  {
     fonction: 'comptes.activer',
     nature: 'exercee-ailleurs',
     raison:

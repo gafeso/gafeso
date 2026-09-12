@@ -1,4 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * ⚠ Client tenant exigé par `getRecordAccessStatus` depuis P6-4 : l'embargo vit
+ * sur la notice, donc dans le schéma de l'école. Ici aucune notice n'est sous
+ * embargo — ces cas éprouvent les règles de classe et de palier, pas l'embargo,
+ * qui a sa propre suite (`embargo.spec.ts`).
+ */
+const dbSansEmbargo = { biblioRecord: { findUnique: vi.fn(async () => null) } } as never;
+
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AccessControlService } from './access-control.service';
 import { StudentAccessContext } from './access-control.matching';
@@ -137,7 +146,7 @@ describe('AccessControlService — filtrage étudiant', () => {
       },
     ]);
     const { service } = makeService(prisma);
-    expect(await service.getRecordAccessStatus(ctx, 'rec-1')).toEqual({ granted: true });
+    expect(await service.getRecordAccessStatus(dbSansEmbargo, ctx, 'rec-1')).toEqual({ granted: true });
   });
 
   it('getRecordAccessStatus : refusé avec message clair (classe) quand seule la classe bloque', async () => {
@@ -152,7 +161,7 @@ describe('AccessControlService — filtrage étudiant', () => {
       },
     ]);
     const { service } = makeService(prisma);
-    expect(await service.getRecordAccessStatus(ctx, 'rec-1')).toEqual({
+    expect(await service.getRecordAccessStatus(dbSansEmbargo, ctx, 'rec-1')).toEqual({
       granted: false,
       code: 'CLASS_MISMATCH',
       requiredClassName: 'M2_MEDECINE',
@@ -172,7 +181,7 @@ describe('AccessControlService — filtrage étudiant', () => {
       },
     ]);
     const { service } = makeService(prisma);
-    expect(await service.getRecordAccessStatus(ctx, 'rec-1')).toEqual({
+    expect(await service.getRecordAccessStatus(dbSansEmbargo, ctx, 'rec-1')).toEqual({
       granted: false,
       code: 'SUBSCRIPTION_REQUIRED',
       requiredSubscriptionTier: 'premium',
@@ -184,7 +193,7 @@ describe('AccessControlService — filtrage étudiant', () => {
     const prisma = makePrisma();
     prisma.collectionTitle.findMany.mockResolvedValue([]);
     const { service } = makeService(prisma);
-    expect(await service.getRecordAccessStatus(ctx, 'rec-1')).toEqual({
+    expect(await service.getRecordAccessStatus(dbSansEmbargo, ctx, 'rec-1')).toEqual({
       granted: false,
       code: 'NOT_CONFIGURED',
       message: 'Ce document n’est pas accessible pour votre école.',

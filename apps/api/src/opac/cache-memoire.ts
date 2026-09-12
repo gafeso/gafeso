@@ -2,7 +2,8 @@
  * Cache mémoire à durée de vie courte, pour les réponses PUBLIQUES qu'on ne
  * peut pas laisser recalculer à chaque visite.
  *
- * POURQUOI PAS REDIS. Le conteneur tourne, mais aucun client ne s'y connecte
+ * POURQUOI PAS REDIS. Le conteneur a été RETIRÉ le 12 septembre 2026 (backlog
+ * n°7) : il tournait depuis le début sans qu'aucun client ne s'y connecte
  * (ni `ioredis` ni `bullmq` dans apps/api) : l'utiliser demanderait une
  * dépendance nouvelle. Pour quatre entiers rafraîchis chaque minute, un cache
  * de processus suffit.

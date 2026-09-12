@@ -1,0 +1,547 @@
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+import { MailOutcome } from '../accounts/mail/mail-outcome';
+import { MailService } from '../accounts/mail/mail.service';
+import { StorageService } from '../storage/storage.service';
+import { ContentIngestionService } from '../offline-licensing/content-ingestion.service';
+import { verifierFichier, type UploadedDigitalFile } from '../cataloging/fichier-numerique';
+import { FONCTIONS } from '../auth/functions';
+import {
+  OU_CANDIDAT_DIRECTEUR,
+  SELECTION_CANDIDAT_DIRECTEUR,
+  peutDirigerUnDepot,
+  versDirecteurDesignable,
+} from './directeurs';
+import {
+  ActeurDepot,
+  EtatDepot,
+  ETAT_INITIAL,
+  enAttenteDeCatalogage,
+  refusDeTransition,
+} from './etats';
+
+type TenantDb = PrismaClient;
+
+/**
+ * Durée de vie de l'URL de lecture d'un dépôt — **cinq minutes**, comme celle
+ * de la lecture en ligne d'une notice (`READ_URL_TTL_SECONDS`).
+ *
+ * ⚠ Elle suffit parce que les lecteurs téléchargent le fichier ENTIER à
+ * l'ouverture : aucune requête ensuite, session de lecture illimitée. Ne pas
+ * rallonger « par confort » — le TTL est ce qui borne la fenêtre pendant
+ * laquelle une URL copiée depuis l'onglet Réseau reste utilisable.
+ */
+const TTL_LECTURE_DEPOT_SECONDES = 5 * 60;
+
+/**
+ * LE CIRCUIT DE DÉPÔT — P6-2.
+ *
+ * L'étudiant dépose, le directeur valide le CONTENU, le bibliothécaire complète
+ * la DESCRIPTION et c'est lui qui crée la notice. Deux gestes, deux métiers.
+ *
+ * ⚠ LA NOTICE NAÎT AU CATALOGAGE, PAS AU DÉPÔT, et ce n'est pas un détail de
+ * séquence : c'est ce qui protège l'invariant I1. `BiblioRecord.id` ne change
+ * jamais — c'est le `docId` des licences hors-ligne signées déployées sur des
+ * téléphones. Un dépôt refusé ne doit laisser aucun identifiant mort-né dans la
+ * table que ces licences indexent.
+ *
+ * ⚠ ET UN DÉPÔT N'EST JAMAIS PUBLIC, QUEL QUE SOIT SON ÉTAT — garanti par
+ * CONSTRUCTION, pas par un filtre : `deposits` est une table distincte, et ni
+ * l'OPAC ni l'entrepôt OAI ne la lisent. Il n'y a rien à filtrer parce qu'il
+ * n'y a rien à voir. Voir `jamais-public.spec.ts`.
+ */
+@Injectable()
+export class DepotsService {
+  private readonly logger = new Logger(DepotsService.name);
+
+  constructor(
+    private readonly mail: MailService,
+    private readonly storage: StorageService,
+    private readonly ingestion: ContentIngestionService,
+  ) {}
+
+  /** Crée un brouillon. Le déposant est toujours l'auteur de l'appel. */
+  async creer(
+    db: TenantDb,
+    deposantId: string,
+    dto: {
+      title: string;
+      authorName: string;
+      documentType: string;
+      year?: number;
+      directorId?: string;
+    },
+  ) {
+    // ⚠ LE DIRECTEUR DOIT ÊTRE UN COMPTE EXISTANT, et c'est `Author.userId`
+    // (P6-1) qui rend ce lien possible. Sans vérification, un identifiant
+    // fautif produirait un dépôt que PERSONNE ne peut valider — et l'étudiant
+    // attendrait indéfiniment sans que rien ne le dise.
+    if (dto.directorId) await this.exigerDirecteur(db, dto.directorId);
+
+    return db.deposit.create({
+      data: {
+        status: ETAT_INITIAL,
+        depositorId: deposantId,
+        authorName: dto.authorName.trim(),
+        title: dto.title.trim(),
+        documentType: dto.documentType,
+        year: dto.year ?? null,
+        directorId: dto.directorId ?? null,
+      },
+    });
+  }
+
+  /**
+   * Téléverse le document du dépôt — et le CHIFFRE immédiatement.
+   *
+   * ⚠ LE CHIFFREMENT A LIEU AU DÉPÔT, PAS AU CATALOGAGE. Le pire cas la
+   * commande : un dépôt REFUSÉ que personne ne cataloguera jamais laisserait
+   * son fichier en clair indéfiniment. Les documents les moins protégés
+   * seraient exactement ceux que personne ne surveille — et une thèse sous
+   * embargo attend parfois des semaines une décision qui ne vient pas.
+   *
+   * ⚠ LES CLÉS SONT PRÉFIXÉES PAR L'IDENTIFIANT DU DÉPÔT, et le catalogage ne
+   * les recopie PAS : il copie les VALEURS de colonnes dans `digital_copies`.
+   * Le blob et la CEK enveloppée ne sont jamais retouchés.
+   *
+   * ⚠ ET LE FICHIER CLAIR EST CONSERVÉ, comme pour toute copie numérique : la
+   * lecture en ligne en a besoin, le chiffré sert la lecture hors-ligne. C'est
+   * le même régime que le reste du produit — deux façons de stocker un
+   * document, et la seconde serait celle que personne ne pense à protéger.
+   */
+  async televerser(
+    db: TenantDb,
+    id: string,
+    deposantId: string,
+    fichier: UploadedDigitalFile,
+  ) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.depositorId !== deposantId) {
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+    // ⚠ On ne remplace pas le document d'un dépôt déjà SOUMIS : le directeur
+    // aurait validé un document et en verrait un autre.
+    if (depot.status !== ETAT_INITIAL) {
+      throw new BadRequestException(
+        `Ce dépôt est « ${depot.status} » : son document ne peut plus être remplacé.`,
+      );
+    }
+
+    const verdict = verifierFichier(fichier);
+    if (!verdict.accepte) throw new BadRequestException(verdict.refus);
+
+    const objectKey = `${id}/${Date.now()}-${nomDeFichierSur(fichier.originalname)}`;
+    await this.storage.putObject(objectKey, fichier.buffer, fichier.mimetype);
+
+    const precedent = depot.fileKey;
+    const precedentChiffre = depot.encObjectKey;
+
+    let ingestion: Record<string, unknown> = { encStatus: 'pending', encError: null };
+    if (verdict.format === 'PDF') {
+      try {
+        ingestion = {
+          ...(await this.ingestion.ingestPdf(id, fichier.buffer)),
+          encStatus: 'ready',
+          encError: null,
+        };
+      } catch (error) {
+        // ⚠ L'ÉCHEC DU CHIFFREMENT NE FAIT PAS ÉCHOUER LE DÉPÔT, mais il est
+        // ÉCRIT : `encStatus: 'failed'` avec son motif. Un dépôt dont le
+        // chiffrement a échoué est lisible en ligne et pas hors ligne — et on
+        // peut le savoir, au lieu de le découvrir sur un téléphone.
+        ingestion = { encStatus: 'failed', encError: (error as Error).message };
+        this.logger.warn(
+          `Ingestion chiffrée du dépôt ${id} échouée : ${(error as Error).message}`,
+        );
+      }
+    }
+
+    const misAJour = await db.deposit.update({
+      where: { id },
+      data: {
+        fileKey: objectKey,
+        fileName: fichier.originalname,
+        fileSize: fichier.size,
+        fileFormat: verdict.format,
+        ...ingestion,
+      },
+    });
+
+    // ⚠ L'ANCIEN OBJET N'EST SUPPRIMÉ QU'APRÈS le succès du nouveau et de
+    // l'écriture — jamais de fenêtre où le dépôt n'a plus de document.
+    if (precedent && precedent !== objectKey) {
+      await this.storage.deleteObject(precedent).catch(() => undefined);
+    }
+    if (precedentChiffre && precedentChiffre !== misAJour.encObjectKey) {
+      await this.storage.deleteObject(precedentChiffre).catch(() => undefined);
+    }
+    return misAJour;
+  }
+
+  /**
+   * L'étudiant soumet : le dépôt passe à `soumis` et le directeur est notifié.
+   *
+   * ⚠ LA NOTIFICATION DIT LA VÉRITÉ SUR SON ENVOI. Elle rend le `MailOutcome`
+   * tel quel — jamais un « envoyé » écrit en dur. C'est le motif corrigé ce
+   * matin sur quatre chemins : un étudiant qui dépose et n'entend plus rien
+   * redéposera, et un directeur jamais prévenu ne validera jamais.
+   *
+   * ⚠ MAIS UN ÉCHEC DE COURRIEL NE FAIT PAS ÉCHOUER LA SOUMISSION. Le dépôt est
+   * soumis, il apparaît dans la liste du directeur, et le circuit reste
+   * utilisable sans messagerie. L'issue est REMONTÉE pour que l'écran puisse
+   * dire « soumis, mais votre directeur n'a pas été prévenu — signalez-le-lui ».
+   */
+  async soumettre(db: TenantDb, id: string, deposantId: string) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.depositorId !== deposantId) {
+      // ⚠ « INTROUVABLE » ET NON « INTERDIT », par le même raisonnement que
+      // pour le directeur : un 403 dirait à un étudiant qu'un dépôt existe sous
+      // cet identifiant et qu'il appartient à quelqu'un d'autre. Ce n'est pas
+      // son affaire, et la symétrie évite qu'un des deux chemins fuie ce que
+      // l'autre protège.
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+    this.exigerTransition(depot.status as EtatDepot, 'soumis', 'deposant');
+    if (!depot.directorId) {
+      throw new BadRequestException(
+        'Désignez le directeur de mémoire ou de thèse avant de soumettre.',
+      );
+    }
+    // ⚠ UN DÉPÔT SANS DOCUMENT N'EST PAS UN DÉPÔT. Le laisser passer enverrait
+    // au directeur une notification pour un dossier vide, et il ne saurait ni
+    // quoi valider ni quoi motiver en refusant.
+    if (!depot.fileKey) {
+      throw new BadRequestException('Téléversez le document avant de soumettre.');
+    }
+
+    const soumis = await db.deposit.update({
+      where: { id },
+      data: { status: 'soumis', submittedAt: new Date() },
+    });
+
+    return { depot: soumis, notification: await this.notifierDirecteur(db, soumis) };
+  }
+
+  /** Le directeur valide le CONTENU. Aucune notice n'est créée ici. */
+  async valider(db: TenantDb, id: string, directeurId: string) {
+    const depot = await this.exigerDepotDeSonDirecteur(db, id, directeurId);
+    this.exigerTransition(depot.status as EtatDepot, 'valide', 'directeur');
+
+    return db.deposit.update({
+      where: { id },
+      data: { status: 'valide', decidedAt: new Date(), decidedById: directeurId },
+    });
+  }
+
+  /**
+   * Le directeur refuse, AVEC SON MOTIF.
+   *
+   * ⚠ Aucune donnée n'est supprimée : le dépôt reste, son fichier reste, et le
+   * motif est conservé. Un étudiant qui veut redéposer crée un NOUVEAU dépôt —
+   * les deux subsistent, ce qui est précisément ce qu'on veut pouvoir relire.
+   */
+  async refuser(db: TenantDb, id: string, directeurId: string, motif: string) {
+    const depot = await this.exigerDepotDeSonDirecteur(db, id, directeurId);
+    this.exigerTransition(depot.status as EtatDepot, 'refuse', 'directeur');
+
+    const propre = motif.trim();
+    if (!propre) {
+      // ⚠ UN REFUS SANS MOTIF EST UN REFUS QU'ON NE PEUT PAS CORRIGER.
+      // L'étudiant saurait que c'est non, sans savoir quoi reprendre.
+      throw new BadRequestException('Indiquez le motif du refus.');
+    }
+
+    return db.deposit.update({
+      where: { id },
+      data: {
+        status: 'refuse',
+        refusalReason: propre,
+        decidedAt: new Date(),
+        decidedById: directeurId,
+      },
+    });
+  }
+
+  /**
+   * L'URL de lecture du document déposé — et sans elle, le circuit demandait à
+   * un directeur de VALIDER UN CONTENU QU'IL NE POUVAIT PAS LIRE.
+   *
+   * ⚠ ONZE ROUTES, AUCUNE NE SERVAIT LE FICHIER. Le téléversement le stockait,
+   * le catalogage en recopiait les clés — et entre les deux, la seule personne
+   * dont le métier est de juger le contenu n'y avait aucun accès. Le déposant
+   * non plus ne pouvait pas relire ce qu'il avait envoyé, donc pas vérifier
+   * qu'il avait envoyé le bon fichier.
+   *
+   * ⚠ TROIS POPULATIONS, ET LA DÉCISION EST ICI, PAS DANS UNE GARDE. Le
+   * déposant (le sien), le directeur désigné (ceux qu'il dirige), le
+   * bibliothécaire (`catalogue.gerer`, pour cataloguer). `@RequiresFunctions`
+   * exige TOUTES les fonctions listées : il ne sait pas dire « ou ». Écrire la
+   * décision au point de décision est ce qu'on a déjà fait pour l'embargo, et
+   * pour la même raison — une liste de gardes par surface se complète mal.
+   *
+   * ⚠ ET LE REFUS EST « INTROUVABLE », par la symétrie du reste du module : un
+   * 403 dirait à un étudiant qu'un dépôt existe sous cet identifiant et qu'il
+   * appartient à quelqu'un d'autre.
+   */
+  async urlDeLectureDuDocument(
+    db: TenantDb,
+    id: string,
+    demandeurId: string,
+    fonctions: string[],
+  ) {
+    const depot = await this.exigerDepot(db, id);
+
+    const sien = depot.depositorId === demandeurId;
+    const leDirige = depot.directorId === demandeurId;
+    const catalogue = fonctions.includes(FONCTIONS.CATALOGUE_GERER);
+    if (!sien && !leDirige && !catalogue) {
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+
+    if (!depot.fileKey) {
+      throw new NotFoundException('Ce dépôt n’a pas de document.');
+    }
+
+    // ⚠ LE CLAIR, PAS LE CHIFFRÉ. Le blob AEAD segmenté n'est lisible que par
+    // le lecteur natif, avec une licence : le servir ici donnerait un fichier
+    // que personne ne peut ouvrir. C'est le même partage que pour les copies
+    // numériques — le clair sert la lecture en ligne, le chiffré la lecture
+    // hors-ligne.
+    const url = await this.storage.getSignedDownloadUrl(
+      depot.fileKey,
+      depot.fileName ?? 'document',
+      TTL_LECTURE_DEPOT_SECONDES,
+    );
+    return {
+      url,
+      expiresInSeconds: TTL_LECTURE_DEPOT_SECONDES,
+      fileFormat: depot.fileFormat,
+      fileName: depot.fileName,
+    };
+  }
+
+  /** Les dépôts du déposant — il suit le sien, sinon il redéposera. */
+  mesDepots(db: TenantDb, deposantId: string) {
+    return db.deposit.findMany({
+      where: { depositorId: deposantId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+
+  /**
+   * Les dépôts qu'un directeur a à valider.
+   *
+   * ⚠ AUTO-PORTÉE, et c'est ce qui rend `depot.valider` acceptable comme
+   * élargissement : un directeur ne voit QUE les dépôts dont il est le
+   * directeur désigné, jamais ceux d'un collègue. Propriété testée.
+   */
+  aValider(db: TenantDb, directeurId: string) {
+    return db.deposit.findMany({
+      where: { directorId: directeurId, status: 'soumis' },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  /** Les dépôts validés dont la notice reste à créer — le travail du bibliothécaire. */
+  async aCataloguer(db: TenantDb) {
+    const valides = await db.deposit.findMany({
+      where: { status: 'valide' },
+      orderBy: [{ decidedAt: 'asc' }, { id: 'asc' }],
+    });
+    // Le prédicat est nommé une seule fois (`etats.ts`) et réutilisé ici : un
+    // `status === 'valide' && recordId === null` recopié dans cinq requêtes est
+    // exactement la forme qui dérive.
+    return valides.filter(enAttenteDeCatalogage);
+  }
+
+  /**
+   * Rattache la notice créée par le bibliothécaire au dépôt.
+   *
+   * ⚠ ON NE CRÉE PAS LA NOTICE ICI, ET C'EST DÉLIBÉRÉ. `CatalogingService.
+   * createRecord` porte des invariants — au moins un auteur principal, au moins
+   * trois mots-clés — que le formulaire de dépôt ne fournit pas et n'a pas à
+   * fournir. Créer la notice depuis ce service demanderait un TROISIÈME chemin
+   * d'écriture aux règles plus souples, c'est-à-dire une porte ouverte sur ces
+   * invariants. Le bibliothécaire catalogue par le chemin normal, puis rattache.
+   */
+  async rattacherNotice(db: TenantDb, id: string, recordId: string) {
+    const depot = await this.exigerDepot(db, id);
+    if (!enAttenteDeCatalogage(depot)) {
+      throw new BadRequestException(
+        depot.recordId
+          ? 'Ce dépôt a déjà une notice.'
+          : `Ce dépôt est « ${depot.status} » : seul un dépôt validé se catalogue.`,
+      );
+    }
+    if (!depot.fileKey || !depot.fileFormat) {
+      throw new BadRequestException('Ce dépôt n’a pas de document à rattacher.');
+    }
+
+    // ⚠ ON COPIE DES VALEURS DE COLONNES, PAS DES OCTETS. Le blob chiffré et la
+    // CEK enveloppée restent exactement où le dépôt les a mis : rien n'est
+    // re-chiffré, rien n'est recopié dans le seau. La CEK est enveloppée par la
+    // KEK SERVEUR, qui ne dépend d'aucune notice.
+    //
+    // ⚠ Les deux écritures sont dans la MÊME transaction : une notice qui
+    // pointerait un fichier sans que le dépôt le sache — ou l'inverse — serait
+    // un document orphelin que personne ne retrouve.
+    return db.$transaction(async (tx) => {
+      await tx.digitalCopy.create({
+        data: {
+          recordId,
+          objectKey: depot.fileKey!,
+          fileFormat: depot.fileFormat as never,
+          fileSizeBytes: depot.fileSize ?? 0,
+          originalName: depot.fileName ?? 'document',
+          encObjectKey: depot.encObjectKey,
+          encWrappedCek: depot.encWrappedCek,
+          encSegSize: depot.encSegSize,
+          encAlgo: depot.encAlgo,
+          encStatus: depot.encStatus,
+          encError: depot.encError,
+          xrefValidatedAt: depot.xrefValidatedAt,
+          encryptedAt: depot.encryptedAt,
+        },
+      });
+      return tx.deposit.update({ where: { id }, data: { recordId } });
+    });
+  }
+
+  // ── Aides ───────────────────────────────────────────────────────────────
+
+  private async exigerDepot(db: TenantDb, id: string) {
+    const depot = await db.deposit.findUnique({ where: { id } });
+    if (!depot) throw new NotFoundException('Dépôt introuvable.');
+    return depot;
+  }
+
+  /** Le dépôt existe ET le demandeur en est le directeur désigné. */
+  private async exigerDepotDeSonDirecteur(db: TenantDb, id: string, directeurId: string) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.directorId !== directeurId) {
+      // ⚠ « Introuvable » et non « interdit » : répondre 403 dirait à un
+      // enseignant qu'un dépôt existe sous cet identifiant et qu'un collègue
+      // le dirige. Ce n'est pas son affaire.
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+    return depot;
+  }
+
+  private exigerTransition(courant: EtatDepot, vers: EtatDepot, par: ActeurDepot) {
+    const refus = refusDeTransition(courant, vers, par);
+    if (refus) throw new BadRequestException(refus);
+  }
+
+  /**
+   * LA GARDE — et elle demande la bonne chose.
+   *
+   * ⚠ ELLE VÉRIFIAIT QUE LE COMPTE EXISTE. Un dépôt adressé à un camarade
+   * passait donc, et restait « soumis » pour toujours : le camarade ne le voit
+   * pas (il n'a pas `depot.valider`, donc `a-valider` lui est fermée), le
+   * bibliothécaire ne le voit pas (il ne voit que les dépôts VALIDÉS), et
+   * l'étudiant attend une réponse que personne n'est en mesure de donner. Rien
+   * n'échouait, rien ne se passait.
+   *
+   * ⚠ ET LE REFUS NOMME SA CAUSE, en deux messages distincts. « Ce compte
+   * n'existe pas » et « cette personne ne peut pas diriger » envoient chercher
+   * deux choses différentes : le premier dit qu'on s'est trompé de personne, le
+   * second qu'on a la bonne personne et qu'elle n'a pas ce rôle dans l'école.
+   * Les confondre ferait chercher une faute de saisie là où il faut demander un
+   * droit à l'administrateur.
+   */
+  private async exigerDirecteur(db: TenantDb, directorId: string) {
+    const compte = await db.user.findUnique({
+      where: { id: directorId },
+      select: SELECTION_CANDIDAT_DIRECTEUR,
+    });
+    if (!compte) {
+      throw new BadRequestException(
+        'Le directeur désigné n’a pas de compte dans cet établissement.',
+      );
+    }
+    if (!peutDirigerUnDepot(compte)) {
+      throw new BadRequestException(
+        'Cette personne ne peut pas diriger un mémoire ou une thèse.',
+      );
+    }
+  }
+
+  /**
+   * Les directeurs qu'un étudiant peut désigner — le menu déroulant.
+   *
+   * ⚠ CE N'EST PAS L'ANNUAIRE DES COMPTES. Il en sort un identifiant et un nom
+   * affichable, rien d'autre : ni courriel, ni matricule, ni statut, ni rôle.
+   * Ce qu'un déposant a besoin de savoir, c'est à QUI adresser son travail.
+   *
+   * ⚠ LA DÉCISION REPASSE SUR LE RÉSULTAT DE LA REQUÊTE. Le `where` n'est qu'un
+   * pré-filtre : si un jour il s'élargit par accident, `peutDirigerUnDepot`
+   * écarte quand même. Une erreur de requête ne peut donc que faire MANQUER
+   * quelqu'un — jamais en proposer un que la garde refusera ensuite.
+   */
+  async directeursDesignables(db: TenantDb) {
+    const candidats = await db.user.findMany({
+      where: OU_CANDIDAT_DIRECTEUR,
+      select: SELECTION_CANDIDAT_DIRECTEUR,
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+    });
+    return candidats.filter(peutDirigerUnDepot).map(versDirecteurDesignable);
+  }
+
+  /**
+   * Désigne — ou remplace — le directeur d'un BROUILLON.
+   *
+   * ⚠ SANS ELLE, `directorId` ne se posait qu'à la création, et il y était
+   * FACULTATIF : un brouillon créé sans directeur ne pouvait plus jamais être
+   * soumis ni corrigé. Un formulaire dont une étape mène à un dossier
+   * définitivement bloqué est une inertie, pas une contrainte.
+   *
+   * ⚠ BROUILLON SEULEMENT. Changer le directeur d'un dépôt déjà soumis
+   * retirerait le dossier des mains de quelqu'un qui l'examine, sans que rien
+   * ne le lui dise.
+   */
+  async designerDirecteur(
+    db: TenantDb,
+    id: string,
+    deposantId: string,
+    directorId: string,
+  ) {
+    const depot = await this.exigerDepot(db, id);
+    if (depot.depositorId !== deposantId) {
+      throw new NotFoundException('Dépôt introuvable.');
+    }
+    if (depot.status !== ETAT_INITIAL) {
+      throw new BadRequestException(
+        `Ce dépôt est « ${depot.status} » : son directeur ne peut plus être changé.`,
+      );
+    }
+    await this.exigerDirecteur(db, directorId);
+    return db.deposit.update({ where: { id }, data: { directorId } });
+  }
+
+  /** Prévient le directeur, et rend CE QUI EST ARRIVÉ à l'envoi. */
+  private async notifierDirecteur(
+    db: TenantDb,
+    depot: { id: string; title: string; authorName: string; directorId: string | null },
+  ): Promise<MailOutcome> {
+    if (!depot.directorId) return { sent: false, reason: 'aucun_destinataire' };
+    const directeur = await db.user.findUnique({ where: { id: depot.directorId } });
+    if (!directeur?.email) return { sent: false, reason: 'aucun_destinataire' };
+
+    const resultat = await this.mail.sendDepositSubmitted(directeur.email, {
+      titre: depot.title,
+      auteur: depot.authorName,
+    });
+    if (!resultat.sent) {
+      this.logger.warn(
+        `Directeur non prévenu du dépôt ${depot.id} : ${resultat.reason}` +
+          `${resultat.detail ? ` — ${resultat.detail}` : ''}`,
+      );
+    }
+    return resultat;
+  }
+}
+
+/** Neutralise les caractères à risque dans un nom de fichier utilisateur. */
+function nomDeFichierSur(nom: string): string {
+  return nom.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120);
+}

@@ -101,3 +101,28 @@ export function fonctionsApresDecoupage(anciennes: string[]): string[] {
   }
   return [...sortie];
 }
+
+/**
+ * ÉLARGISSEMENTS ACCORDÉS DEPUIS LE DÉCOUPAGE — chacun daté et motivé.
+ *
+ * ⚠ POURQUOI CETTE LISTE EXISTE. Le garde « personne ne perd, personne ne
+ * gagne » compare chaque rôle système à l'IMAGE EXACTE de ses anciennes
+ * fonctions. Il a fait son office le 12 septembre 2026 : le premier
+ * élargissement accordé depuis le découpage l'a fait tomber.
+ *
+ * On ne l'affaiblit pas en retirant l'assertion — on DÉCLARE ce qui a été
+ * accordé. Le garde devient « image + élargissements écrits ici », donc tout
+ * AUTRE ajout continue de le faire tomber. Une ligne d'apparence anodine ne
+ * peut plus élargir en silence : elle doit s'inscrire ici, avec sa date et son
+ * motif, et c'est exactement ce qu'on veut relire dans six mois.
+ */
+export const ELARGISSEMENTS_ACCORDES: Record<string, { fonctions: string[]; motif: string }> = {
+  Étudiant: {
+    fonctions: ['depot.deposer'],
+    motif:
+      '12 septembre 2026, P6-2 — l’étudiant dépose son mémoire ou sa thèse. ' +
+      'Fonction AUTO-PORTÉE : trois routes, toutes sur SON dépôt. Un étudiant ' +
+      'ne voit jamais celui d’un autre, et le refus sur le dépôt d’un tiers est ' +
+      '« introuvable », jamais « interdit ».',
+  },
+};

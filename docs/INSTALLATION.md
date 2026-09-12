@@ -272,7 +272,6 @@ caddy         Up 21 hours
 db            Up 21 hours (healthy)
 meilisearch   Up 21 hours (healthy)
 minio         Up 21 hours (healthy)
-redis         Up 21 hours (healthy)
 web           Up 21 hours (healthy)
 ```
 

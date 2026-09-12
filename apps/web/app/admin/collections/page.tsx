@@ -1,6 +1,8 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
+import { enArbre, invisibleDeTous } from '@/lib/arbre-collections';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
@@ -12,6 +14,8 @@ interface Collection {
   description: string | null;
   type: 'INTERNAL' | 'COMMERCIAL' | 'EXTERNAL';
   tenantId: string | null;
+  /** Collection parente, ou `null` pour une racine — P6-1. */
+  parentId: string | null;
   _count: { titles: number; accessRules: number };
 }
 
@@ -140,17 +144,51 @@ export default function CollectionsPage() {
         </p>
       )}
 
+      {/*
+        ⚠ LE RAPPEL EN TÊTE NE REMPLACE PAS LA PHRASE SUR CHAQUE COLLECTION. Il
+        s'adresse à qui découvre la hiérarchie ; la phrase, elle, s'adresse à qui
+        vient de se tromper. Un bandeau général se lit une fois et s'oublie.
+      */}
+      {collections !== null && collections.some((c) => c.parentId !== null) && (
+        <p className="mt-4 text-sm text-muted">
+          {LIBELLES.collectionsArbre.pasDHeritage}{' '}
+          {LIBELLES.collectionsArbre.profondeurMax}
+        </p>
+      )}
+
       <div className="mt-5 flex flex-col gap-2">
         {collections?.length === 0 && (
           <Card className="text-center text-sm text-muted">Aucune collection.</Card>
         )}
-        {collections?.map((c) => (
-          <Link key={c.id} href={`/admin/collections/${c.id}`}>
+      {collections !== null &&
+        enArbre(collections).map(({ noeud: c, profondeur }) => (
+          <Link
+            key={c.id}
+            href={`/admin/collections/${c.id}`}
+            // ⚠ L'indentation est VISUELLE. Ce qui porte la hiérarchie pour une
+            // lecture non visuelle, c'est `aria-level` — sans lui, un arbre
+            // indenté n'est qu'une liste plate décalée.
+            style={{ marginLeft: `${profondeur * 24}px` }}
+            aria-level={profondeur + 1}
+          >
             <Card className="flex items-center justify-between !p-4 transition-colors hover:border-ocre/50">
               <div>
                 <div className="font-semibold">{c.name}</div>
                 {c.description && (
                   <div className="text-sm text-muted">{c.description}</div>
+                )}
+                {/*
+                  ⚠ LA PHRASE QUI DÉTROMPE, et elle change selon qu'on a pu croire
+                  hériter ou non. Zéro règle = invisible de tous, que la collection
+                  soit racine ou fille ; mais seule la fille laissait croire le
+                  contraire.
+                */}
+                {invisibleDeTous(c) && (
+                  <div className="mt-1 text-sm text-heading">
+                    {c.parentId
+                      ? LIBELLES.collectionsArbre.sansRegleSousCollection
+                      : LIBELLES.collectionsArbre.sansRegle}
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-3 text-sm text-muted">

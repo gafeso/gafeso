@@ -14,6 +14,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBELLES } from '@/lib/libelles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ModulesPage from '@/app/admin/modules/page';
 import { ongletsVisibles } from '@/lib/navigation';
@@ -77,6 +78,19 @@ function brancher(fonctions: string[], modules: unknown[] | 'jamais' | 'echec') 
 afterEach(() => {
   vi.unstubAllGlobals();
   fermerSession();
+});
+
+describe('Ce que la confirmation DOIT promettre', () => {
+  /**
+   * ⚠ SA PROPRIÉTÉ, PAS SA VALEUR. Cette phrase est dite AVANT le geste, et
+   * c'est elle qui lève l'inquiétude : un administrateur qui désactive un module
+   * doit savoir qu'il ne perd rien. Un test qui la compare au libellé suivrait
+   * sa dégradation — « Attention. » passerait.
+   */
+  it('elle NIE la suppression de données', () => {
+    expect(LIBELLES.modules.aucuneDonneeSupprimee).toMatch(/aucune donnée/i);
+    expect(LIBELLES.modules.aucuneDonneeSupprimee).toMatch(/supprim/i);
+  });
 });
 
 describe('sans modules.gerer, ni entrée ni écran', () => {

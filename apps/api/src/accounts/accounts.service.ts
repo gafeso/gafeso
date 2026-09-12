@@ -27,10 +27,13 @@ const TOKEN_TTL_HOURS = 24;
 const TOKEN_BYTES = 32;
 const BCRYPT_ROUNDS = 10;
 
-/** Ce qui est RÉELLEMENT arrivé à un envoi d'email. */
-export type MailOutcome =
-  | { sent: true }
-  | { sent: false; reason: 'smtp_absent' | 'smtp_error'; detail?: string };
+/**
+ * Ré-exporté depuis `mail/mail-outcome.ts`, où le type a été déplacé le
+ * 12 septembre 2026 : il décrit le contrat de `MailService`, qui ne peut pas
+ * importer depuis ce fichier. Ré-export conservé pour ne casser aucun import.
+ */
+import type { MailOutcome } from './mail/mail-outcome';
+export type { MailOutcome };
 
 export interface RegistrationResult {
   userId: string;
@@ -52,6 +55,12 @@ export interface ImportResult {
   imported: number;
   skipped: number;
   errors: ImportRowError[];
+  /**
+   * Lignes RETIRÉES par un remplacement. Toujours présent, `0` sans
+   * remplacement — un champ absent se lit « pas de retrait » aussi bien que
+   * « la question n'a pas été posée », et ce n'est pas la même chose.
+   */
+  retires: number;
 }
 
 /** Validation d'email pragmatique (suffisante pour une liste d'école). */
@@ -91,7 +100,20 @@ export class AccountsService {
    * fichier (le second ne doit pas écraser silencieusement le premier).
    * Le BOM d'Excel est retiré (bom: true) ; le fichier est attendu en UTF-8.
    */
-  async importExpectedStudents(db: TenantDb, csv: string): Promise<ImportResult> {
+  /**
+   * LE CSV, ANALYSÉ UNE SEULE FOIS — et c'est ce qui empêche l'aperçu de mentir.
+   *
+   * ⚠ L'APERÇU ET L'IMPORT DOIVENT VOIR EXACTEMENT LE MÊME FICHIER. Deux
+   * analyses séparées s'accorderaient aujourd'hui et divergeraient au premier
+   * changement de règle — « deux sources qui s'accordent par coïncidence ».
+   * Un aperçu qui annonce 47 retraits pendant que l'import en fait 48 est pire
+   * qu'une absence d'aperçu : il fait confirmer un nombre qu'on n'appliquera
+   * pas.
+   */
+  private analyserCsv(csv: string): {
+    lignes: { matricule: string; email: string; firstName: string; lastName: string; className: string }[];
+    errors: ImportRowError[];
+  } {
     let rows: { record: Record<string, string>; info: { lines: number } }[];
     try {
       rows = parse(csv, {
@@ -109,7 +131,9 @@ export class AccountsService {
       );
     }
 
-    let imported = 0;
+    const lignes: {
+      matricule: string; email: string; firstName: string; lastName: string; className: string;
+    }[] = [];
     const errors: ImportRowError[] = [];
     const seenMatricules = new Set<string>();
 
@@ -148,19 +172,151 @@ export class AccountsService {
         continue;
       }
       seenMatricules.add(matricule);
+      lignes.push({ matricule, email, firstName, lastName, className });
+    }
 
+    return { lignes, errors };
+  }
+
+  /**
+   * CE QUE L'IMPORT RETIRERAIT si on demandait le remplacement.
+   *
+   * ⚠ LA PORTÉE EST LA CLASSE, ET SEULEMENT LES CLASSES PRÉSENTES DANS LE
+   * FICHIER. Un fichier qui ne contient que L1 Droit ne peut rien retirer à M2
+   * Médecine — c'est ce qui borne le pire cas : « quelqu'un exportera la moitié
+   * d'un tableur ».
+   *
+   * ⚠ ET JAMAIS UNE LIGNE RÉCLAMÉE (`claimed`). Elle porte l'explication d'un
+   * compte activé automatiquement : la retirer rendrait cette activation
+   * inexplicable. Une ligne fantôme, elle, n'est par définition jamais
+   * réclamée.
+   */
+  private async aRetirer(
+    db: TenantDb,
+    lignes: { matricule: string; className: string }[],
+  ) {
+    const classes = [...new Set(lignes.map((l) => l.className))];
+    if (classes.length === 0) return [];
+    const gardees = new Set(lignes.map((l) => l.matricule));
+    const existantes = await db.expectedStudent.findMany({
+      where: { className: { in: classes }, claimed: false },
+      select: { id: true, matricule: true, firstName: true, lastName: true, className: true },
+      orderBy: [{ className: 'asc' }, { matricule: 'asc' }],
+    });
+    return existantes.filter((e) => !gardees.has(e.matricule));
+  }
+
+  /**
+   * L'APERÇU — ce que l'import ferait, sans rien écrire.
+   *
+   * ⚠ DEUX ROUTES ET NON UN `dryRun`, comme pour la propagation des règles
+   * d'accès : la lecture et l'écriture derrière deux VERBES distincts, jamais
+   * derrière le même où une faute de frappe écrit.
+   */
+  async apercuImportExpectedStudents(db: TenantDb, csv: string) {
+    const { lignes, errors } = this.analyserCsv(csv);
+    const retraits = await this.aRetirer(db, lignes);
+    return {
+      aImporter: lignes.length,
+      enErreur: errors.length,
+      errors,
+      classes: [...new Set(lignes.map((l) => l.className))].sort(),
+      retraits: {
+        total: retraits.length,
+        // ⚠ ON NOMME LES PREMIERS. « 47 lignes seront supprimées » ne se
+        // vérifie pas ; « Traoré Awa, Zongo Moussa, … et 45 autres » se
+        // reconnaît — ou ne se reconnaît pas, et c'est alors qu'on s'arrête.
+        premiers: retraits.slice(0, 10).map((r) => ({
+          matricule: r.matricule,
+          nom: `${r.firstName} ${r.lastName}`.trim(),
+          className: r.className,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Importe la liste des étudiants attendus depuis un CSV.
+   * Colonnes acceptées (FR ou EN) : matricule, email, firstName|prenom,
+   * lastName|nom, className|classe. Upsert par matricule (idempotent).
+   *
+   * Tolérant aux fichiers réels : chaque ligne fautive est rejetée
+   * individuellement avec son numéro et un motif clair (jamais d'échec
+   * global). Le BOM d'Excel est retiré ; le fichier est attendu en UTF-8.
+   *
+   * ⚠ LE REMPLACEMENT EST EXPLICITE ET JAMAIS LE DÉFAUT, et il exige de
+   * CONFIRMER LE NOMBRE vu à l'aperçu. Sans ce nombre, rien n'empêcherait
+   * d'appliquer un fichier différent de celui qu'on a prévisualisé — et c'est
+   * précisément le cas qui détruirait une classe entière : quelqu'un exportera
+   * la moitié d'un tableur.
+   */
+  async importExpectedStudents(
+    db: TenantDb,
+    csv: string,
+    options: { remplacer?: boolean; confirmeRetraits?: number } = {},
+  ): Promise<ImportResult> {
+    const { lignes, errors } = this.analyserCsv(csv);
+
+    let retires = 0;
+    if (options.remplacer) {
+      const retraits = await this.aRetirer(db, lignes);
+      if (options.confirmeRetraits !== retraits.length) {
+        throw new BadRequestException(
+          `Remplacement refusé : l’aperçu annonçait ` +
+            `${options.confirmeRetraits ?? 'aucun nombre'} retrait(s), le fichier ` +
+            `en produit ${retraits.length}. Relancez l’aperçu — le fichier ou la ` +
+            'liste a changé depuis.',
+        );
+      }
+      if (retraits.length > 0) {
+        await db.expectedStudent.deleteMany({
+          where: { id: { in: retraits.map((r) => r.id) } },
+        });
+        retires = retraits.length;
+      }
+    }
+
+    let imported = 0;
+    for (const l of lignes) {
       await db.expectedStudent.upsert({
-        where: { matricule },
-        create: { matricule, email, firstName, lastName, className },
-        update: { email, firstName, lastName, className },
+        where: { matricule: l.matricule },
+        create: l,
+        update: { email: l.email, firstName: l.firstName, lastName: l.lastName, className: l.className },
       });
       imported++;
     }
 
     this.logger.log(
-      `Import expected_students : ${imported} importés, ${errors.length} en erreur.`,
+      `Import expected_students : ${imported} importés, ${errors.length} en erreur, ` +
+        `${retires} retirés.`,
     );
-    return { imported, skipped: errors.length, errors };
+    return { imported, skipped: errors.length, errors, retires };
+  }
+
+  /**
+   * Retire UNE ligne d'étudiant attendu — le geste qui manquait.
+   *
+   * ⚠ L'IMPORT FAIT UN `upsert` PAR MATRICULE : un matricule saisi de travers
+   * crée une ligne SOUS UNE AUTRE CLÉ, et réimporter le fichier corrigé ne la
+   * retire pas. La liste des étudiants attendus accumulait donc des fantômes —
+   * des gens qui ne s'inscriront jamais, comptés dans l'effectif attendu.
+   *
+   * ⚠ UNE LIGNE RÉCLAMÉE NE SE RETIRE PAS. Elle explique pourquoi un compte a
+   * été activé automatiquement ; la retirer rendrait cette activation
+   * inexplicable. Et ce n'est pas une gêne : un fantôme n'est jamais réclamé,
+   * par définition.
+   */
+  async retirerExpectedStudent(db: TenantDb, id: string) {
+    const ligne = await db.expectedStudent.findUnique({ where: { id } });
+    if (!ligne) throw new NotFoundException('Étudiant attendu introuvable.');
+    if (ligne.claimed) {
+      throw new BadRequestException(
+        `« ${ligne.firstName} ${ligne.lastName} » a déjà créé son compte à partir ` +
+          'de cette ligne : la retirer rendrait cette activation inexplicable.',
+      );
+    }
+    await db.expectedStudent.delete({ where: { id } });
+    return { deleted: true, matricule: ligne.matricule };
   }
 
   // ───────────────────────────────────────────────────────────
@@ -643,18 +799,38 @@ export class AccountsService {
    * créé, le lien existe en base, il reste récupérable (voir passwordLink()).
    */
   private async sendSetPasswordSafely(email: string, url: string): Promise<MailOutcome> {
-    if (!this.mail.available) {
-      return { sent: false, reason: 'smtp_absent' };
-    }
+    // ⚠ CETTE MÉTHODE NE FAIT PLUS QUE TRANSMETTRE, et c'est un progrès.
+    //
+    // Elle interrogeait `mail.available` puis rattrapait l'exception, parce que
+    // `MailService` avait DEUX modes d'échec : un retour silencieux quand SMTP
+    // est absent, une exception quand il refuse. Elle était le seul appelant à
+    // traiter les deux — d'où les trois mensonges ailleurs. Depuis le
+    // 12 septembre 2026, `MailService` rend l'issue lui-même.
+    // ⚠ LE `try` EST UN FILET, PLUS LE CHEMIN PRINCIPAL — et il doit RESTER.
+    //
+    // `MailService` ne jette plus pour une panne SMTP : il rend l'issue. Mais
+    // l'invariant écrit ici depuis le début — « un échec d'email ne fait
+    // JAMAIS échouer l'opération métier, le compte est créé et le lien reste
+    // récupérable » — vaut aussi pour l'inattendu : un gabarit qui explose, une
+    // adresse que nodemailer refuse de parser. Retirer ce filet en même temps
+    // que le try/catch d'origine aurait transformé un courriel raté en échec de
+    // création de compte.
+    let resultat: MailOutcome;
     try {
-      await this.mail.sendSetPasswordLink(email, url);
-      return { sent: true };
+      resultat = await this.mail.sendSetPasswordLink(email, url);
     } catch (error) {
-      const message = (error as Error).message;
-      // Le message d'erreur SMTP est conservé (diagnostic), JAMAIS l'URL.
-      this.logger.warn(`Envoi du lien de mot de passe à ${email} échoué : ${message}`);
-      return { sent: false, reason: 'smtp_error', detail: message };
+      resultat = { sent: false, reason: 'smtp_error', detail: (error as Error).message };
     }
+    if (!resultat.sent) {
+      // L'URL n'est JAMAIS journalisée : elle permet de prendre la main sur le
+      // compte. Seul le motif l'est. Le lien reste récupérable par
+      // `passwordLink()`, réservé à `comptes.gerer` et tracé nominativement.
+      this.logger.warn(
+        `Lien de mot de passe non envoyé à ${email} : ${resultat.reason}` +
+          `${resultat.detail ? ` — ${resultat.detail}` : ''}`,
+      );
+    }
+    return resultat;
   }
 
   /**
@@ -709,11 +885,20 @@ export class AccountsService {
         where: { role: UserRole.MANAGER, status: AccountStatus.ACTIVE },
         select: { email: true },
       });
-      await this.mail.notifyManagerPendingAccount(
+      const resultat = await this.mail.notifyManagerPendingAccount(
         managers.map((manager) => manager.email),
         accountEmail,
         matricule,
       );
+      if (!resultat.sent) {
+        // ⚠ Le cas `aucun_destinataire` n'est PAS une panne : c'est une école
+        // sans gestionnaire actif. Le compte attend, et personne n'est
+        // prévenu — ça mérite d'être dit ici, où le motif est connu.
+        this.logger.warn(
+          `Gestionnaires NON notifiés du compte en attente ` +
+            `(${matricule ?? accountEmail}) : ${resultat.reason}`,
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `Notification des gestionnaires échouée (${matricule ?? accountEmail}) : ${(error as Error).message}`,

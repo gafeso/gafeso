@@ -17,6 +17,7 @@ import {
 } from '@/lib/server-api';
 import { homeThemeStyle } from '@/lib/home-theme';
 import { HomeHeader } from '@/components/home/home-header';
+import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 import { HeroBandeau } from '@/components/home/hero-bandeau';
 import { bornerDiapositives } from '@/lib/hero-slides';
 import { GROUPES_DE_TYPES } from '@/lib/record-types';
@@ -60,7 +61,7 @@ export default async function HomePage() {
   // Domaine inconnu / API indisponible : repli sobre, sans contenu d'école.
   if (!home) {
     return (
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>
+      <main id={ID_CONTENU} style={{ maxWidth: 640, margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>
         <h1 style={{ fontFamily: 'Charter, Georgia, serif' }}>Bibliothèque</h1>
         <p style={{ color: '#5E6B78', marginTop: 12 }}>
           Le catalogue est accessible ci-dessous.
@@ -120,6 +121,8 @@ export default async function HomePage() {
 
   return (
     <div className={styles.vitrine} style={themeStyle} id="top">
+      {/* ⚠ Premier élément focalisable : avant l'en-tête, jamais après. */}
+      <LienDEvitement />
       <HomeHeader
         brandMark={identity.brandMark}
         logoUrl={identity.logoUrl}
@@ -129,7 +132,7 @@ export default async function HomePage() {
       />
       {latticeEnabled && <div className={styles.latticeStrip} />}
 
-      <main>
+      <main id={ID_CONTENU}>
         {/* ---------- BANDEAU PLEINE LARGEUR ----------
             Texte par-dessus l'image, flèches et points. Le moteur est celui du
             lot précédent : sur mobile UNE seule image est montée, jamais
@@ -431,7 +434,16 @@ export default async function HomePage() {
                 légales » et « Politique de confidentialité » : aucune de ces
                 pages n'existe, aucun de ces liens n'est affiché. */}
             <div>
-              <h5>{LIBELLES.pied.bibliotheque}</h5>
+              {/*
+                ⚠ h2, PAS h5. Les colonnes du pied venaient après un h3 : un
+                niveau sauté (3 → 5), donc une personne qui navigue de titre en
+                titre entend un trou. Elles sont les groupes de premier rang DU
+                PIED, pas des sous-sections de ce qui précède — h2 dit ce
+                qu'elles sont, h5 disait une profondeur qui n'existe pas.
+                La taille reste celle d'avant : c'est une classe qui la porte,
+                pas le niveau du titre.
+              */}
+              <h2 className={styles.titreDePied}>{LIBELLES.pied.bibliotheque}</h2>
               <a className={styles.flink} href="/opac">
                 {LIBELLES.pied.catalogue}
               </a>
@@ -450,7 +462,7 @@ export default async function HomePage() {
             </div>
 
             <div>
-              <h5>{LIBELLES.pied.services}</h5>
+              <h2 className={styles.titreDePied}>{LIBELLES.pied.services}</h2>
               <a className={styles.flink} href="/inscription">
                 {LIBELLES.pied.creerCompte}
               </a>
@@ -461,7 +473,7 @@ export default async function HomePage() {
 
             {content.contact.address && (
               <div>
-                <h5>{LIBELLES.pied.campus}</h5>
+                <h2 className={styles.titreDePied}>{LIBELLES.pied.campus}</h2>
                 <p>{content.contact.address}</p>
               </div>
             )}
@@ -475,7 +487,7 @@ export default async function HomePage() {
               content.contact.phones ||
               content.contact.socials.some((social) => safeHref(social.url))) && (
             <div>
-              <h5>{LIBELLES.pied.contact}</h5>
+              <h2 className={styles.titreDePied}>{LIBELLES.pied.contact}</h2>
               {content.contact.email && (
                 <a className={styles.flink} href={`mailto:${content.contact.email}`}>
                   {content.contact.email}
@@ -509,7 +521,7 @@ export default async function HomePage() {
                 l'établissement — et seulement s'il en a. */}
             {content.resources.some((r) => safeHref(r.url)) && (
               <div>
-                <h5>{LIBELLES.pied.ressources}</h5>
+                <h2 className={styles.titreDePied}>{LIBELLES.pied.ressources}</h2>
                 {content.resources
                   .filter((r) => safeHref(r.url))
                   .map((resource, i) => (

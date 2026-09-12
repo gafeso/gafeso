@@ -12,6 +12,8 @@ import { AuditModule } from './audit/audit.module';
 import { MailModule } from './mail/mail.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { AccessControlModule } from './access-control/access-control.module';
+import { DepotsModule } from './depots/depots.module';
+import { EncadrementsModule } from './encadrements/encadrements.module';
 import { AdminModule } from './admin/admin.module';
 import { SearchModule } from './search/search.module';
 import { CatalogingModule } from './cataloging/cataloging.module';
@@ -55,6 +57,8 @@ import { ClientCacheKeyMiddleware } from './common/client-cache-key.middleware';
     MailModule,
     AccountsModule,
     AccessControlModule,
+    DepotsModule,
+    EncadrementsModule,
     AdminModule,
     SearchModule,
     CatalogingModule,

@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -104,9 +105,19 @@ function SetPasswordForm() {
         </label>
 
         {error && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
-            {error}
-          </p>
+          <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+            <p>{error}</p>
+            {/*
+              ⚠ LE RECOURS S'AJOUTE À TOUT ÉCHEC, et sans chercher à deviner
+              lequel. « Lien invalide ou expiré. » est un fait exact et une
+              impasse : cet écran est le SEUL chemin vers le compte, et aucune
+              route publique ne régénère un lien. Détecter le cas précis
+              demanderait de reconnaître un message français ou un code partagé
+              avec d'autres erreurs — pour un gain nul, puisque la sortie est la
+              même quelle que soit la panne.
+            */}
+            <p className="mt-1">{LIBELLES.motDePasse.recours}</p>
+          </div>
         )}
 
         <Button type="submit" disabled={loading}>

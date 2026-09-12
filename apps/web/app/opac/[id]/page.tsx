@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { noticeExiste } from '@/lib/server-api';
+import { noticePublique } from '@/lib/server-api';
 import { FicheNotice } from './fiche-notice';
 
 /**
@@ -28,6 +28,11 @@ export default async function FicheNoticePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  if ((await noticeExiste(id)) === 'introuvable') notFound();
-  return <FicheNotice />;
+  const { etat, notice } = await noticePublique(id);
+  if (etat === 'introuvable') notFound();
+  // ⚠ `notice` est nulle quand l'état est « indisponible » : la fiche se charge
+  // alors comme avant, côté client, et dit elle-même son échec. Passer un objet
+  // vide à la place ferait rendre une notice sans titre — une page qui affirme
+  // un contenu qu'elle n'a pas.
+  return <FicheNotice initial={(notice as never) ?? null} />;
 }

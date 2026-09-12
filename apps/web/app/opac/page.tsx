@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, Suspense, useCallback, useEffect, useState } from 'react';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -239,7 +240,7 @@ function OpacSearch() {
   ];
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main id={ID_CONTENU} className="mx-auto max-w-5xl px-6 py-8">
       <h1 className="font-serif text-3xl font-bold">Catalogue</h1>
 
       <form onSubmit={onSubmit} className="mt-4 flex flex-wrap gap-2">

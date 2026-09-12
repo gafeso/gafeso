@@ -1,14 +1,28 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { Button, Card, Input } from '@/components/ui';
+
+/** Ce qui est RÉELLEMENT arrivé à l'email (rendu par l'API). */
+type MailOutcome =
+  | { sent: true }
+  | { sent: false; reason: 'smtp_absent' | 'smtp_error'; detail?: string };
 
 interface RegisterResponse {
   userId: string;
   status: 'ACTIVE' | 'PENDING';
   autoActivated: boolean;
+  /**
+   * ⚠ L'API le rend TOUJOURS sur cette route ; l'optionnel est défensif, pour
+   * qu'une réponse plus ancienne ne fasse pas planter la lecture. La convention
+   * est celle de `/admin/comptes`, qui a tranché la première : en l'absence du
+   * champ, on garde la formulation d'envoi plutôt que d'inventer une troisième
+   * façon de dire la même chose.
+   */
+  mail?: MailOutcome;
 }
 
 type Profil = 'etudiant' | 'personnel';
@@ -117,15 +131,26 @@ export default function InscriptionPage() {
           >
             {result.autoActivated ? (
               <>
-                <p className="font-semibold">Compte activé !</p>
-                <p className="mt-1">
-                  Un email vous a été envoyé avec un lien sécurisé pour définir votre
-                  mot de passe (valable 24 h). Vous pourrez ensuite{' '}
-                  <Link href="/login" className="font-semibold underline">
-                    vous connecter
-                  </Link>
-                  .
-                </p>
+                <p className="font-semibold">{LIBELLES.inscription.compteActive}</p>
+                {/*
+                  ⚠ L'ÉCRAN NE DÉCLARE PLUS L'ENVOI SANS LE SAVOIR. L'API rend le
+                  sort de l'email, avec un commentaire qui dit pourquoi :
+                  « l'interface doit pouvoir dire la vérité ». L'ignorer envoyait
+                  l'étudiant attendre une messagerie muette — et sans aucun
+                  recours, le lien de définition de mot de passe étant le SEUL
+                  chemin vers son compte.
+                */}
+                {result.mail?.sent === false ? (
+                  <p className="mt-1">{LIBELLES.inscription.emailNonParti}</p>
+                ) : (
+                  <p className="mt-1">
+                    {LIBELLES.inscription.emailParti} Vous pourrez ensuite{' '}
+                    <Link href="/login" className="font-semibold underline">
+                      vous connecter
+                    </Link>
+                    .
+                  </p>
+                )}
               </>
             ) : (
               <>

@@ -60,10 +60,15 @@ describe('La table des adresses ne ment pas sur le disque', () => {
    * énoncé qui tombe le jour où l'un d'eux déménage — et c'est ce jour-là que la
    * table se mettrait à servir le mauvais écran en silence.
    */
-  it('les cinq écrans déclarés existent et exportent un défaut', () => {
+  it('tous les écrans déclarés existent et exportent un défaut', () => {
     const chemins = Object.values(ECRANS).map((e) => e.fichier);
-    expect(chemins).toHaveLength(5);
-    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(5);
+    // ⚠ Le témoin COMPTE, il ne constate pas. Le chiffre change quand la table
+    // change, et c'est voulu : on le met à jour en sachant ce qu'on ajoute.
+    expect(chemins).toHaveLength(22);
+    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(22);
+    // Aucun chemin en double : deux adresses qui pointent le même fichier
+    // passeraient pour deux écrans couverts.
+    expect(new Set(chemins).size).toBe(chemins.length);
   });
 
   it('et la lecture sait dire non', () => {
@@ -131,11 +136,32 @@ describe('Défaut n° 2 de P4-2 — l’adresse d’un module éteint est refus�
       fonctions: ADMIN,
       modules: ['amendes', 'rappels'],
     });
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      LIBELLES.modules.ecranModuleInactif,
-    );
+    expect(await screen.findByText(LIBELLES.modules.ecranModuleInactif)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: /Interopérabilité/ })).toBeNull();
+    /**
+     * ⚠ ET CE N'EST PAS UNE ALERTE. Un module désactivé est un état que le
+     * produit permet de créer exprès : un administrateur l'a éteint. Le peindre
+     * en rouge et l'annoncer comme une alerte qualifierait d'anomalie un réglage
+     * volontaire — et apprendrait à lire les rouges comme du décor.
+     */
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  /**
+   * ⚠ CE QUE LE TEXTE DOIT DIRE, séparément de l'écran qui l'affiche. Un
+   * contrôle négatif l'a exigé : remplacer ce libellé par « Accès refusé. » ne
+   * faisait tomber aucun test, tous comparant à la CONSTANTE. Ils suivaient
+   * donc sa dégradation sans broncher.
+   *
+   * Sa raison d'être tient en deux points, et son propre commentaire les dit :
+   * rassurer — rien n'est perdu — et indiquer le chemin du retour. Sans eux,
+   * quelqu'un qui retrouve un vieux signet croit la fonction supprimée.
+   */
+  it('le refus DIT que rien n’est perdu, et par où revenir', () => {
+    const texte = LIBELLES.modules.ecranModuleInactif;
+    expect(texte).toMatch(/aucune donnée n’a été supprimée/i);
+    expect(texte).toMatch(/réactivez/i);
+    expect(texte).toMatch(/Modules/);
   });
 
   it('module allumé : le même écran s’affiche', async () => {

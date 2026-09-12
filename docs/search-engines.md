@@ -48,7 +48,7 @@ Ces garanties sont vérifiées par la **suite de parité**
 
 ```bash
 docker compose --profile elasticsearch up -d elasticsearch
-SEARCH_PARITY=1 MEILI_MASTER_KEY=meili_dev_master_key \
+SEARCH_PARITY=1 MEILI_MASTER_KEY='<la clé de votre .env>' \
   npx vitest run src/search/search-parity.spec.ts   # depuis apps/api
 ```
 

@@ -42,6 +42,7 @@ import {
 } from './dto/two-factor.dto';
 import { clearSessionCookie, setSessionCookie, tokenFromCookieHeader } from './session-cookie';
 import { AuditService } from '../audit/audit.service';
+import { sansDetail } from '../accounts/mail/mail-outcome';
 import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { ClientIp } from '../audit/client-ip.decorator';
 
@@ -240,8 +241,17 @@ export class AuthController {
     const tenant = this.requireTenant(tenantOrNull);
     const db = this.prisma.forTenant(tenant.slug);
     const userId = this.verifyStageToken(dto.twoFactorToken, 'twofactor', tenant.slug);
-    await this.twoFactor.sendEmailOtp(db, userId);
-    return { sent: true };
+    // ⚠ ON REND CE QUI EST ARRIVÉ, PLUS `{ sent: true }` ÉCRIT EN DUR.
+    //
+    // C'est le REPLI de double authentification : quelqu'un qui a perdu son
+    // appareil TOTP n'a plus que ce chemin. Un faux « Code envoyé par email ✓ »
+    // devant une boîte qui reste vide l'enferme dehors, sans qu'il puisse
+    // savoir pourquoi. Relevé par la session frontend le 12 septembre 2026.
+    //
+    // `sansDetail` retire le message du serveur SMTP : l'appelant n'a franchi
+    // que l'étape du mot de passe, il n'est pas authentifié. Le motif lui
+    // suffit pour savoir quoi faire ; le détail est au journal.
+    return sansDetail(await this.twoFactor.sendEmailOtp(db, userId));
   }
 
   @Post('logout')

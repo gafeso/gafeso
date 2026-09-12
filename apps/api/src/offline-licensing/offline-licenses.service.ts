@@ -10,6 +10,7 @@ import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
 import { AuthzService } from '../auth/authz.service';
 import { FONCTIONS } from '../auth/functions';
+import { sousEmbargo } from '../access-control/access-control.matching';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { AccessControlService } from '../access-control/access-control.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -66,10 +67,27 @@ export class OfflineLicensesService {
     userId: string,
     recordId: string,
   ): Promise<boolean> {
+    // ⚠ L'EMBARGO S'APPLIQUE À TOUT LE MONDE ICI, PERSONNEL COMPRIS — et c'est
+    // la seule surface où j'ai écarté le contournement `document.lire`.
+    //
+    // Lire une thèse sous embargo EN LIGNE est le métier d'un bibliothécaire :
+    // il la catalogue, il vérifie que le fichier est le bon. L'emporter HORS
+    // LIGNE est autre chose — le téléphone garde le blob ET la clé pour toute
+    // la durée du bail, et une licence émise ne se rappelle pas. C'est
+    // exactement le cas irrattrapable que l'embargo existe pour empêcher.
+    //
+    // Décision prise seule et rapportée : elle se défait en retirant ces
+    // quatre lignes.
+    const embargo = await db.biblioRecord.findUnique({
+      where: { id: recordId },
+      select: { embargoUntil: true },
+    });
+    if (sousEmbargo(embargo?.embargoUntil, new Date())) return false;
+
     const readsAll = await this.authz.hasFunction(db, userId, FONCTIONS.DOCUMENT_LIRE);
     if (readsAll) return true;
     const ctx = await this.access.buildStudentContext(tenant, db, userId);
-    return (await this.access.getRecordAccessStatus(ctx, recordId)).granted;
+    return (await this.access.getRecordAccessStatus(db, ctx, recordId)).granted;
   }
 
   async issue(
@@ -346,7 +364,7 @@ export class OfflineLicensesService {
     const out: Array<{ docId: string; title: string; fileFormat: string }> = [];
     for (const copy of copies) {
       const granted =
-        readsAll || (await this.access.getRecordAccessStatus(ctx!, copy.recordId)).granted;
+        readsAll || (await this.access.getRecordAccessStatus(db, ctx!, copy.recordId)).granted;
       if (granted) {
         out.push({ docId: copy.recordId, title: copy.record.title, fileFormat: copy.fileFormat });
       }

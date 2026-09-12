@@ -16,6 +16,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBELLES } from '@/lib/libelles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ImportNoticesPage from '@/app/admin/outils/import-notices/page';
 
@@ -69,6 +70,19 @@ async function importerUnFichier(container: HTMLElement) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('Ce que l’avis de valeurs non reconnues DOIT dire', () => {
+  /**
+   * ⚠ SA PROPRIÉTÉ, PAS SA VALEUR, et la première moitié est la plus fragile :
+   * sans « les notices SONT importées », l'avis se lit comme un échec d'import.
+   * Un test qui compare au libellé laisserait passer « Domaine non reconnu. »,
+   * qui dit vrai et fait croire que tout est perdu.
+   */
+  it('il rassure sur l’import AVANT de dire ce qui manque', () => {
+    expect(LIBELLES.importNotices.valeursNonReconnuesTexte).toMatch(/bien importées/i);
+    expect(LIBELLES.importNotices.valeursNonReconnuesTexte).toMatch(/rien n’est perdu|conservée/i);
+  });
 });
 
 describe("compte rendu d'import MARC", () => {

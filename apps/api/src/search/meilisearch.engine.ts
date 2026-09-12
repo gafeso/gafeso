@@ -6,6 +6,7 @@ import {
   SearchEngine,
   SearchParams,
   SearchResult,
+  MAX_TOTAL_HITS,
   SEARCHABLE_ATTRIBUTES,
   SORTABLE_ATTRIBUTES,
 } from './search-engine';
@@ -39,6 +40,9 @@ export class MeilisearchEngine implements SearchEngine {
       sortableAttributes: [...SORTABLE_ATTRIBUTES],
       // Ordre = poids de pertinence (règle « attribute » de Meilisearch).
       searchableAttributes: [...SEARCHABLE_ATTRIBUTES],
+      // ⚠ SANS CETTE LIGNE, `totalHits` MENT AU-DELÀ DE 1 000 (le défaut de
+      // Meilisearch). Voir MAX_TOTAL_HITS : mesures de coût et motif du chiffre.
+      pagination: { maxTotalHits: MAX_TOTAL_HITS },
     });
   }
 
@@ -71,7 +75,17 @@ export class MeilisearchEngine implements SearchEngine {
       page: res.page,
       totalPages: res.totalPages,
       facetDistribution: (res.facetDistribution as SearchResult['facetDistribution']) ?? {},
+      // ⚠ `>=` ET NON `===` : Meilisearch écrête À la valeur, et une réponse
+      // exactement égale au plafond est indiscernable d'une réponse écrêtée.
+      // Dans le doute on annonce le doute — une réponse dite « au moins 100 000 »
+      // alors qu'il y en a pile 100 000 reste vraie ; l'inverse ne l'est pas.
+      totalPlafonne: (res.totalHits ?? 0) >= MAX_TOTAL_HITS,
     };
+  }
+
+  async countDocuments(slug: string): Promise<number> {
+    const stats = await this.client.index(this.indexUid(slug)).getStats();
+    return stats.numberOfDocuments;
   }
 
   async health(): Promise<boolean> {

@@ -13,6 +13,7 @@ import {
   ReminderType,
   ReminderVars,
 } from './reminder-templates';
+import { DATE_CORRECTIF_STATUT_ENVOI, statutFiable } from './fiabilite-du-statut';
 import { UpdateReminderSettingsDto } from './dto/update-reminder-settings.dto';
 
 /** Jeu de données d'exemple pour l'aperçu des modèles. */
@@ -138,6 +139,23 @@ export class RemindersService {
   /**
    * Journal des rappels envoyés, borné au tenant courant, paginé et filtrable
    * (type, statut). Lecture seule — la table est dénormalisée, aucune jointure.
+   *
+   * ⚠ CHAQUE LIGNE DIT SI SON STATUT EST FIABLE — backlog n°26.
+   *
+   * Jusqu'au 12 septembre 2026, `MailService.send()` sortait normalement quand
+   * aucun serveur de courriel n'était configuré : le moteur de rappels écrivait
+   * alors `status: 'SENT'` sur un envoi qui n'avait pas eu lieu, et l'affichait
+   * en statistiques. Le mensonge est persisté.
+   *
+   * ⚠ ON NE LE RATTRAPE PAS, et c'est la décision : reconstruire a posteriori
+   * ce qui a réellement été envoyé est impossible — il faudrait savoir si un
+   * transport existait à cet instant-là, ce que rien n'a enregistré. Un
+   * rattrapage inventé serait pire que l'aveu.
+   *
+   * ⚠ MAIS LA COUPURE EST MARQUÉE, parce qu'« une donnée fausse dont on sait
+   * qu'elle est fausse vaut mieux qu'une donnée fausse qu'on croit vraie ».
+   * `fiabiliteGarantie` est DÉRIVÉ d'une date, pas d'une colonne : aucune
+   * migration, et rien à tenir à jour.
    */
   async listLog(
     tenantId: string,
@@ -171,7 +189,18 @@ export class RemindersService {
         },
       }),
     ]);
-    return { total, page, totalPages: Math.ceil(total / limit) || 1, entries };
+    return {
+      total,
+      page,
+      totalPages: Math.ceil(total / limit) || 1,
+      entries: entries.map((e) => ({ ...e, fiabiliteGarantie: statutFiable(e.createdAt) })),
+      /**
+       * La coupure, rendue telle quelle pour que l'écran puisse l'ÉCRIRE au
+       * lieu de la coder en dur de son côté — deux sources pour une même date
+       * finiraient par diverger.
+       */
+      statutsFiablesDepuis: DATE_CORRECTIF_STATUT_ENVOI.toISOString(),
+    };
   }
 
   /** Rend un modèle (sujet + corps) avec un jeu de données d'exemple. */
@@ -399,11 +428,35 @@ export class RemindersService {
       jours_retard: plan.joursRetard,
     };
     try {
-      await this.mail.sendCirculationReminder(
+      const resultat = await this.mail.sendCirculationReminder(
         email,
         renderTemplate(tpl.subject, vars),
         renderTemplate(tpl.body, vars),
       );
+      // ⚠ `status: 'SENT'` ÉTAIT ÉCRIT SUR UN NON-ÉVÉNEMENT.
+      //
+      // `MailService` traitait « SMTP absent » comme un envoi réussi : aucune
+      // exception, donc ce chemin marquait SENT et rendait 'sent'. Le mensonge
+      // était PERSISTÉ dans `reminder_log` puis AFFICHÉ dans les statistiques
+      // de l'école — un bibliothécaire lisait « rappels envoyés » pour des
+      // courriels qui n'étaient jamais partis, et les adhérents n'étaient
+      // jamais prévenus de leur retard.
+      //
+      // ⚠ Avec `smtp_absent`, le rappel reste donc en FAILED et sera retenté à
+      // chaque passage. C'est voulu : le jour où la messagerie est configurée,
+      // il part. L'alternative — le marquer envoyé — est le mensonge qu'on
+      // corrige.
+      if (!resultat.sent) {
+        const motif = `${resultat.reason}${resultat.detail ? ` — ${resultat.detail}` : ''}`;
+        await this.prisma.reminderLog.update({
+          where,
+          data: { ...snapshot, recipientEmail: email, status: 'FAILED', error: motif.slice(0, 500) },
+        });
+        this.logger.warn(
+          `Rappel NON envoyé à ${email} (prêt ${checkout.id}, ${plan.type}) : ${motif} — sera retenté.`,
+        );
+        return 'failed';
+      }
       await this.prisma.reminderLog.update({
         where,
         data: { ...snapshot, recipientEmail: email, status: 'SENT', error: null },

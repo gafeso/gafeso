@@ -157,12 +157,26 @@ export class HoldsService {
         continue;
       }
       try {
-        await this.mail.sendHoldAvailable(email, {
+        const resultat = await this.mail.sendHoldAvailable(email, {
           name: user ? `${user.firstName} ${user.lastName}`.trim() : null,
           title: hold.record.title,
           pickupDays,
           expiryDate: hold.expiryDate,
         });
+        // ⚠ `sent += 1` COMPTAIT DES COURRIELS JAMAIS PARTIS. `MailService`
+        // traitait « SMTP absent » comme un succès : le compteur enflait, et
+        // `notifiedAt` restait posé — donc le lecteur n'était jamais prévenu
+        // que son document l'attendait, et le guichet croyait l'avoir averti.
+        // Même traitement que l'échec SMTP juste en dessous : on relâche la
+        // réservation pour retenter.
+        if (!resultat.sent) {
+          await db.hold.updateMany({ where: { id: hold.id }, data: { notifiedAt: null } });
+          this.logger.warn(
+            `Email de réservation NON envoyé à ${email} (hold ${hold.id}) : ` +
+              `${resultat.reason}${resultat.detail ? ` — ${resultat.detail}` : ''} — sera retenté.`,
+          );
+          continue;
+        }
         sent += 1;
       } catch (error) {
         // Échec SMTP : on relâche la réservation pour retenter plus tard.

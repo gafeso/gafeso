@@ -38,12 +38,21 @@ describe('registre — la déclaration', () => {
   });
 
   it('⚠ AUCUN module inerte : les activables sont ceux que P4 rend réellement désactivables', () => {
-    // Déclarer `depot`, `moissonnage`, `identifiants`, `statistiques` ou
+    // Déclarer `moissonnage`, `identifiants`, `statistiques` ou
     // `lecture-hors-ligne` afficherait dans l'écran d'activation des
     // interrupteurs qui n'éteignent rien. Le front affiche CE QUE L'API
     // DÉCLARE : la déclaration est donc la source unique, et une case de plus
     // ici est une case inerte de plus à l'écran.
-    expect(MODULES_ACTIVABLES).toEqual(['amendes', 'interoperabilite', 'rappels']);
+    //
+    // ⚠ `depot` A REJOINT LA LISTE le 12 septembre 2026, et il en était cité
+    // comme CONTRE-EXEMPLE : le circuit existe depuis P6 — douze routes, un
+    // écran « Mon dépôt », un chiffrement à l'ingestion. Il n'était donc plus
+    // inerte, et son absence avait un coût mesuré par la session front :
+    // `depot.deposer` est sur le rôle SYSTÈME Étudiant, donc seedé dans CHAQUE
+    // école, quand `depot.valider` n'est sur aucun. Aucune école n'était « sans
+    // dépôt » — toutes étaient à moitié ouvertes, et aucune ne pouvait
+    // l'éteindre. Un circuit qu'on ne peut pas éteindre est un droit imposé.
+    expect(MODULES_ACTIVABLES).toEqual(['amendes', 'interoperabilite', 'depot', 'rappels']);
   });
 
   it('toute dépendance déclarée existe', () => {

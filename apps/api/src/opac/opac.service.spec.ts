@@ -5,8 +5,14 @@ import { StudentAccessContext } from '../access-control/access-control.matching'
 
 /** OpacService injecte PrismaService depuis les chiffres publics ; ces cas-ci
  *  ne l'utilisent pas, un objet inerte suffit. */
-function fauxPrisma() {
-  return { forTenant: () => ({}) };
+/**
+ * ⚠ `biblioRecord.count` N'EST PAS DÉCORATIF : depuis le 11 septembre 2026, le
+ * total de la constellation vient de la BASE et non du moteur, dont le
+ * `totalHits` plafonne à 1 000. Le paramètre porte le nombre de lignes de
+ * l'école simulée. Voir `plafond-du-moteur.spec.ts`.
+ */
+function fauxPrisma(notices = 0) {
+  return { forTenant: () => ({ biblioRecord: { count: async () => notices } }) };
 }
 
 function makeSearch(result: Partial<Record<string, unknown>> = {}) {
@@ -91,7 +97,9 @@ describe('OpacService — constellation', () => {
       totalHits: 6,
       facetDistribution: { category: { droit: 2, medecine: 3, informatique: 1 } },
     });
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any);
+    // Le fonds compte 6 lignes en base, et le moteur en indexe 6 : les deux
+    // sources s'accordent, cas nominal.
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma(6) as any);
 
     const result = await service.constellation('zinda');
 
@@ -220,12 +228,16 @@ describe('OpacService — URL de lecture en ligne', () => {
     const accessControl = makeAccessControl({ granted: true });
     const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
-      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
+      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
     const result = await service.getReadUrl(db, 'rec-1', ctx);
 
-    expect(accessControl.getRecordAccessStatus).toHaveBeenCalledWith(ctx, 'rec-1');
+    // ⚠ LE CLIENT TENANT EST PASSÉ, et ce n'est pas un détail d'appel : depuis
+    // P6-4, la décision lit l'embargo sur la notice, donc dans le schéma de
+    // l'école. Ce paramètre est OBLIGATOIRE exprès — optionnel, l'embargo
+    // aurait été sauté par simple omission.
+    expect(accessControl.getRecordAccessStatus).toHaveBeenCalledWith(db, ctx, 'rec-1');
     expect(digitalCopy.getDownloadUrl).toHaveBeenCalledWith(db, 'rec-1', 300);
     expect(result).toEqual({
       url: 'https://minio.local/signed-read-url',
@@ -249,7 +261,7 @@ describe('OpacService — URL de lecture en ligne', () => {
     const accessControl = makeAccessControl({ granted: false, message: 'peu importe' });
     const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
-      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
+      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
     const result = await service.getReadUrl(db, 'rec-1', null);
@@ -269,7 +281,7 @@ describe('OpacService — URL de lecture en ligne', () => {
     });
     const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any);
     const db = {
-      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ title: 'Droit foncier' }) },
+      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
     await expect(service.getReadUrl(db, 'rec-1', ctx)).rejects.toBeInstanceOf(

@@ -4,7 +4,7 @@ import { HoldsService } from './holds.service';
 
 const prismaStub = { tenantSettings: { findUnique: vi.fn().mockResolvedValue({ holdPickupDays: 7 }) } };
 
-function makeService(mail: any = { sendHoldAvailable: vi.fn().mockResolvedValue(undefined) }, circulation: any = {}) {
+function makeService(mail: any = { sendHoldAvailable: vi.fn().mockResolvedValue({ sent: true }) }, circulation: any = {}) {
   return new HoldsService(prismaStub as any, mail as any, circulation as any, {} as any);
 }
 
@@ -59,7 +59,7 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
 
   let mail: any;
   beforeEach(() => {
-    mail = { sendHoldAvailable: vi.fn().mockResolvedValue(undefined) };
+    mail = { sendHoldAvailable: vi.fn().mockResolvedValue({ sent: true }) };
   });
 
   it('envoie une fois et pose notifiedAt', async () => {
@@ -75,6 +75,22 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
     const res = await makeService(mail).notifyAvailable(db, 't1', new Date('2026-07-19T00:00:00Z'));
     expect(res.sent).toBe(0);
     expect(mail.sendHoldAvailable).not.toHaveBeenCalled();
+  });
+
+  it('⚠ SANS SMTP : notifiedAt RELÂCHÉ et rien n’est compté', async () => {
+    // LE défaut du 12 septembre 2026. `MailService` traitait « SMTP absent »
+    // comme un succès : `sent += 1` comptait un courriel jamais parti, et
+    // `notifiedAt` restait posé — donc le lecteur n'était JAMAIS prévenu que
+    // son document l'attendait, et le guichet croyait l'avoir averti. La
+    // réservation expirait sans que personne ne vienne la chercher.
+    const muet = { sendHoldAvailable: vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_absent' }) };
+    const db = makeDb(null);
+
+    const res = await makeService(muet).notifyAvailable(db, 't1', new Date('2026-07-18T00:00:00Z'));
+
+    expect(res.sent).toBe(0);
+    // Relâché : le prochain passage retentera, comme pour une panne SMTP.
+    expect(db.row.notifiedAt).toBeNull();
   });
 
   it('échec SMTP : relâche notifiedAt pour retenter', async () => {

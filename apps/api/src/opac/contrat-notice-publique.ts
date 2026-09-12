@@ -45,6 +45,17 @@ export const COLONNES_SERVIES = [
   'publicationCity',
   'defenseUniversity',
   'defensePlace',
+  /**
+   * ⚠ SERVI, ET C'EST LE POINT DE L'EMBARGO (P6-4).
+   *
+   * « Les métadonnées sont visibles, le fichier non. » Une notice dont le
+   * fichier refuse SANS DIRE POURQUOI serait exactement le faux silencieux que
+   * ce dépôt passe son temps à corriger : le lecteur conclurait à une panne, et
+   * réessaierait. Servir la date, c'est répondre à « pourquoi ? » avant qu'on
+   * la pose — et une thèse sous embargo reste ainsi CITABLE, ce qui est l'objet
+   * même du dépôt.
+   */
+  'embargoUntil',
   'summary',
   'coverUrl',
   'category',

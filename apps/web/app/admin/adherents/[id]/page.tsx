@@ -55,6 +55,38 @@ export default function FicheAdherentPage() {
   const [formulaire, setFormulaire] = useState<Formulaire | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmeSuppression, setConfirmeSuppression] = useState(false);
+  /** Le prêt dont on confirme la perte. `null` = aucune confirmation ouverte. */
+  const [pertePret, setPertePret] = useState<{ checkoutId: string; title: string; itemBarcode: string } | null>(null);
+  const [perteEnCours, setPerteEnCours] = useState(false);
+  /**
+   * ⚠ `null` TANT QU'IL N'Y A RIEN À DIRE. Le cas courant est ZÉRO réservation
+   * orpheline — une autre copie existe. Afficher « 0 réservation touchée »
+   * serait du bruit sur un écran où l'on vient de faire un geste irréversible.
+   */
+  const [fileNonServable, setFileNonServable] = useState<number | null>(null);
+
+  async function declarerPerdu(pret: { checkoutId: string; title: string }) {
+    setError(null);
+    setPerteEnCours(true);
+    try {
+      const res = await api<{ title: string; reservationsSansExemplaire: number }>(
+        `/circulation/checkouts/${pret.checkoutId}/perte`,
+        { method: 'POST' },
+        getToken(),
+      );
+      setPertePret(null);
+      setNotice(LIBELLES.perte.faite(res.title));
+      // ⚠ Rendu par l'API, jamais deviné : le front ne sait pas combien
+      // d'exemplaires circulent encore, et le supposer serait un faux.
+      setFileNonServable(res.reservationsSansExemplaire > 0 ? res.reservationsSansExemplaire : null);
+      // On RELIT : le prêt a disparu des prêts en cours, et l'amende est figée.
+      await charger();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : LIBELLES.perte.echec);
+    } finally {
+      setPerteEnCours(false);
+    }
+  }
 
   const charger = useCallback(async () => {
     setError(null);
@@ -254,6 +286,18 @@ export default function FicheAdherentPage() {
       {notice && <Alert tone="success" className="mt-4">{notice}</Alert>}
       {error && <Alert tone="error" className="mt-4">{error}</Alert>}
 
+      {/*
+        ⚠ INFORMATION, PAS ALERTE, et rien du tout quand il n'y a rien. Une file
+        que plus aucun exemplaire ne peut servir est un état qu'un rachat
+        résout — la bibliothécaire est seule à pouvoir en décider. Le ton de
+        l'anomalie qualifierait de faute le geste qu'on vient de rendre possible.
+      */}
+      {fileNonServable !== null && (
+        <p className="mt-4 rounded-md border border-line bg-paper px-3 py-2 text-sm text-muted">
+          {LIBELLES.perte.fileNonServable(fileNonServable)}
+        </p>
+      )}
+
       {/* ⚠ La confirmation NOMME la personne. « Êtes-vous sûr ? » ne dit pas
           de qui il s'agit, et c'est précisément ce qu'il faut relire. */}
       {confirmeSuppression && (
@@ -388,6 +432,51 @@ export default function FicheAdherentPage() {
                     {T.amendeCourue(francs(pret.accruedFineXof))}
                   </p>
                 )}
+
+                {/*
+                  ⚠ LA PERTE SE DÉCLARE ICI, sur un compte qu'on regarde — pas
+                  au guichet. Une bibliothécaire déclare une perte en consultant
+                  un dossier, pas en scannant un code-barres qu'elle n'a pas :
+                  le document perdu n'est plus là pour être scanné.
+                */}
+                {pertePret?.checkoutId === pret.checkoutId ? (
+                  <Card className="mt-3 border-red-200 !p-3">
+                    <p className="text-sm font-semibold">
+                      {LIBELLES.perte.confirmation(pret.title, pret.itemBarcode)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        className="min-h-11"
+                        disabled={perteEnCours}
+                        onClick={() => void declarerPerdu(pret)}
+                      >
+                        {LIBELLES.perte.confirmer}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="min-h-11"
+                        disabled={perteEnCours}
+                        onClick={() => setPertePret(null)}
+                      >
+                        {T.annuler}
+                      </Button>
+                    </div>
+                  </Card>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    className="mt-3 min-h-11"
+                    onClick={() =>
+                      setPertePret({
+                        checkoutId: pret.checkoutId,
+                        title: pret.title,
+                        itemBarcode: pret.itemBarcode,
+                      })
+                    }
+                  >
+                    {LIBELLES.perte.declarer}
+                  </Button>
+                )}
               </Card>
             );
           })}
@@ -403,7 +492,7 @@ export default function FicheAdherentPage() {
       {situation &&
         (amendesActives === false
           ? situation.fines.recordedXof > 0
-          : situation.fines.totalXof > 0) && (
+          : situation.fines.recordedXof > 0 || situation.fines.accruingXof > 0) && (
           <>
             <h2 className="mt-8 font-serif text-xl font-bold">{T.amendes}</h2>
             {amendesActives === false ? (
@@ -414,9 +503,39 @@ export default function FicheAdherentPage() {
                 <p className="mt-1 text-sm text-muted">{LIBELLES.amendes.conservees}</p>
               </>
             ) : (
+              /*
+                ⚠ CHAQUE GRANDEUR NE S'AFFICHE QUE SI ELLE EXISTE. Le détachement
+                de `totalXof` a rendu ce cas atteignable : un adhérent sans cumul
+                mais avec un retard du jour affichait « 0 FCFA constatées aux
+                retours passés · 450 FCFA courant ». Le zéro n'apprend rien et se
+                lit comme un compte à zéro — c'est le badge « En retard · 0 FCFA »
+                déjà corrigé une fois sur cet écran.
+              */
               <p className="mt-2 text-sm text-muted">
-                {francs(situation.fines.recordedXof)} {T.amendesConstatees} ·{' '}
-                {francs(situation.fines.accruingXof)} {T.amendesCourantes}
+                {[
+                  situation.fines.recordedXof > 0
+                    ? `${francs(situation.fines.recordedXof)} ${T.amendesConstatees}`
+                    : null,
+                  situation.fines.accruingXof > 0
+                    ? `${francs(situation.fines.accruingXof)} ${T.amendesCourantes}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+            {/*
+              ⚠ C'EST ICI QUE LA PHRASE COMPTE LE PLUS. `Checkout.fineAmount`
+              n'est jamais réduit — aucune route ne consigne un encaissement.
+              La fiche d'adhérent est l'écran où l'on encaisse en regardant un
+              compte : sans cette ligne, le même montant revu le lendemain se
+              lit comme un encaissement perdu, et on le réclame deux fois.
+
+              Ne s'affiche que s'il y a un cumul : rien à détromper sinon.
+            */}
+            {situation.fines.recordedXof > 0 && (
+              <p className="mt-1 text-xs text-muted">
+                {LIBELLES.amendes.aucunEncaissementEnregistre}
               </p>
             )}
           </>

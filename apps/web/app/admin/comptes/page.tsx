@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
+import { LIBELLES } from '@/lib/libelles';
 import { useMyFunctions } from '@/lib/functions';
 import { Alert, Badge, Button, Card, Input, Select } from '@/components/ui';
 
@@ -61,6 +62,9 @@ interface AccountsResponse {
   users: Account[];
 }
 
+/** Lignes par page — la valeur que l'écran demandait déjà, désormais assumée. */
+const PAR_PAGE = 100;
+
 const STATUS_TABS = [
   { key: 'PENDING', label: 'En attente' },
   { key: 'ACTIVE', label: 'Actifs' },
@@ -88,6 +92,7 @@ export default function ComptesPage() {
   const [status, setStatus] = useState('PENDING');
   const [q, setQ] = useState('');
   const [data, setData] = useState<AccountsResponse | null>(null);
+  const [numeroPage, setNumeroPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /**
@@ -137,10 +142,11 @@ export default function ComptesPage() {
       .catch(() => setAssignableRoles([]));
   }, [canManageAccounts]);
 
-  const load = useCallback(async (statusFilter: string, term: string) => {
+  const load = useCallback(async (statusFilter: string, term: string, page: number) => {
     setError(null);
     try {
-      const qs = new URLSearchParams({ limit: '100' });
+      const qs = new URLSearchParams({ limit: String(PAR_PAGE) });
+      qs.set('page', String(page));
       if (statusFilter) qs.set('status', statusFilter);
       if (term) qs.set('q', term);
       setData(await api<AccountsResponse>(`/accounts?${qs}`, {}, getToken()));
@@ -150,13 +156,25 @@ export default function ComptesPage() {
   }, []);
 
   useEffect(() => {
-    void load(status, q);
+    void load(status, q, numeroPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, numeroPage]);
+
+  /**
+   * ⚠ CHANGER D'ONGLET OU CHERCHER REVIENT À LA PREMIÈRE PAGE. Sans ça, passer
+   * de « Tous » page 4 à « En attente » demande la page 4 d'un résultat qui n'en
+   * a qu'une, et l'écran affiche une liste vide sur un onglet qui compte
+   * soixante-huit comptes. Le même défaut que sur le catalogue et l'index des
+   * auteurs : il se reproduit partout où un filtre et une pagination coexistent.
+   */
+  useEffect(() => {
+    setNumeroPage(1);
   }, [status]);
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
-    void load(status, q);
+    setNumeroPage(1);
+    void load(status, q, 1);
   }
 
   /**
@@ -207,7 +225,7 @@ export default function ComptesPage() {
           mailPhrase(res?.mail),
       );
       if (res?.mail && res.mail.sent === false) await showLink(account);
-      await load(status, q);
+      await load(status, q, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Activation impossible.');
     } finally {
@@ -235,7 +253,7 @@ export default function ComptesPage() {
       }
       setStaff({ email: '', firstName: '', lastName: '', role: 'LIBRARIAN' });
       setShowStaffForm(false);
-      await load(status, q);
+      await load(status, q, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Création impossible.');
     } finally {
@@ -257,7 +275,7 @@ export default function ComptesPage() {
           newStatus === 'SUSPENDED' ? 'suspendu' : 'réactivé'
         }.`,
       );
-      await load(status, q);
+      await load(status, q, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Opération impossible.');
     }
@@ -298,7 +316,7 @@ export default function ComptesPage() {
       );
       setNotice(`Compte de ${editForm.firstName} ${editForm.lastName} mis à jour.`);
       setEditingId(null);
-      await load(status, q);
+      await load(status, q, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Modification impossible.');
     } finally {
@@ -314,7 +332,7 @@ export default function ComptesPage() {
       await api(`/accounts/${account.id}`, { method: 'DELETE' }, getToken());
       setNotice(`Compte de ${account.firstName} ${account.lastName} supprimé définitivement.`);
       setConfirmDelete(null);
-      await load(status, q);
+      await load(status, q, numeroPage);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Suppression impossible.');
       setConfirmDelete(null);
@@ -523,7 +541,14 @@ export default function ComptesPage() {
 
       <div className="mt-5 flex gap-1 border-b border-line" role="tablist">
         {STATUS_TABS.map((tab) => {
-          const count = tab.key ? counts[tab.key] : data?.total;
+          // ⚠ « Tous » NE LIT PAS `data.total` : ce total est celui de la requête
+          // COURANTE, donc filtrée. Il affichait « Tous(68) » quand on regardait
+          // les comptes en attente — le nombre de l'onglet d'à côté. `counts`
+          // porte la ventilation complète et ne bouge pas avec le filtre ;
+          // somme de ses valeurs plutôt que de deux clés nommées, pour qu'un
+          // statut ajouté demain entre dans le total sans qu'on y pense.
+          const total = Object.values(counts).reduce((a, b) => a + b, 0);
+          const count = tab.key ? counts[tab.key] : (data ? total : undefined);
           return (
             <button
               key={tab.key || 'all'}
@@ -687,6 +712,41 @@ export default function ComptesPage() {
           </tbody>
         </table>
       </div>
+
+      {/*
+        ⚠ CENT LIGNES SUR 481, SANS UN MOT : c'est ce que cet écran faisait, et
+        c'est la même liste tronquée que l'index des auteurs à la même semaine.
+        Le compteur dit le total, le parcours mène au reste — et il ne s'affiche
+        que s'il y a plus d'une page, sinon ce serait un bouton sans effet.
+      */}
+      {data && (
+        <p className="mt-3 text-sm text-muted">
+          {LIBELLES.comptes.compte(data.total)}
+        </p>
+      )}
+      {data && data.total > PAR_PAGE && (
+        <div className="mt-2 flex items-center justify-center gap-3">
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            disabled={numeroPage <= 1}
+            onClick={() => setNumeroPage((n) => Math.max(1, n - 1))}
+          >
+            {LIBELLES.comptes.pagePrecedente}
+          </Button>
+          <span className="text-sm text-muted">
+            {LIBELLES.comptes.pageSur(numeroPage, Math.ceil(data.total / PAR_PAGE))}
+          </span>
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            disabled={numeroPage >= Math.ceil(data.total / PAR_PAGE)}
+            onClick={() => setNumeroPage((n) => n + 1)}
+          >
+            {LIBELLES.comptes.pageSuivante}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -12,13 +12,22 @@ function p2002() {
 }
 
 // ── Mocks ────────────────────────────────────────────────────
+/**
+ * ⚠ LA DOUBLURE REND MAINTENANT UNE ISSUE, comme le service réel.
+ *
+ * Elle rendait `undefined` — plus permissive que `MailService`, donc aveugle
+ * là où il décide. C'est le même défaut que le `select` de l'entrepôt OAI et
+ * que la doublure du plafond de recherche : depuis le 12 septembre 2026,
+ * `MailService` rend un `MailOutcome` et ne jette plus pour une panne SMTP.
+ */
 function makeMail(available = true) {
+  const issue = available
+    ? { sent: true as const }
+    : { sent: false as const, reason: 'smtp_absent' as const };
   return {
-    // `available` reflète la présence d'un SMTP configuré. Sans lui, le service
-    // ne tente même pas l'envoi et renvoie { sent:false, reason:'smtp_absent' }.
     available,
-    sendSetPasswordLink: vi.fn().mockResolvedValue(undefined),
-    notifyManagerPendingAccount: vi.fn().mockResolvedValue(undefined),
+    sendSetPasswordLink: vi.fn().mockResolvedValue(issue),
+    notifyManagerPendingAccount: vi.fn().mockResolvedValue(issue),
   };
 }
 
@@ -218,7 +227,7 @@ describe('AccountsService — création de compte (2 chemins)', () => {
     expect(result.mail).toEqual({ sent: true });
   });
 
-  it('SANS SMTP : n’essaie même pas d’envoyer, et le DIT', async () => {
+  it('SANS SMTP : le compte est créé, et l’absence d’envoi est DITE', async () => {
     // Le compte doit être créé quand même — le produit fonctionne sans mail,
     // il est seulement moins pratique. Mais l'appelant doit le savoir pour
     // proposer le lien à l'administrateur.
@@ -231,7 +240,14 @@ describe('AccountsService — création de compte (2 chemins)', () => {
     const result = await svc.register(db, { ...baseDto });
 
     expect(result.status).toBe('ACTIVE');
-    expect(m.sendSetPasswordLink).not.toHaveBeenCalled();
+    // ⚠ L'ANCIENNE ASSERTION ÉTAIT `not.toHaveBeenCalled()`, et elle portait une
+    // vraie propriété : ne pas tenter un envoi qu'on sait impossible. Elle la
+    // portait au MAUVAIS NIVEAU. `sendSetPasswordSafely` consultait
+    // `mail.available` avant d'appeler ; depuis que `MailService` rend une
+    // issue, c'est LUI qui court-circuite — `send()` sort sur
+    // `!this.transporter` sans ouvrir de connexion. La garantie « aucune
+    // tentative réseau » est donc intacte, un cran plus bas, et ce qui compte
+    // pour l'appelant est l'ISSUE.
     expect(result.mail).toEqual({ sent: false, reason: 'smtp_absent' });
   });
 
@@ -240,7 +256,11 @@ describe('AccountsService — création de compte (2 chemins)', () => {
     db.expectedStudent.findUnique.mockResolvedValue({
       id: 'es-1', matricule: baseDto.matricule, email: baseDto.email, claimed: false,
     });
-    mail.sendSetPasswordLink.mockRejectedValue(new Error('certificate mismatch'));
+    // `MailService` ne JETTE plus : il rend l'issue. (Le filet `try` de
+    // `sendSetPasswordSafely` couvre encore l'inattendu — éprouvé plus bas.)
+    mail.sendSetPasswordLink.mockResolvedValue({
+      sent: false, reason: 'smtp_error', detail: 'certificate mismatch',
+    });
 
     const result = await service.register(db, { ...baseDto });
 

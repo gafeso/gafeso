@@ -276,6 +276,8 @@ const QUALIFICATIFS = [
   '— perspectives contemporaines', 'et développement local', '— travaux dirigés',
 ];
 const TYPES = ['ouvrage', 'ouvrage', 'ouvrage', 'these', 'memoire', 'memoire', 'publication'];
+/** Villes de soutenance — les mêmes que celles du fonds, pour rester plausible. */
+const VILLES_SOUTENANCE = ['Ouagadougou', 'Bobo-Dioulasso', 'Koudougou', 'Dakar', 'Abidjan', 'Bamako'];
 
 /** Générateur congruentiel : reproductible, sans dépendance. */
 function tirage(graine) {
@@ -300,11 +302,39 @@ function genererNotices(combien) {
     // Titre = clé naturelle de l'idempotence du seed : jamais deux fois le même.
     if (vus.has(titre)) continue;
     vus.add(titre);
+    const recordType = pioche(TYPES);
+    // ⚠ UNE SOUTENANCE SE DÉCRIT ENTIÈREMENT, sinon elle ne démontre rien.
+    // `cataloging.service` REFUSE une thèse ou un mémoire sans université de
+    // soutenance et sans directeur ; le seed écrit en direct par Prisma et
+    // contournait donc la règle du produit. Mesuré le 12 septembre 2026 sur
+    // l'école de démonstration : 162 travaux académiques, 45 sans université,
+    // et ZÉRO directeur. Le fonds contenait des notices que le produit lui-même
+    // rejetterait — et ETD-MS, livré, n'avait rien à montrer : toute sa valeur
+    // pour un moissonneur de thèses tient à la distinction advisor / author.
+    const academique = recordType === 'these' || recordType === 'memoire';
+    const ville = pioche(VILLES_SOUTENANCE);
     notices.push({
       title: titre,
       author: `${pioche(NOMS)}, ${pioche(PRENOMS)}`,
+      // ⚠ `profile` DÉCIDE DE L'EXPOSITION ETD-MS : `exposableEnEtdms` ne retient
+      // que « academique », et la colonne vaut « bibliographique » par défaut.
+      // Sans cette ligne, une installation neuve exporterait ZÉRO thèse.
+      profile: academique ? 'academique' : 'bibliographique',
+      // Le directeur est porté ici et transformé en CONTRIBUTEUR plus bas : la
+      // colonne `author` ne connaît que l'auteur principal.
+      directeur: academique ? `${pioche(NOMS)}, ${pioche(PRENOMS)}` : null,
+      defenseUniversity: academique ? `Université de ${ville}` : null,
+      defensePlace: academique ? ville : null,
+      // ⚠ LES DEUX ENDROITS, ET CE N'EST PAS UNE REDONDANCE. Depuis P3 les trois
+      // champs de profil sont LUS dans `profileData` ; les colonnes restent le
+      // temps de la transition. N'écrire que la colonne laisse l'export ETD-MS
+      // sans `<grantor>` — 45 soutenances renseignées en base et invisibles à
+      // l'entrepôt, mesuré sur l'école de démonstration.
+      profileData: academique
+        ? { defenseUniversity: `Université de ${ville}`, defensePlace: ville }
+        : {},
       category,
-      recordType: pioche(TYPES),
+      recordType,
       publishYear: 2012 + Math.floor(alea() * 14),
       isbn: `EXEMPLE-${String(1000 + notices.length)}`,
       // Couvertures VECTORIELLES d'exemple, servies en statique par le front,
@@ -340,15 +370,15 @@ function genererNotices(combien) {
 }
 
 const RECORDS_ECRITS = [
-  { title: 'Droit constitutionnel burkinabè', author: 'Traoré, Awa', category: 'droit', recordType: 'these', publishYear: 2023, isbn: 'EXEMPLE-0001' },
-  { title: 'Précis de droit foncier rural', author: 'Ouédraogo, Salif', category: 'droit', recordType: 'memoire', publishYear: 2021 },
+  { title: 'Droit constitutionnel burkinabè', author: 'Traoré, Awa', directeur: 'Ouédraogo, Salif', defenseUniversity: 'Université de Ouagadougou', defensePlace: 'Ouagadougou', profile: 'academique', profileData: { defenseUniversity: 'Université de Ouagadougou', defensePlace: 'Ouagadougou' }, category: 'droit', recordType: 'these', publishYear: 2023, isbn: 'EXEMPLE-0001' },
+  { title: 'Précis de droit foncier rural', author: 'Ouédraogo, Salif', directeur: 'Kaboré, Mariam', defenseUniversity: 'Université de Bobo-Dioulasso', defensePlace: 'Bobo-Dioulasso', profile: 'academique', profileData: { defenseUniversity: 'Université de Bobo-Dioulasso', defensePlace: 'Bobo-Dioulasso' }, category: 'droit', recordType: 'memoire', publishYear: 2021 },
   { title: 'Anatomie générale', author: 'Kaboré, Mariam', category: 'medecine', recordType: 'ouvrage', publishYear: 2022 },
   { title: 'Informatique pour tous', author: 'Sawadogo, Issa', category: 'informatique', recordType: 'ouvrage', publishYear: 2020 },
   { title: 'Algorithmique avancée', author: 'Zongo, Pauline', category: 'informatique', recordType: 'ouvrage', publishYear: 2021 },
   { title: 'Histoire des empires du Sahel', author: 'Kaboré, Émilie', category: 'histoire', recordType: 'publication', publishYear: 2019 },
-  { title: 'Microéconomie appliquée', author: 'Nikiema, Rasmata', category: 'economie', recordType: 'memoire', publishYear: 2022 },
-  { title: 'Grammaire mooré-français', author: 'Ouoba, Benjamin', category: 'langues', recordType: 'memoire', publishYear: 2018 },
-  { title: 'Introduction à la philosophie africaine', author: 'Yaméogo, Céline', category: 'philosophie', recordType: 'these', publishYear: 2020 },
+  { title: 'Microéconomie appliquée', author: 'Nikiema, Rasmata', directeur: 'Zongo, Pauline', defenseUniversity: 'Université de Koudougou', defensePlace: 'Koudougou', profile: 'academique', profileData: { defenseUniversity: 'Université de Koudougou', defensePlace: 'Koudougou' }, category: 'economie', recordType: 'memoire', publishYear: 2022 },
+  { title: 'Grammaire mooré-français', author: 'Ouoba, Benjamin', directeur: 'Sanogo, Alain', defenseUniversity: 'Université de Ouagadougou', defensePlace: 'Ouagadougou', profile: 'academique', profileData: { defenseUniversity: 'Université de Ouagadougou', defensePlace: 'Ouagadougou' }, category: 'langues', recordType: 'memoire', publishYear: 2018 },
+  { title: 'Introduction à la philosophie africaine', author: 'Yaméogo, Céline', directeur: 'Sanou, Fatoumata', defenseUniversity: 'Université de Bobo-Dioulasso', defensePlace: 'Bobo-Dioulasso', profile: 'academique', profileData: { defenseUniversity: 'Université de Bobo-Dioulasso', defensePlace: 'Bobo-Dioulasso' }, category: 'philosophie', recordType: 'these', publishYear: 2020 },
   { title: 'Chimie générale — 1er cycle', author: 'Compaoré, Adama', category: 'sciences', recordType: 'ouvrage', publishYear: 2023 },
   { title: 'Arts plastiques du Burkina', author: 'Sanou, Fatoumata', category: 'arts', recordType: 'publication', publishYear: 2021 },
   { title: 'Anthologie de la littérature burkinabè', author: 'Sanogo, Alain', category: 'litterature', recordType: 'ouvrage', publishYear: 2017 },
@@ -506,7 +536,10 @@ async function seedTenant(db) {
   const aCreer = RECORDS.filter((r) => !titresConnus.has(r.title));
   if (aCreer.length > 0) {
     await db.biblioRecord.createMany({
-      data: aCreer.map((r) => ({ ...r, language: 'fr', marcData: {} })),
+      // ⚠ `directeur` n'est PAS une colonne de `biblio_records` : c'est un
+      // CONTRIBUTEUR, écrit plus bas dans `record_contributors`. Le laisser
+      // passer ici ferait échouer l'écriture entière.
+      data: aCreer.map(({ directeur: _d, ...r }) => ({ ...r, language: 'fr', marcData: {} })),
     });
   }
   // ⚠ Les DOUZE notices écrites à la main sont mises à jour même si elles
@@ -516,7 +549,7 @@ async function seedTenant(db) {
   // était juste, la base gardait l'ancienne valeur. Les 340 générées ne sont
   // pas mises à jour : elles ne changent pas, et 340 écritures inutiles à
   // chaque relance rendraient le seed pénible pour rien.
-  for (const r of ECRITES) {
+  for (const { directeur: _d, ...r } of ECRITES) {
     await db.biblioRecord.updateMany({ where: { title: r.title }, data: { ...r } });
   }
 
@@ -608,6 +641,167 @@ async function seedTenant(db) {
       authorId: auteursConnus.get(n.author) ?? null,
     }));
   if (liens.length > 0) await db.recordContributor.createMany({ data: liens });
+
+  // ── Le rôle dynamique « Enseignant » ──────────────────────────────────────
+  //
+  // ⚠ IL VIT DANS LE SEED, PAS DANS LE PRODUIT. `depot.valider` n'est portée par
+  // AUCUN rôle système, et c'est délibéré côté API : « si personne ne peut
+  // valider, le circuit reste inerte plutôt qu'ouvert ». Une école qui ne veut
+  // pas de circuit de dépôt ne doit donc pas hériter d'un rôle qu'elle
+  // n'utilise pas — le créer au provisioning serait lui imposer un métier.
+  //
+  // Ici, c'est l'école de DÉMONSTRATION : elle doit pouvoir montrer le circuit
+  // de bout en bout, sinon P6 n'est démontrable qu'à moitié.
+  //
+  // ⚠ `encadrements.voir` EST POSÉE DEPUIS LE 12 SEPTEMBRE 2026. Elle n'existait
+  // pas quand ce bloc a été écrit — la session front l'avait constaté et laissé
+  // la note. Jean l'a tranchée : elle est créée au catalogue de fonctions, elle
+  // porte « Mes encadrements » (P6-3), et elle est AUTO-PORTÉE — un enseignant
+  // voit les notices où il est LUI-MÊME directeur, jamais celles d'un collègue.
+  //
+  const ENSEIGNANT = 'Enseignant';
+  const roleEnseignant = await db.role.upsert({
+    where: { name: ENSEIGNANT },
+    create: {
+      name: ENSEIGNANT,
+      description:
+        'Dirige des mémoires et des thèses : valide ou refuse les dépôts dont il est le directeur désigné.',
+      functions: ['document.lire', 'depot.valider', 'encadrements.voir'],
+      isSystem: false,
+    },
+    // ⚠ Les fonctions SONT mises à jour : le jour où le catalogue en gagne une
+    // (encadrements.voir), une relance du seed doit la propager. Le nom et la
+    // description, eux, appartiennent à l'école si elle les a changés.
+    update: { functions: ['document.lire', 'depot.valider', 'encadrements.voir'] },
+  });
+
+  // ⚠ DES COMPTES DÉDIÉS, ET SURTOUT PAS LES COMPTES EXISTANTS. Mesuré dans
+  // `authz.service.ts` avant d'écrire :
+  //
+  //     return user.customRole?.functions ?? functionsForLegacyRole(user.role);
+  //
+  // Un rôle dynamique REMPLACE les fonctions du rôle système, il ne s'y ajoute
+  // pas. Poser « Enseignant » sur `bib@exemple.bf` lui retirerait donc
+  // `catalogue.gerer`, `circulation.faire` et le reste — la bibliothécaire de
+  // démonstration perdrait son métier pour gagner celui de directeur.
+  //
+  // Les deux comptes créés ici portent les noms de directeurs qui figurent DÉJÀ
+  // sur des notices écrites à la main : le circuit est cohérent — ils ont
+  // vraiment des travaux à valider — sans que personne ne soit dépouillé.
+  const ENSEIGNANTS = [
+    { email: 'zongo@exemple.bf', firstName: 'Pauline', lastName: 'Zongo' },
+    { email: 'sanogo@exemple.bf', firstName: 'Alain', lastName: 'Sanogo' },
+  ];
+  for (const e of ENSEIGNANTS) {
+    await db.user.upsert({
+      where: { email: e.email },
+      create: {
+        ...e,
+        role: 'STUDENT',
+        roleId: roleEnseignant.id,
+        status: 'ACTIVE',
+        activatedAt: new Date(),
+        password: hash,
+      },
+      // ⚠ `role: 'STUDENT'` est l'enum de repli et il ne sert à RIEN ici : le
+      // rôle dynamique le court-circuite. On le laisse au plus petit pour que,
+      // si quelqu'un retire un jour le rôle dynamique, le compte retombe sans
+      // droit plutôt qu'avec ceux d'un administrateur.
+      update: { roleId: roleEnseignant.id, status: 'ACTIVE', password: hash },
+    });
+  }
+  log(
+    `rôle « ${ENSEIGNANT} » (depot.valider, encadrements.voir) sur ` +
+      `${ENSEIGNANTS.length} comptes dédiés : ` +
+      ENSEIGNANTS.map((e) => e.email).join(', '),
+  );
+
+  // ── Directeurs de mémoire / de thèse ──────────────────────────────────────
+  //
+  // ⚠ SANS EUX, ETD-MS NE DÉMONTRE RIEN. Le format est livré, et toute sa valeur
+  // pour un moissonneur de thèses tient à la distinction qu'il expose :
+  // `<contributor role="advisor">` pour le directeur, `<creator>` pour l'auteur.
+  // Le fonds de démonstration ne portait que des AUTEUR_PRINCIPAL — 162 travaux
+  // académiques, zéro directeur, mesuré le 12 septembre 2026. On exportait donc
+  // un ETD-MS qui ressemblait à du Dublin Core.
+  //
+  // ⚠ Et le produit REFUSE ces notices : `cataloging.service` exige un directeur
+  // et une université de soutenance pour une thèse ou un mémoire. Le seed écrit
+  // en direct par Prisma, il contournait la règle — un fonds de démonstration
+  // qui contient ce que le produit rejette ne démontre pas le produit.
+  const parTitre = new Map(RECORDS.filter((r) => r.directeur).map((r) => [r.title, r.directeur]));
+  const academiques = await db.biblioRecord.findMany({
+    where: { recordType: { in: ['these', 'memoire'] } },
+    select: { id: true, title: true, contributors: { select: { role: true } } },
+  });
+  const directeurs = academiques
+    .filter((r) => !r.contributors.some((c) => c.role === 'DIRECTEUR_MEMOIRE'))
+    .map((r) => ({ recordId: r.id, nom: parTitre.get(r.title) }))
+    .filter((x) => x.nom);
+  if (directeurs.length > 0) {
+    // Les directeurs sont aussi des AUTORITÉS : sans fiche, ils ne se
+    // dédoublonnent pas et n'apparaissent pas dans l'index des auteurs.
+    const nomsDirecteurs = [...new Set(directeurs.map((d) => d.nom))];
+    const inconnus = nomsDirecteurs.filter((n) => !auteursConnus.has(n));
+    if (inconnus.length > 0) {
+      await db.author.createMany({
+        data: inconnus.map((nom) => ({ displayName: nom, normalizedName: normaliser(nom) })),
+      });
+      for (const a of await db.author.findMany({ select: { id: true, displayName: true } })) {
+        auteursConnus.set(a.displayName, a.id);
+      }
+    }
+    await db.recordContributor.createMany({
+      data: directeurs.map((d) => ({
+        recordId: d.recordId,
+        name: d.nom,
+        role: 'DIRECTEUR_MEMOIRE',
+        // ⚠ Position 1 : l'auteur principal occupe la 0, et l'ordre est ce que
+        // lit l'export ETD-MS.
+        position: 1,
+        authorId: auteursConnus.get(d.nom) ?? null,
+      })),
+    });
+  }
+  log(`${directeurs.length} directeurs de mémoire / thèse`);
+
+  // ── Rattachement des enseignants à leur fiche d'autorité ──────────────────
+  //
+  // ⚠ SANS LUI, « MES ENCADREMENTS » (P6-3) NE MONTRE RIEN. L'écran part de
+  // `Author.userId` : il cherche la fiche RATTACHÉE au compte de l'appelant,
+  // puis ses contributions `DIRECTEUR_MEMOIRE`. Mesuré le 12 septembre 2026
+  // avant d'écrire ceci : zéro fiche rattachée sur les deux écoles de
+  // développement. Les deux enseignants ci-dessus avaient bien un compte, bien
+  // une fiche, et rien entre les deux — l'écran leur aurait répondu « votre
+  // compte n'est relié à aucune fiche d'auteur ».
+  //
+  // ⚠ ON RATTACHE ICI PAR LE NOM, ET C'EST ACCEPTABLE ICI SEULEMENT. Le produit
+  // s'y refuse — `AuthorsService.rattacherAuCompte` exige un identifiant, parce
+  // qu'un homonyme rattaché par erreur attribue à quelqu'un les encadrements
+  // d'un autre, sur l'écran qui sert un dossier de promotion. Le seed, lui, a
+  // CRÉÉ les deux côtés : il sait que « Zongo, Pauline » est la fiche de
+  // `zongo@exemple.bf` parce que c'est lui qui a écrit les deux.
+  let rattaches = 0;
+  for (const e of ENSEIGNANTS) {
+    const nomDeFiche = `${e.lastName}, ${e.firstName}`;
+    const fiche = await db.author.findFirst({
+      where: { displayName: nomDeFiche },
+      select: { id: true, userId: true },
+    });
+    const compte = await db.user.findUnique({ where: { email: e.email }, select: { id: true } });
+    if (!fiche || !compte) continue;
+    // Idempotent, et il ne VOLE pas un rattachement existant : si la fiche est
+    // déjà reliée à quelqu'un d'autre, on n'y touche pas — une relance de seed
+    // ne doit pas défaire un geste de bibliothécaire.
+    if (fiche.userId && fiche.userId !== compte.id) continue;
+    if (fiche.userId === compte.id) {
+      rattaches += 1;
+      continue;
+    }
+    await db.author.update({ where: { id: fiche.id }, data: { userId: compte.id } });
+    rattaches += 1;
+  }
+  log(`${rattaches}/${ENSEIGNANTS.length} enseignants rattachés à leur fiche d'autorité`);
 
   // ⚠ Reliquat de fixture : « Auteur, Un », sans œuvre, trie EN TÊTE de l'index
   // alphabétique — c'est la première ligne que voit qui ouvre « Auteurs ». Un

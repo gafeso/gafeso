@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { AccountStatus, PrismaClient } from '@prisma/client';
-import { functionsForLegacyRole } from './functions';
+import { PrismaClient } from '@prisma/client';
+import { SELECTION_DES_FONCTIONS, fonctionsEffectives } from './functions';
 
 /**
  * Résolution des fonctions effectives d'un utilisateur — la source de vérité
  * du contrôle d'accès fonctionnel. Résolue à CHAQUE requête (pas figée dans
  * le JWT) : retirer une fonction à un rôle prend effet immédiatement.
+ *
+ * ⚠ LA RÈGLE ELLE-MÊME N'EST PLUS ICI : elle est dans `fonctionsEffectives`
+ * (functions.ts), parce qu'un second appelant la demande — la liste des
+ * directeurs désignables, qui pose la question dans l'autre sens (« QUI porte
+ * cette fonction ? »). Ce service est le chemin « une personne, une réponse » ;
+ * il ne décide rien de plus que l'autre.
  *
  * Règles :
  *  - compte inexistant ou non ACTIVE (suspendu, en attente) → aucune fonction ;
@@ -21,14 +27,9 @@ export class AuthzService {
   ): Promise<string[]> {
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: {
-        role: true,
-        status: true,
-        customRole: { select: { functions: true } },
-      },
+      select: SELECTION_DES_FONCTIONS,
     });
-    if (!user || user.status !== AccountStatus.ACTIVE) return [];
-    return user.customRole?.functions ?? functionsForLegacyRole(user.role);
+    return fonctionsEffectives(user);
   }
 
   async hasFunction(

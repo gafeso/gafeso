@@ -39,7 +39,17 @@ interface PatronSituation {
     accruedFineXof: number;
   }[];
   holds: { id: string; status: string; record: { title: string } }[];
-  fines: { recordedXof: number; accruingXof: number; totalXof: number };
+  /**
+   * ⚠ `totalXof` A ÉTÉ RETIRÉ DE CE TYPE le 12 septembre 2026, et c'est
+   * délibérément le TYPE qu'on a changé : le compilateur énumère les sites
+   * qui le lisaient, là où un grep en aurait manqué.
+   *
+   * L'API le rend encore, marqué `@deprecated` : il additionne un CUMUL
+   * HISTORIQUE et un ENCOURS DU JOUR — un nombre qui ne désigne rien, et que
+   * l'écran lisait comme un solde. Le front s'en détache : c'est la condition
+   * du backlog backend n° 32, qui le supprimera ensuite.
+   */
+  fines: { recordedXof: number; accruingXof: number };
 }
 
 const dateFr = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' });
@@ -54,6 +64,37 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'patron', label: 'Adhérent' },
   { id: 'holds', label: 'Réservations' },
 ];
+
+/**
+ * Flèches, Origine et Fin dans une barre d'onglets — motif ARIA « tabs », en
+ * activation MANUELLE : les flèches déplacent le FOCUS, elles ne changent pas
+ * d'onglet. Entrée ou Espace activent (comportement natif du bouton).
+ *
+ * ⚠ POURQUOI MANUELLE, ET PAS AUTOMATIQUE. L'activation automatique est le choix
+ * courant, et il était le mien : la flèche changeait d'onglet. Le test « le focus
+ * suit la sélection » a montré qu'il ne le suivait pas — il atterrissait sur un
+ * `<input>`. Les panneaux du guichet portent un `autoFocus` sur leur champ de
+ * code-barres, et c'est voulu : une bibliothécaire qui change d'onglet scanne
+ * dans la seconde.
+ *
+ * Les deux comportements sont justes et ils se battaient. Le motif ARIA tranche
+ * lui-même : quand activer un onglet a un EFFET DE BORD — déplacer le focus,
+ * charger du contenu — c'est l'activation manuelle qui est recommandée. On garde
+ * donc l'`autoFocus` au clic, et les flèches redeviennent ce qu'elles doivent
+ * être : un parcours, pas une suite d'activations.
+ */
+function deplacerParFleche(e: React.KeyboardEvent, courant: Tab): void {
+  const i = TABS.findIndex((t) => t.id === courant);
+  const cible =
+    e.key === 'ArrowRight' ? (i + 1) % TABS.length
+    : e.key === 'ArrowLeft' ? (i - 1 + TABS.length) % TABS.length
+    : e.key === 'Home' ? 0
+    : e.key === 'End' ? TABS.length - 1
+    : -1;
+  if (cible < 0) return;
+  e.preventDefault();
+  document.getElementById(`onglet-${TABS[cible].id}`)?.focus();
+}
 
 export default function GuichetPage() {
   const [tab, setTab] = useState<Tab>('checkout');
@@ -84,13 +125,33 @@ export default function GuichetPage() {
           faisaient défiler la page latéralement — mesuré sur build de
           production. Même défaut que la barre du haut, sur l'écran où une
           bibliothécaire passe sa journée. */}
-      <div className="mt-6 flex flex-wrap gap-1 border-b border-line" role="tablist">
+      {/*
+        ⚠ CE `tablist` N'EN ÉTAIT PAS UN. Il avait les rôles et `aria-selected`,
+        et rien de ce qui fait fonctionner des onglets au clavier : pas de
+        panneau, pas de lien entre l'onglet et son panneau, et surtout les
+        QUATRE onglets dans l'ordre de tabulation. Le motif ARIA veut l'inverse —
+        une seule tabulation entre dans la barre, les FLÈCHES circulent. Annoncer
+        `role="tab"` sans cette mécanique promet un comportement qui n'existe
+        pas : c'est pire que de ne rien annoncer, parce que la personne attend
+        les flèches et qu'il ne se passe rien.
+      */}
+      <div
+        className="mt-6 flex flex-wrap gap-1 border-b border-line"
+        role="tablist"
+        aria-label={LIBELLES.accessibilite.ongletsDuGuichet}
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
+            id={`onglet-${t.id}`}
             role="tab"
             aria-selected={tab === t.id}
+            aria-controls={`panneau-${t.id}`}
+            // ⚠ Tabindex ROULANT : seul l'onglet actif est dans l'ordre de
+            // tabulation, les autres s'atteignent aux flèches.
+            tabIndex={tab === t.id ? 0 : -1}
             onClick={() => setTab(t.id)}
+            onKeyDown={(e) => deplacerParFleche(e, t.id)}
             className={`rounded-t-md px-5 py-2.5 text-sm font-semibold transition-colors ${
               tab === t.id
                 ? 'border border-b-0 border-line bg-white text-ink'
@@ -102,7 +163,13 @@ export default function GuichetPage() {
         ))}
       </div>
 
-      <div className="mt-6">
+      <div
+        className="mt-6"
+        role="tabpanel"
+        id={`panneau-${tab}`}
+        aria-labelledby={`onglet-${tab}`}
+        tabIndex={0}
+      >
         {tab === 'checkout' && <CheckoutTab />}
         {tab === 'return' && <ReturnTab />}
         {tab === 'patron' && <PatronTab />}
@@ -122,6 +189,12 @@ interface HoldRow {
   patronBarcode: string;
   patronName: string | null;
   expiryDate: string | null;
+  /**
+   * ⚠ Faux quand plus AUCUN exemplaire de la notice ne circule — typiquement
+   * après une perte. Ce n'est pas une anomalie : la réservation est conservée,
+   * le lecteur garde sa place, et c'est un rachat qui résout, pas un correctif.
+   */
+  servable: boolean;
 }
 
 function HoldsTab() {
@@ -169,6 +242,16 @@ function HoldsTab() {
                 <span className="ml-2 font-mono text-xs text-muted">{h.patronBarcode}</span>
               </td>
               <td className="py-2 pr-3">
+                {/*
+                  ⚠ DIT, PAS ALARMÉ. Une mention grise à côté du statut, pas un
+                  badge rouge : la file non servable est un état, pas une faute.
+                  Et rien n'apparaît quand `servable` est vrai — le cas courant.
+                */}
+                {h.servable === false && (
+                  <span className="mr-2 text-xs text-muted">
+                    {LIBELLES.perte.holdNonServable}
+                  </span>
+                )}
                 {h.status === 'AVAILABLE' ? (
                   <Badge tone="green">Mis de côté</Badge>
                 ) : (
@@ -430,16 +513,22 @@ function PatronTab() {
                 </p>
               </div>
               {amendesActives === false ? (
-                // Module éteint : il ne reste que la DETTE, et seulement si elle
-                // existe. Un « Aucune amende » vert ici laisserait croire qu'un
-                // calcul a tourné et n'a rien trouvé.
+                // Module éteint : il ne reste que le CUMUL CONSTATÉ, et
+                // seulement s'il existe. Un « Aucune amende » vert ici
+                // laisserait croire qu'un calcul a tourné et n'a rien trouvé.
                 situation.fines.recordedXof > 0 && (
                   <Badge tone="ocre">
-                    {LIBELLES.amendes.dues(fcfa(situation.fines.recordedXof))}
+                    {LIBELLES.amendes.constatees(fcfa(situation.fines.recordedXof))}
                   </Badge>
                 )
-              ) : situation.fines.totalXof > 0 ? (
-                <Badge tone="ocre">Amendes : {fcfa(situation.fines.totalXof)}</Badge>
+              ) : situation.fines.recordedXof > 0 ? (
+                <Badge tone="ocre">
+                  {LIBELLES.amendes.constatees(fcfa(situation.fines.recordedXof))}
+                </Badge>
+              ) : situation.fines.accruingXof > 0 ? (
+                <Badge tone="ocre">
+                  {LIBELLES.amendes.courantSurRetards(fcfa(situation.fines.accruingXof))}
+                </Badge>
               ) : (
                 <Badge tone="green">Aucune amende</Badge>
               )}
@@ -448,12 +537,26 @@ function PatronTab() {
               ? situation.fines.recordedXof > 0 && (
                   <p className="mt-2 text-sm text-muted">{LIBELLES.amendes.conservees}</p>
                 )
-              : situation.fines.totalXof > 0 && (
+              : situation.fines.recordedXof > 0 &&
+                situation.fines.accruingXof > 0 && (
                   <p className="mt-2 text-sm text-muted">
-                    Constatées aux retours : {fcfa(situation.fines.recordedXof)} · en cours
-                    sur les retards : {fcfa(situation.fines.accruingXof)}
+                    {LIBELLES.amendes.detailConstateEtCourant(
+                      fcfa(situation.fines.recordedXof),
+                      fcfa(situation.fines.accruingXof),
+                    )}
                   </p>
                 )}
+            {/*
+              ⚠ DIT UNE FOIS, LÀ OÙ LE CHIFFRE EST. Sans elle, « constatées
+              (cumul) » est exact et opaque : la bibliothécaire qui vient
+              d'encaisser revoit le même montant et cherche un bogue. Elle ne
+              s'affiche que s'il y a un cumul — rien à détromper sinon.
+            */}
+            {situation.fines.recordedXof > 0 && (
+              <p className="mt-1 text-xs text-muted">
+                {LIBELLES.amendes.aucunEncaissementEnregistre}
+              </p>
+            )}
           </Card>
 
           <Card>

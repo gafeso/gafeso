@@ -69,6 +69,36 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
   ];
   const compte = user
     ? [
+        // ⚠ « Mon dépôt » N'APPARAÎT QUE POUR QUI DÉTIENT LA FONCTION. Un
+        // étudiant d'une école qui n'ouvre pas le dépôt ne doit pas voir une
+        // entrée qui le refusera — c'est la règle du dépôt : pas d'entrée sans
+        // écran, pas d'écran sans droit.
+        ...(effectives?.includes('depot.deposer')
+          ? [{ href: '/mon-depot', label: LIBELLES.monDepot.titre, title: 'Déposer un mémoire ou une thèse, et suivre son avancement' }]
+          : []),
+        // Même règle pour « Mes encadrements » : l'entrée n'existe que pour qui
+        // détient `encadrements.voir`. Un enseignant d'une école qui n'ouvre
+        // pas ce suivi ne doit pas voir une porte qui lui refusera l'entrée.
+        // Le directeur : sa file de décisions. Même règle que les deux
+        // au-dessus — l'entrée n'existe que pour qui détient la fonction.
+        ...(effectives?.includes('depot.valider')
+          ? [
+              {
+                href: '/depots-a-valider',
+                label: LIBELLES.depotsAValider.titre,
+                title: 'Les dépôts que je dirige et qui attendent ma décision',
+              },
+            ]
+          : []),
+        ...(effectives?.includes('encadrements.voir')
+          ? [
+              {
+                href: '/mes-encadrements',
+                label: LIBELLES.mesEncadrements.titre,
+                title: 'Les mémoires et thèses que j’ai dirigés',
+              },
+            ]
+          : []),
         { href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' },
         { href: '/profil', label: 'Mon compte', title: 'Mon compte (informations, mot de passe, sécurité)' },
       ]
@@ -116,7 +146,12 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
           <img src="/marque/gafeso_horizontal.svg" alt="Gafeso" className="h-11 w-auto" />
         </Link>
 
-        <nav className="hidden gap-1 md:flex">{principales.map((i) => lien(i))}</nav>
+        <nav
+          aria-label={LIBELLES.accessibilite.navPrincipale}
+          className="hidden gap-1 md:flex"
+        >
+          {principales.map((i) => lien(i))}
+        </nav>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
           {compte.map((i) => lien(i))}
@@ -142,6 +177,7 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
       {menuOuvert && (
         <nav
           id="menu-principal"
+          aria-label={LIBELLES.accessibilite.navDepliee}
           className="flex flex-col gap-1 border-t border-line px-4 py-2 md:hidden"
         >
           {principales.map((i) => lien(i, true))}

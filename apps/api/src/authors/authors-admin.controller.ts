@@ -29,6 +29,7 @@ import {
   AuthorsListDto,
   AuthorSuggestDto,
   MergeAuthorDto,
+  RattacherAuteurAuCompteDto,
   RenameAuthorDto,
 } from './dto/authors-admin.dto';
 
@@ -72,11 +73,32 @@ export class AuthorsAdminController {
     @Query() query: AuthorsListDto,
   ) {
     const tenant = this.tenant(tenantOrNull);
-    return this.authors.listAuthors(this.prisma.forTenant(tenant.slug), { q: query.q, limit: 200 });
+    // ⚠ `limit` N'EST PLUS FORCÉ, MAIS SON DÉFAUT RESTE 200, ET C'EST
+    // DÉLIBÉRÉ. La route rendait `total`/`page`/`totalPages` tout en REFUSANT
+    // `page` : elle décrivait un parcours qu'elle n'offrait pas. Ouvrir les
+    // deux paramètres était la correction.
+    //
+    // Laisser le défaut du service s'appliquer (50) aurait fait passer l'écran
+    // des auteurs de 200 lignes à 50 pour un client qui ne demande rien — une
+    // correction qui RETIRE à quelqu'un, sans que personne l'ait demandé. Le
+    // front affiche aujourd'hui « 200 auteurs affichés sur 557 » et remplacera
+    // cet avis par un vrai parcours quand il le voudra : d'ici là, rien ne
+    // change pour lui.
+    return this.authors.listAuthors(this.prisma.forTenant(tenant.slug), {
+      q: query.q,
+      page: query.page,
+      limit: query.limit ?? 200,
+    });
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Renommer une fiche auteur (propagé partout + réindex)' })
+  @ApiOperation({
+    summary: 'Modifier une fiche auteur — nom (propagé partout + réindex), notice, dates',
+    description:
+      '⚠ `bio`, `birthYear` et `deathYear` étaient SERVIS par GET /authors/:id ' +
+      'et écrits par aucune route : la fiche affichait trois cases vides à ' +
+      'jamais. `null` EFFACE une valeur, un champ absent la laisse.',
+  })
   async rename(
     @CurrentTenant() tenantOrNull: ResolvedTenant | null,
     @CurrentUser() user: JwtPayload,
@@ -86,7 +108,11 @@ export class AuthorsAdminController {
   ) {
     const tenant = this.tenant(tenantOrNull);
     const db = this.prisma.forTenant(tenant.slug);
-    const result = await this.authors.rename(db, id, dto.displayName);
+    const result = await this.authors.rename(db, id, dto.displayName, {
+      bio: dto.bio,
+      birthYear: dto.birthYear,
+      deathYear: dto.deathYear,
+    });
     await this.cataloging.reindexRecords(db, tenant.slug, result.affectedRecordIds);
     void this.audit.log({
       tenantId: tenant.id,
@@ -131,6 +157,47 @@ export class AuthorsAdminController {
         mergedName: result.loserName,
         affected: result.affectedRecordIds.length,
       },
+    });
+    return result;
+  }
+
+  @Patch(':id/compte')
+  @ApiOperation({
+    summary: 'Rattacher cette fiche à un compte — ou l’en détacher (`userId: null`)',
+    description:
+      'C’est ce lien qui rend « Mes encadrements » calculable : sans lui, un ' +
+      'enseignant qui a dirigé quinze thèses lit « votre compte n’est relié à ' +
+      'aucune fiche d’auteur ». Geste de bibliothécaire, jamais de ' +
+      'l’intéressé : rattacher, c’est affirmer que cette personne signe bien ' +
+      'ces œuvres, et l’écran qui en découle sert un dossier de promotion.',
+  })
+  async rattacherAuCompte(
+    @CurrentTenant() tenantOrNull: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RattacherAuteurAuCompteDto,
+    @ClientIp() ip?: string,
+  ) {
+    const tenant = this.tenant(tenantOrNull);
+    const result = await this.authors.rattacherAuCompte(
+      this.prisma.forTenant(tenant.slug),
+      id,
+      dto.userId,
+    );
+    // ⚠ TRACÉ. Le rattachement décide de qui pourra produire une pièce
+    // justificative d'encadrement à son nom : c'est de la même famille qu'un
+    // changement de rôle, pas une correction de fiche.
+    void this.audit.log({
+      tenantId: tenant.id,
+      actorId: user.sub,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: AUDIT_ACTIONS.AUTHOR_ACCOUNT_LINK,
+      targetType: 'author',
+      targetId: id,
+      targetLabel: result.displayName,
+      ip,
+      metadata: { userId: dto.userId },
     });
     return result;
   }

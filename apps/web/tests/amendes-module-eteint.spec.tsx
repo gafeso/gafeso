@@ -170,11 +170,60 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('Ce que la phrase d’extinction DOIT dire', () => {
+  /**
+   * ⚠ SA PROPRIÉTÉ, PAS SA VALEUR. Les tests ci-dessous comparent au LIBELLÉ :
+   * ils suivraient sa dégradation sans broncher. Or ce texte porte la seule
+   * information qui empêche de lire un montant figé comme un calcul en panne —
+   * les amendes dues sont CONSERVÉES, elles cessent seulement de s'accumuler.
+   */
+  it('elle dit la conservation ET l’arrêt de l’accumulation', () => {
+    expect(LIBELLES.amendes.conservees).toMatch(/conservé/i);
+    expect(LIBELLES.amendes.conservees).toMatch(/cessent|s’accumuler/i);
+  });
+
+  /**
+   * ⚠ « CONSTATÉES (CUMUL) », ET PLUS « DUES » — 12 septembre 2026.
+   *
+   * `Checkout.fineAmount` n'est jamais réduit : aucune route ne consigne un
+   * encaissement. « Dues » affirmait un SOLDE, c'est-à-dire une somme qui
+   * décroît quand on paie. Une bibliothécaire qui encaisse 2 950 FCFA revoyait
+   * le même montant le lendemain et en concluait que son encaissement s'était
+   * perdu — ou le réclamait deux fois.
+   *
+   * On teste la PROPRIÉTÉ du texte, pas sa valeur : comparer au libellé le
+   * suivrait dans sa dégradation sans broncher.
+   */
+  it('⚠ le vocabulaire des amendes ne promet plus un SOLDE', () => {
+    expect(LIBELLES.amendes.constatees('1 000 FCFA')).toMatch(/constatée/i);
+    expect(LIBELLES.amendes.constatees('1 000 FCFA')).toMatch(/cumul/i);
+    // Le mot qui ment, et il ne doit revenir nulle part dans ce vocabulaire.
+    for (const texte of [
+      LIBELLES.amendes.constatees('1 000 FCFA'),
+      LIBELLES.amendes.constatees('1 000 FCFA'),
+      LIBELLES.amendes.conservees,
+      LIBELLES.amendes.detailConstateEtCourant('1 000 FCFA', '0 FCFA'),
+    ]) {
+      expect(texte).not.toMatch(/\bdues?\b/i);
+    }
+  });
+
+  it('⚠ l’écran DIT que les encaissements ne sont pas enregistrés', () => {
+    // « Constatées (cumul) » est exact et opaque. Sans cette phrase, le mot
+    // seul n'apprend rien à qui vient d'encaisser — et un montant figé se lit
+    // comme un calcul en panne, ce que ce fichier documente déjà ailleurs.
+    expect(LIBELLES.amendes.aucunEncaissementEnregistre).toMatch(/encaissement/i);
+    expect(LIBELLES.amendes.aucunEncaissementEnregistre).toMatch(/ne diminue pas|pas encore/i);
+  });
+});
+
 describe('Guichet · situation d’un adhérent', () => {
   it('module ACTIF : le total et le détail s’affichent comme avant', async () => {
     brancher({ amendes: true, constatees: DUES, courantes: 500 });
     await ouvrirSituation();
-    expect(await screen.findByText('Amendes : 22 400 FCFA')).toBeTruthy();
+    expect(
+      await screen.findByText(LIBELLES.amendes.constatees('21 900 FCFA')),
+    ).toBeTruthy();
     expect(screen.getByText(/en cours\s+sur les retards/)).toBeTruthy();
   });
 
@@ -182,7 +231,9 @@ describe('Guichet · situation d’un adhérent', () => {
     brancher({ amendes: false, constatees: DUES, courantes: 0 });
     await ouvrirSituation();
     // Ce qui RESTE : le montant dû, nommé « dues » et non « Amendes ».
-    expect(await screen.findByText(`Amendes dues : ${'21 900'} FCFA`)).toBeTruthy();
+    expect(
+      await screen.findByText(LIBELLES.amendes.constatees('21 900 FCFA')),
+    ).toBeTruthy();
     expect(screen.getByText(LIBELLES.amendes.conservees)).toBeTruthy();
     // Ce qui PART : le détail, dont le « en cours : 0 FCFA » se lirait comme une panne.
     expect(screen.queryByText(/en cours\s+sur les retards/)).toBeNull();
@@ -193,14 +244,16 @@ describe('Guichet · situation d’un adhérent', () => {
     await ouvrirSituation();
     // ⚠ Un « Aucune amende » vert laisserait croire qu'un calcul a tourné.
     expect(screen.queryByText('Aucune amende')).toBeNull();
-    expect(screen.queryByText(/Amendes dues/)).toBeNull();
+    expect(screen.queryByText(LIBELLES.amendes.constatees('21 900 FCFA'))).toBeNull();
     expect(screen.queryByText(LIBELLES.amendes.conservees)).toBeNull();
   });
 
   it('état du module INCONNU : l’affichage d’avant, rien n’est affirmé', async () => {
     brancher({ amendes: null, constatees: DUES, courantes: 500 });
     await ouvrirSituation();
-    expect(await screen.findByText('Amendes : 22 400 FCFA')).toBeTruthy();
+    expect(
+      await screen.findByText(LIBELLES.amendes.constatees('21 900 FCFA')),
+    ).toBeTruthy();
     expect(screen.queryByText(LIBELLES.amendes.conservees)).toBeNull();
   });
 });

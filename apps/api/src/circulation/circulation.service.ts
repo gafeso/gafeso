@@ -71,6 +71,22 @@ export type TenantDb = PrismaClient;
 const DAY_MS = 24 * 3600 * 1000;
 const ACTIVE_HOLD_STATUSES: HoldStatus[] = [HoldStatus.PENDING, HoldStatus.AVAILABLE];
 
+/**
+ * Les statuts d'exemplaire qui reviendront un jour sur l'étagère.
+ *
+ * ⚠ `DAMAGED` EN EST EXCLU, ET C'EST DÉLIBÉRÉ : un exemplaire abîmé ne circule
+ * pas. S'il est réparé il repasse `AVAILABLE`, et le signal qui s'appuie sur
+ * cette liste disparaît de lui-même — il est DÉRIVÉ, jamais stocké. C'est ce
+ * qui l'autorise à être prudent : un signal qui s'efface tout seul peut se
+ * permettre de crier un peu tôt, un drapeau écrit en base ne le peut pas.
+ */
+const STATUTS_CIRCULABLES: ItemStatus[] = [
+  ItemStatus.AVAILABLE,
+  ItemStatus.CHECKED_OUT,
+  ItemStatus.ON_HOLD,
+  ItemStatus.IN_TRANSIT,
+];
+
 @Injectable()
 export class CirculationService {
   // ───────────────────────────────────────────────────────────
@@ -211,7 +227,10 @@ export class CirculationService {
       // (double scan), la seconde opération échoue proprement.
       const closed = await tx.checkout.updateMany({
         where: { id: checkout.id, returnDate: null },
-        data: { returnDate: now, fineAmount: fine.amountXof },
+        // ⚠ `closedAs` DIT COMMENT le prêt s'est terminé. Sans lui, un prêt
+        // clos pour PERTE serait indiscernable d'un retour — et l'historique
+        // de l'adhérent affirmerait qu'il a rapporté un document qu'il a perdu.
+        data: { returnDate: now, fineAmount: fine.amountXof, closedAs: 'rendu' },
       });
       if (closed.count === 0) {
         throw new ConflictException('Ce prêt vient déjà d’être clôturé.');
@@ -384,6 +403,25 @@ export class CirculationService {
    * Réservations actives (file d'attente) pour la vue guichet : par notice,
    * dans l'ordre, avec la position et l'adhérent. Statut AVAILABLE = mis de côté.
    */
+  /**
+   * ⚠ CHAQUE RÉSERVATION DIT SI UN EXEMPLAIRE PEUT ENCORE LA SERVIR.
+   *
+   * `servable: false` — plus aucun exemplaire de la notice n'est en état de
+   * circuler (tous perdus, retirés, manquants, abîmés). La file attend un
+   * document qui n'existe plus.
+   *
+   * ⚠ CE N'EST PAS UNE ANOMALIE, et le ton de l'écran doit le dire : un rachat
+   * la résout. C'est « un avertissement ne se place que là où il détrompe » —
+   * ici on informe, on n'alarme pas. Personne n'a mal fait.
+   *
+   * ⚠ SANS CE CHAMP, L'INFORMATION NE VIVAIT QUE LE TEMPS D'UN ÉCRAN : la
+   * clôture pour perte la rend au moment du geste, et la bibliothécaire qui
+   * n'était pas là ce jour-là ne saurait jamais qu'une file attend un document
+   * qui n'existe plus.
+   *
+   * ⚠ DÉRIVÉ, JAMAIS STOCKÉ — un drapeau qu'il faut penser à effacer ne
+   * s'efface jamais. Le jour du rachat, `servable` redevient vrai tout seul.
+   */
   async listActiveHolds(db: TenantDb) {
     const holds = await db.hold.findMany({
       where: { status: { in: ACTIVE_HOLD_STATUSES } },
@@ -398,6 +436,20 @@ export class CirculationService {
       },
       orderBy: [{ recordId: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
     });
+
+    // ⚠ UNE SEULE REQUÊTE POUR TOUTES LES NOTICES, pas une par réservation :
+    // la vue guichet en porte des dizaines, et un `count` par ligne ferait un
+    // N+1 sur l'écran le plus consulté du métier.
+    const notices = [...new Set(holds.map((h) => h.recordId))];
+    const circulables = new Set(
+      (
+        await db.item.findMany({
+          where: { recordId: { in: notices }, status: { in: STATUTS_CIRCULABLES } },
+          select: { recordId: true },
+          distinct: ['recordId'],
+        })
+      ).map((i) => i.recordId),
+    );
 
     // Position dans la file de chaque notice (1 = tête ; AVAILABLE = mis de côté).
     const positionByRecord = new Map<string, number>();
@@ -414,6 +466,8 @@ export class CirculationService {
         patronBarcode: h.patron.barcode,
         patronName: user ? `${user.firstName} ${user.lastName}`.trim() : null,
         expiryDate: h.expiryDate,
+        /** Un exemplaire peut-il encore servir cette file ? Voir l'en-tête. */
+        servable: circulables.has(h.recordId),
       };
     });
   }
@@ -564,11 +618,147 @@ export class CirculationService {
       patron: { ...patron, nomsDivergents: nomsDivergents(patron) },
       checkouts,
       holds,
+      /**
+       * ⚠ CE N'EST PAS UN SOLDE, ET LE PRODUIT NE PEUT PAS EN CALCULER UN.
+       *
+       * `Checkout.fineAmount` est écrit au retour et n'est JAMAIS réduit :
+       * aucune colonne, aucune route ne consigne un paiement. La bibliothécaire
+       * qui encaisse 2 950 FCFA au guichet voit le même montant le lendemain.
+       *
+       * Décision du 12 septembre 2026 : ces montants sont un HISTORIQUE, pas un
+       * dû. Un vrai suivi de paiement est une CAISSE — remises, paiements
+       * partiels, qui a le droit de remettre, traçabilité de l'argent — et
+       * c'est une phase, pas un champ (backlog n°31).
+       *
+       * L'écran doit donc dire « constatées (cumul) », jamais « dues ».
+       */
       fines: {
-        recordedXof: recorded, // amendes constatées aux retours passés
-        accruingXof: accruing, // amendes courant sur les retards en cours
+        /** Cumul HISTORIQUE des amendes constatées aux retours et aux pertes. */
+        recordedXof: recorded,
+        /** Amendes courant AUJOURD'HUI sur les prêts en retard non rendus. */
+        accruingXof: accruing,
+        /**
+         * @deprecated ⚠ SOMME D'UN HISTORIQUE ET D'UN ENCOURS — un nombre qui
+         * ne veut rien dire, et que l'écran lit comme un solde. Conservé le
+         * temps que le front s'en détache ; à retirer ensuite (backlog n°32).
+         */
         totalXof: recorded + accruing,
       },
+    };
+  }
+
+
+  /**
+   * Combien de réservations en attente sur cette notice plus aucun exemplaire
+   * ne peut servir ?
+   *
+   * ⚠ DÉRIVÉ, JAMAIS STOCKÉ. Le jour où la bibliothèque rachète le document, le
+   * compte retombe à zéro sans que personne ait à penser à effacer un drapeau.
+   * Un drapeau écrit en base serait la forme qu'on corrige partout ailleurs :
+   * une ligne qui reste vraie à l'écran après avoir cessé de l'être.
+   */
+  private async reservationsQueRienNePeutServir(db: TenantDb, recordId: string) {
+    const [exemplairesCirculables, enAttente] = await Promise.all([
+      db.item.count({ where: { recordId, status: { in: STATUTS_CIRCULABLES } } }),
+      db.hold.count({ where: { recordId, status: { in: ACTIVE_HOLD_STATUSES } } }),
+    ]);
+    return exemplairesCirculables > 0 ? 0 : enAttente;
+  }
+
+  /**
+   * CLORE UN PRÊT POUR PERTE DU DOCUMENT.
+   *
+   * ⚠ SANS CE GESTE, LE SEUL CHEMIN ÉTAIT UN MENSONGE. Clore un prêt ne se
+   * faisait que par un RETOUR ; pour un document perdu, la bibliothécaire
+   * devait donc déclarer un retour qui n'avait pas eu lieu — et ce chemin remet
+   * l'exemplaire en `AVAILABLE`, ou pire le met `ON_HOLD` et **prévient le
+   * lecteur suivant que son document l'attend au guichet**. Pour un livre que
+   * personne n'a.
+   *
+   * ⚠ ET NE RIEN FAIRE N'ÉTAIT PAS UNE OPTION NON PLUS : tant que le prêt reste
+   * ouvert, il compte dans le plafond de prêts simultanés — un adhérent avec
+   * assez de pertes est bloqué DÉFINITIVEMENT — et l'amende court sans fin.
+   *
+   * Trois différences avec un retour, et chacune répond à un défaut de l'autre
+   * chemin :
+   *  1. l'exemplaire passe en `LOST`, jamais en `AVAILABLE` ;
+   *  2. **aucune réservation n'est promue** — il n'y a pas de document à mettre
+   *     de côté. Si une autre copie existe, elle servira la file à son retour ;
+   *  3. l'amende est FIGÉE à sa valeur du jour : elle cesse de courir, puisque
+   *     le prêt est clos.
+   */
+  async cloreVersPerte(
+    db: TenantDb,
+    checkoutId: string,
+    now: Date = new Date(),
+    settings?: DueSettings,
+  ) {
+    const checkout = await db.checkout.findUnique({
+      where: { id: checkoutId },
+      include: { item: { include: { record: { select: { title: true } } } }, patron: true },
+    });
+    if (!checkout || checkout.returnDate) {
+      throw new NotFoundException('Prêt en cours introuvable.');
+    }
+
+    const rules = await db.circulationRule.findMany({
+      where: { patronCategory: checkout.patron.category },
+    });
+    const rule = resolveRule(rules, checkout.patron.category, checkout.item.itemType);
+    const fine = computeFine(
+      checkout.dueDate,
+      now,
+      tarifApplicable(rule.finePerDay, settings),
+      settings?.timezone ?? DEFAULT_TIMEZONE,
+    );
+
+    await db.$transaction(async (tx) => {
+      // Clôture CONDITIONNELLE, comme au retour : si le prêt vient d'être clos
+      // ailleurs (double clic, retour simultané), la seconde opération échoue
+      // proprement plutôt que d'écraser la première.
+      const closed = await tx.checkout.updateMany({
+        where: { id: checkout.id, returnDate: null },
+        data: { returnDate: now, fineAmount: fine.amountXof, closedAs: 'perte' },
+      });
+      if (closed.count === 0) {
+        throw new ConflictException('Ce prêt vient déjà d’être clôturé.');
+      }
+      await tx.item.update({
+        where: { id: checkout.itemId },
+        data: { status: ItemStatus.LOST },
+      });
+    });
+
+    // ⚠ LES RÉSERVATIONS EN ATTENTE SONT TRAITÉES, PAS IGNORÉES — et « traitées »
+    // veut dire SIGNALÉES, jamais annulées. Trois raisons, la troisième décide :
+    //  1. une réservation appartient au lecteur : l'annuler pour lui lui retire
+    //     sa place dans une file qu'il voudra peut-être garder ;
+    //  2. la bibliothèque peut racheter le document — et alors la file est
+    //     exactement ce qu'on est content d'avoir conservé ;
+    //  3. ⚠ prévenir les lecteurs serait un geste qui SORT du produit. « Un
+    //     défaut ne se pose jamais sur un comportement qui ÉMET » — annoncer
+    //     « votre réservation ne sera jamais servie » puis racheter le livre la
+    //     semaine suivante est pire que de se taire. C'est à la bibliothécaire
+    //     de décider, et elle est devant l'adhérent au moment où on lui rend ce
+    //     chiffre.
+    const reservationsSansExemplaire = await this.reservationsQueRienNePeutServir(
+      db,
+      checkout.item.recordId,
+    );
+
+    return {
+      checkoutId: checkout.id,
+      closedAs: 'perte' as const,
+      itemBarcode: checkout.item.barcode,
+      title: checkout.item.record.title,
+      patronId: checkout.patronId,
+      fineXof: fine.amountXof,
+      overdueDays: fine.overdueDays,
+      /**
+       * Réservations en attente sur cette notice qu'AUCUN exemplaire ne peut
+       * plus servir. Zéro dans le cas courant — une autre copie existe.
+       */
+      reservationsSansExemplaire,
     };
   }
 

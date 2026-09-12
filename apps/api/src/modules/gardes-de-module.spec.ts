@@ -18,6 +18,25 @@ import { MODULES_ACTIVABLES, ROUTES_PAR_MODULE } from './registre-modules';
  */
 const RACINE = join(__dirname, '..');
 
+/**
+ * La garde déclarée AU NIVEAU DE LA CLASSE, s'il y en a une.
+ *
+ * ⚠ ELLE COMPTE AUTANT QU'UNE GARDE DE ROUTE, et le refuser serait un garde qui
+ * impose la forme la MOINS sûre. `ModuleActifGuard` lit la métadonnée par
+ * `reflector.getAllAndOverride([handler, class])` : une déclaration de classe
+ * couvre donc toutes les routes, y compris la treizième écrite demain par
+ * quelqu'un qui n'aura pas lu ce fichier. Route par route, il suffit d'une
+ * distraction pour laisser une porte ouverte.
+ *
+ * C'est le contrôleur des dépôts qui l'a montré : douze routes, une seule
+ * déclaration, et la treizième héritera.
+ */
+function gardeDeClasse(fichier: string): string {
+  const source = readFileSync(join(RACINE, fichier), 'utf-8');
+  const i = source.indexOf('export class');
+  return i === -1 ? '' : source.slice(0, i);
+}
+
 function blocDeRoute(fichier: string, verbe: string, chemin: string): string | null {
   const source = readFileSync(join(RACINE, fichier), 'utf-8');
   const lignes = source.split('\n');
@@ -39,7 +58,11 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     // ⚠ Un témoin qui COMPTE : si une route déclarée ici a été renommée ou
     // supprimée, la liste ne le dirait pas — elle se contenterait de ne rien
     // vérifier, en silence.
-    expect(declarees.length).toBe(7);
+    // ⚠ 7 → 19 le 12 septembre 2026 : les douze routes du module `depot`. Le
+    // compte a fait son office — il a fallu revenir ici, et constater au
+    // passage que le relevé ne savait pas lire une garde posée au niveau de la
+    // CLASSE, c'est-à-dire la forme la plus sûre.
+    expect(declarees.length).toBe(19);
     for (const { cle } of declarees) {
       const [fichier, reste] = cle.split(' :: ');
       const [verbe, ...ch] = reste.split(' ');
@@ -52,7 +75,7 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     for (const { module, cle } of declarees) {
       const [fichier, reste] = cle.split(' :: ');
       const [verbe, ...ch] = reste.split(' ');
-      const bloc = blocDeRoute(fichier, verbe, ch.join(' ')) ?? '';
+      const bloc = (blocDeRoute(fichier, verbe, ch.join(' ')) ?? '') + gardeDeClasse(fichier);
       if (!bloc.includes(`@ModuleRequis('${module}')`)) fautives.push(`${cle} → @ModuleRequis manquant`);
       if (!bloc.includes('ModuleActifGuard')) fautives.push(`${cle} → ModuleActifGuard manquant`);
     }
@@ -115,12 +138,18 @@ describe('gardes de module — aucune route de module sans son garde', () => {
 describe('amendes éteintes — elles cessent de s’accumuler, elles ne s’effacent pas', () => {
   const service = readFileSync(join(RACINE, 'circulation/circulation.service.ts'), 'utf-8');
 
-  it('⚠ LES TROIS sites de calcul passent par `tarifApplicable` (témoin de COMPTE)', () => {
+  it('⚠ LES QUATRE sites de calcul passent par `tarifApplicable` (témoin de COMPTE)', () => {
     // Un premier relevé n'avait vu que DEUX sites : le troisième aurait
     // continué d'accumuler des amendes dans une école qui les a éteintes, sans
     // que rien ne le signale. Le compte exact est ce qui l'attrape.
-    expect((service.match(/computeFine\(/g) ?? []).length).toBe(3);
-    expect((service.match(/tarifApplicable\(rule\.finePerDay, settings\)/g) ?? []).length).toBe(3);
+    //
+    // ⚠ PASSÉ DE 3 À 4 le 12 septembre 2026 : `cloreVersPerte` calcule l'amende
+    // qu'elle FIGE en clôturant un prêt pour perte. Le compte a fait son office
+    // — il a fallu revenir ici et vérifier que le quatrième site passe bien par
+    // le réglage du module, donc qu'une école qui a éteint les amendes fige
+    // ZÉRO. Il y passe.
+    expect((service.match(/computeFine\(/g) ?? []).length).toBe(4);
+    expect((service.match(/tarifApplicable\(rule\.finePerDay, settings\)/g) ?? []).length).toBe(4);
   });
 
   it('le tarif tombe à zéro quand le module est éteint, et pas autrement', async () => {

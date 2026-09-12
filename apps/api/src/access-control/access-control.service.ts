@@ -5,11 +5,15 @@ import {
 } from '@nestjs/common';
 import { CollectionType, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { refusDeDeplacement } from '../collections/hierarchie';
+import { planifierPropagation } from '../collections/propagation';
+import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import {
   AccessDenialReason,
   explainAccessDenial,
   hasAccessViaRules,
   StudentAccessContext,
+  sousEmbargo,
 } from './access-control.matching';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
@@ -26,6 +30,12 @@ function denialMessage(reason: AccessDenialReason): string {
       return `Réservé aux étudiants de ${reason.requiredClassName}.`;
     case 'SUBSCRIPTION_REQUIRED':
       return `Abonnement requis (palier "${reason.requiredSubscriptionTier}").`;
+    case 'EMBARGO':
+      return (
+        `Ce document est sous embargo jusqu'au ` +
+        `${reason.embargoUntil.toLocaleDateString('fr-FR')}. ` +
+        `Sa description reste consultable ; le fichier ne l'est pas encore.`
+      );
     case 'NOT_CONFIGURED':
     default:
       return 'Ce document n’est pas accessible pour votre école.';
@@ -95,6 +105,29 @@ export class AccessControlService {
   ) {
     // Rejette une collection interne d'une autre école (404) avant modification.
     await this.requireManageableCollection(id, tenantId);
+
+    // ⚠ LE DÉPLACEMENT EST VÉRIFIÉ AVANT L'ÉCRITURE, et ce n'est pas une
+    // duplication inutile du trigger PostgreSQL.
+    //
+    // Le trigger est le garde de DERNIER RECOURS, commun à tous les écrivains
+    // (API, seed, reprise, import futur). Ce contrôle-ci existe pour deux
+    // raisons que le trigger ne couvre pas : rendre un 400 EXPLICABLE plutôt
+    // que laisser remonter une erreur PostgreSQL à l'écran, et voir la HAUTEUR
+    // DU SOUS-ARBRE déplacé — que le trigger ignore, puisqu'il ne valide que la
+    // ligne écrite. Déplacer une collection qui a déjà des enfants peut porter
+    // un sous-arbre au-delà de trois niveaux sans qu'aucune ligne ne viole la
+    // règle à son propre niveau.
+    if (dto.parentId !== undefined) {
+      const noeuds = await this.prisma.collection.findMany({
+        // ⚠ `tenantId` EST NÉCESSAIRE : `refusDeDeplacement` refuse un parent
+        // d'un autre établissement. Sans cette colonne, le refus ne pourrait
+        // jamais se déclencher — et il serait silencieux, donc invisible.
+        select: { id: true, parentId: true, tenantId: true },
+      });
+      const refus = refusDeDeplacement(noeuds, id, dto.parentId);
+      if (refus) throw new BadRequestException(refus);
+    }
+
     return this.prisma.collection.update({
       where: { id },
       data: {
@@ -102,6 +135,8 @@ export class AccessControlService {
         ...(dto.description !== undefined
           ? { description: dto.description.trim() || null }
           : {}),
+        // `null` détache la collection ; `undefined` ne touche à rien.
+        ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
       },
     });
   }
@@ -129,6 +164,73 @@ export class AccessControlService {
       create: { collectionId, titleId },
       update: {},
     });
+  }
+
+  /**
+   * SUPPRIME UNE COLLECTION — et refuse si elle n'est pas VIDE.
+   *
+   * ⚠ ELLE NE POUVAIT PAS ÊTRE SUPPRIMÉE DU TOUT. Trois suppressions
+   * existaient — ses notices, ses titres, ses règles d'accès — et pas la
+   * collection elle-même. Une collection créée sur une faute de frappe restait
+   * pour toujours dans l'écran d'administration, et P6-1 a augmenté le coût :
+   * avec la hiérarchie, une sous-collection mal créée est permanente et l'arbre
+   * la montre à chaque visite.
+   *
+   * ⚠ REFUS PLUTÔT QUE CASCADE, et le motif décide : une cascade emporterait
+   * des RÈGLES D'ACCÈS, c'est-à-dire des décisions que quelqu'un a prises. Même
+   * raisonnement que `DELETE /authors/:id`, qui refuse une fiche portant des
+   * œuvres. Le refus oblige à voir ce qu'on détruit avant de le détruire.
+   *
+   * ⚠ ET « VIDE » INCLUT LES RÈGLES D'ACCÈS. Une collection sans aucune notice
+   * mais portant des règles porte quand même des décisions — c'est précisément
+   * la forme qu'on ne voit pas : l'écran la montre vide, et elle ne l'est pas.
+   *
+   * ⚠ LE REFUS COMPTE CE QUI BLOQUE. « Cette collection n'est pas vide » envoie
+   * chercher à l'aveugle ; « 12 notices, 3 règles d'accès, 2 sous-collections »
+   * dit quoi faire, et dans quel ordre.
+   */
+  async removeCollection(collectionId: string, tenantId: string) {
+    const collection = await this.requireManageableCollection(collectionId, tenantId);
+
+    // ⚠ LA COLLECTION SOCLE NE SE SUPPRIME PAS, et la déclaration du schéma
+    // disait le contraire (« Modifiable et supprimable comme n'importe quelle
+    // collection ») — elle n'a jamais été vraie, puisque RIEN ne supprimait.
+    //
+    // Le motif est un faux silencieux en attente : `DigitalCopyService` y
+    // rattache automatiquement chaque document numérisé, et sort en silence
+    // (`if (!collection) return`) quand il n'y en a pas. Sans socle, un
+    // document téléversé n'entre dans aucune collection et n'est visible de
+    // personne — sans erreur, sans trace, sans que l'on sache pourquoi.
+    if (collection.isDefault) {
+      throw new BadRequestException(
+        'Cette collection est le socle de l’établissement : les documents ' +
+          'numérisés y sont rattachés automatiquement. La supprimer les rendrait ' +
+          'invisibles sans que rien ne le signale.',
+      );
+    }
+
+    const [notices, regles, enfants] = await Promise.all([
+      this.prisma.collectionTitle.count({ where: { collectionId } }),
+      this.prisma.accessRule.count({ where: { collectionId } }),
+      this.prisma.collection.count({ where: { parentId: collectionId } }),
+    ]);
+
+    const blocages = [
+      notices > 0 && `${notices} document(s)`,
+      regles > 0 && `${regles} règle(s) d’accès`,
+      enfants > 0 && `${enfants} sous-collection(s)`,
+    ].filter(Boolean) as string[];
+
+    if (blocages.length > 0) {
+      throw new BadRequestException(
+        `Cette collection n’est pas vide : ${blocages.join(', ')}. ` +
+          'Retirez-les d’abord — une suppression en cascade emporterait des ' +
+          'règles d’accès, c’est-à-dire des décisions.',
+      );
+    }
+
+    await this.prisma.collection.delete({ where: { id: collectionId } });
+    return { deleted: true, name: collection.name };
   }
 
   async removeTitle(collectionId: string, tenantId: string, titleId: string) {
@@ -230,6 +332,136 @@ export class AccessControlService {
         subscriptionTier: dto.subscriptionTier?.trim() || null,
       },
     });
+  }
+
+  /**
+   * Ce que la propagation FERAIT — sans rien écrire.
+   *
+   * ⚠ MOITIÉ EXIGÉE DU LOT : l'action liste ce qu'elle va toucher AVANT
+   * d'écrire. Un élargissement de droits qui s'applique sans être montré est
+   * ce que ce dépôt passe son temps à corriger.
+   */
+  async previsualiserPropagation(collectionId: string, tenantId: string) {
+    await this.requireManageableCollection(collectionId, tenantId);
+    return planifierPropagation({
+      ...(await this.donneesDePropagation()),
+      sourceId: collectionId,
+      tenantId,
+    });
+  }
+
+  /** Les deux lectures dont la planification a besoin. */
+  private async donneesDePropagation() {
+    const [collections, regles] = await Promise.all([
+      this.prisma.collection.findMany({
+        select: { id: true, parentId: true, name: true, tenantId: true },
+      }),
+      this.prisma.accessRule.findMany({
+        select: { collectionId: true, tenantId: true, className: true, subscriptionTier: true },
+      }),
+    ]);
+    return {
+      noeuds: collections.map((c) => ({
+        id: c.id,
+        parentId: c.parentId,
+        nom: c.name,
+        tenantId: c.tenantId,
+      })),
+      regles,
+    };
+  }
+
+  /**
+   * Applique les règles de la collection à TOUTES ses descendantes.
+   *
+   * ⚠ L'ÉCRITURE ET SA TRACE SONT ATOMIQUES, et ce n'est pas du zèle.
+   *
+   * Le motif ailleurs dans ce dépôt est `void this.audit.log(...)` —
+   * fire-and-forget —, et `AuditService.log` AVALE de surcroît son propre
+   * échec (try/catch + warn). Pour une action ordinaire c'est le bon
+   * compromis : un journal indisponible ne doit pas empêcher une connexion.
+   *
+   * Ici non. Cette action ÉLARGIT des droits, et « laisse une trace » ne peut
+   * pas vouloir dire « probablement ». L'entrée d'audit est donc écrite dans la
+   * MÊME transaction que les règles : si elle échoue, rien n'est élargi. On ne
+   * passe pas par `AuditService.log`, précisément parce qu'il rattrape l'erreur
+   * qu'on veut voir remonter.
+   *
+   * ⚠ Idempotente : une descendante qui porte déjà une règle identique ne
+   * reçoit rien. Relancer la propagation deux fois n'empile pas de doublons.
+   */
+  async propagerRegles(
+    collectionId: string,
+    tenantId: string,
+    acteur: { id?: string; email?: string; role?: string; ip?: string },
+  ) {
+    await this.requireManageableCollection(collectionId, tenantId);
+    const plan = planifierPropagation({
+      ...(await this.donneesDePropagation()),
+      sourceId: collectionId,
+      tenantId,
+    });
+
+    if (plan.reglesAEcrire === 0) {
+      // ⚠ RIEN À ÉCRIRE N'EST PAS UN ÉCHEC, et ce n'est pas un succès muet
+      // non plus : le plan dit pourquoi (aucune descendante, ou toutes déjà
+      // pourvues). Aucune entrée d'audit — il n'y a pas eu d'élargissement.
+      return { ...plan, ecrites: 0 };
+    }
+
+    const aEcrire = plan.destinations.flatMap((d) =>
+      d.aAjouter.map((r) => ({
+        collectionId: d.collectionId,
+        tenantId: r.tenantId,
+        className: r.className,
+        subscriptionTier: r.subscriptionTier,
+      })),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.accessRule.createMany({ data: aEcrire });
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          actorId: acteur.id ?? null,
+          actorEmail: acteur.email ?? null,
+          actorRole: acteur.role ?? null,
+          action: AUDIT_ACTIONS.COLLECTION_RULES_PROPAGATE,
+          targetType: 'collection',
+          targetId: collectionId,
+          ip: acteur.ip ?? null,
+          // ⚠ Les collections touchées sont NOMMÉES dans la trace. Un audit qui
+          // dit « propagation » sans dire vers quoi ne permet pas de défaire.
+          metadata: {
+            reglesEcrites: aEcrire.length,
+            destinations: plan.destinations
+              .filter((d) => d.aAjouter.length > 0)
+              .map((d) => ({ id: d.collectionId, nom: d.nom, regles: d.aAjouter.length })),
+            // ⚠ LES ÉPARGNÉES SONT DANS LA TRACE, pas seulement dans la
+            // réponse. Une propagation qui a sauté trois sous-collections
+            // parce qu'elles portaient leurs propres règles n'a pas fait ce
+            // que son nom dit : le journal doit le raconter, sinon relire
+            // l'audit dans six mois donnera une propagation « complète » qui
+            // ne l'était pas.
+            //
+            // Aplati en objets simples : `Prisma.InputJsonValue` n'accepte pas
+            // un tableau d'interfaces nommées, seulement des objets d'index.
+            epargnees: plan.epargnees.map((e) => ({
+              id: e.collectionId,
+              nom: e.nom,
+              reglesPropres: e.reglesPropres,
+            })),
+            ecartees: plan.ecartees.map((e) => ({
+              id: e.collectionId,
+              nom: e.nom,
+              motif: e.motif,
+            })),
+          },
+        },
+      });
+    });
+
+    return { ...plan, ecrites: aEcrire.length };
   }
 
   /**
@@ -364,9 +596,40 @@ export class AccessControlService {
    * AUCUNE URL signée n'est délivrée sans un `granted: true` ici.
    */
   async getRecordAccessStatus(
+    /**
+     * ⚠ LE CLIENT TENANT EST OBLIGATOIRE, ET CE N'EST PAS UNE COMMODITÉ.
+     *
+     * L'embargo vit sur la notice, donc dans le schéma de l'école ; le reste de
+     * cette décision lit le schéma public. Le rendre OPTIONNEL aurait sauté
+     * l'embargo par simple omission — l'affirmation fausse rétablie par
+     * distraction, exactement ce qu'on a corrigé ce matin sur `MailOutcome`.
+     * Obligatoire, le compilateur est allé chercher les quatre appelants.
+     */
+    db: Pick<PrismaClient, 'biblioRecord'>,
     ctx: StudentAccessContext,
     recordId: string,
+    /** Injectable pour éprouver les bornes de l'embargo — voir `sousEmbargo`. */
+    maintenant?: Date,
   ): Promise<RecordAccessStatus> {
+    // ⚠ L'EMBARGO SE DÉCIDE ICI, ET AVANT LES RÈGLES — P6-4.
+    //
+    // Ici, et non dans une liste de surfaces à tenir à jour : ce point garde
+    // l'URL de lecture en ligne ET l'émission de licence hors-ligne. Une liste
+    // aurait eu à être complétée à chaque surface nouvelle, et la manquante
+    // aurait été la dernière écrite — celle que personne ne relit.
+    //
+    // AVANT les règles, parce que l'embargo ne dépend pas de qui demande.
+    // Évaluer la classe d'abord produirait « réservé aux M2 » pour une thèse
+    // que même un M2 ne peut pas lire — un refus exact et trompeur.
+    const notice = await db.biblioRecord.findUnique({
+      where: { id: recordId },
+      select: { embargoUntil: true },
+    });
+    if (notice && sousEmbargo(notice.embargoUntil, maintenant ?? new Date())) {
+      const reason = { code: 'EMBARGO' as const, embargoUntil: notice.embargoUntil! };
+      return { granted: false, message: denialMessage(reason), ...reason };
+    }
+
     const links = await this.prisma.collectionTitle.findMany({
       where: {
         recordId,
@@ -430,7 +693,11 @@ export class AccessControlService {
   private async requireManageableCollection(id: string, tenantId: string) {
     const collection = await this.prisma.collection.findUnique({
       where: { id },
-      select: { id: true, type: true, tenantId: true },
+      // ⚠ `isDefault` et `name` sont chargés ICI, et non par un second `select`
+      // chez l'appelant : cette méthode est le point de passage de toute
+      // manipulation de collection, et un appelant qui recharge la même ligne
+      // est un appelant qui peut la recharger AUTREMENT.
+      select: { id: true, name: true, type: true, tenantId: true, isDefault: true },
     });
     if (!collection || this.isForeignInternal(collection, tenantId)) {
       throw new NotFoundException('Collection introuvable.');

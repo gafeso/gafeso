@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { MailOutcome } from './mail-outcome';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
@@ -71,12 +72,28 @@ export class MailService {
     }
   }
 
+  /**
+   * ⚠ REND CE QUI EST ARRIVÉ — IL NE LE SUPPOSE PLUS.
+   *
+   * Cette méthode rendait `void` et traitait « SMTP absent » comme un envoi
+   * RÉUSSI : pas de transporteur, une ligne de journal, retour normal. Le
+   * no-op était délibéré — le développement n'exige pas de serveur de
+   * courriel — mais chaque appelant rapportait ensuite ce silence comme un
+   * succès. Trois mensonges mesurés le 12 septembre 2026, dont le REPLI de
+   * double authentification. Voir `mail-outcome.ts` pour le tableau.
+   *
+   * ⚠ ELLE NE JETTE PLUS NON PLUS. Une erreur SMTP devient
+   * `{ sent: false, reason: 'smtp_error' }`. C'est délibéré : avec deux modes
+   * d'échec — un retour silencieux pour l'absence, une exception pour la
+   * panne — chaque appelant devait traiter les deux, et aucun ne traitait le
+   * premier. Un seul canal, et le type force à le lire.
+   */
   private async send(
     to: string,
     subject: string,
     text: string,
     html: string,
-  ): Promise<void> {
+  ): Promise<MailOutcome> {
     if (!this.transporter) {
       // Le CORPS n'est PAS journalisé. Il contient, pour les emails de compte,
       // un lien de définition de mot de passe — donc de quoi prendre la main
@@ -85,10 +102,18 @@ export class MailService {
       // Le canal maîtrisé est GET /accounts/:id/password-link : réservé à
       // « comptes.gerer », à la demande, et journalisé nominativement.
       this.logger.log(`[mail non envoyé, SMTP absent] à ${to} — ${subject}`);
-      return;
+      return { sent: false, reason: 'smtp_absent' };
     }
-    await this.transporter.sendMail({ from: this.from, to, subject, text, html });
-    this.logger.log(`Email envoyé à ${to} : ${subject}`);
+    try {
+      await this.transporter.sendMail({ from: this.from, to, subject, text, html });
+      this.logger.log(`Email envoyé à ${to} : ${subject}`);
+      return { sent: true };
+    } catch (error) {
+      const detail = (error as Error).message;
+      // ⚠ Le CORPS n'est toujours pas journalisé : seul le message du serveur.
+      this.logger.warn(`Email NON envoyé à ${to} (${subject}) : ${detail}`);
+      return { sent: false, reason: 'smtp_error', detail };
+    }
   }
 
   /** L'envoi réel est-il possible (SMTP configuré) ? Sinon les codes sont journalisés. */
@@ -102,16 +127,16 @@ export class MailService {
    * sans balise fournie par l'utilisateur → pas d'injection. PROPAGE l'erreur
    * SMTP : l'appelant (moteur de rappels) journalise l'échec et retentera.
    */
-  async sendCirculationReminder(to: string, subject: string, body: string): Promise<void> {
+  async sendCirculationReminder(to: string, subject: string, body: string): Promise<MailOutcome> {
     const html = body
       .split('\n')
       .map((line) => escapeHtml(line))
       .join('<br>');
-    await this.send(to, subject, body, `<div style="font-family:sans-serif">${html}</div>`);
+    return this.send(to, subject, body, `<div style="font-family:sans-serif">${html}</div>`);
   }
 
   /** Code de double authentification (repli email) — expiration courte. */
-  async sendTwoFactorCode(email: string, code: string): Promise<void> {
+  async sendTwoFactorCode(email: string, code: string): Promise<MailOutcome> {
     const subject = 'Votre code de connexion — Gafeso';
     const text =
       `Bonjour,\n\nVotre code de connexion à usage unique est : ${code}\n\n` +
@@ -122,7 +147,7 @@ export class MailService {
       `<p style="font-size:26px;font-weight:700;letter-spacing:4px">${code}</p>` +
       `<p style="color:#666;font-size:13px">Il expire dans 10 minutes. Si vous ` +
       `n'êtes pas à l'origine de cette connexion, changez votre mot de passe.</p>`;
-    await this.send(email, subject, text, html);
+    return this.send(email, subject, text, html);
   }
 
   /**
@@ -132,7 +157,7 @@ export class MailService {
   async sendHoldAvailable(
     email: string,
     info: { name: string | null; title: string; pickupDays: number; expiryDate: Date | null },
-  ): Promise<void> {
+  ): Promise<MailOutcome> {
     const hello = info.name ? `Bonjour ${info.name},` : 'Bonjour,';
     const until = info.expiryDate
       ? ` (jusqu’au ${info.expiryDate.toLocaleDateString('fr-FR')})`
@@ -152,11 +177,11 @@ export class MailService {
       `<strong>${info.pickupDays} jour(s)</strong>${until}.</p>` +
       `<p style="color:#666;font-size:13px">Passé ce délai, il sera proposé au ` +
       `lecteur suivant de la file.</p>`;
-    await this.send(email, subject, text, html);
+    return this.send(email, subject, text, html);
   }
 
   /** Envoie le lien de définition de mot de passe (usage unique, 24 h). */
-  async sendSetPasswordLink(email: string, url: string): Promise<void> {
+  async sendSetPasswordLink(email: string, url: string): Promise<MailOutcome> {
     const subject = 'Définissez votre mot de passe — Gafeso';
     const text =
       `Bonjour,\n\n` +
@@ -172,7 +197,7 @@ export class MailService {
       `Définir mon mot de passe</a></p>` +
       `<p style="color:#666;font-size:13px">Ou copiez ce lien : ${url}<br>` +
       `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.</p>`;
-    await this.send(email, subject, text, html);
+    return this.send(email, subject, text, html);
   }
 
   /**
@@ -180,16 +205,44 @@ export class MailService {
    * matricule null = inscription personnel/autre (le rôle sera défini à
    * l'activation).
    */
+  /**
+   * Un dépôt vient d'être soumis : le directeur doit le valider (P6-2).
+   *
+   * ⚠ Pas de lien dans le corps : l'adresse de l'espace professionnel dépend du
+   * domaine de l'établissement, et un lien faux vaut moins qu'une phrase juste.
+   */
+  async sendDepositSubmitted(
+    email: string,
+    info: { titre: string; auteur: string },
+  ): Promise<MailOutcome> {
+    const subject = `Dépôt à valider : « ${info.titre} »`;
+    const text =
+      `Bonjour,\n\n${info.auteur} a déposé « ${info.titre} » et vous a désigné ` +
+      `comme directeur.\n\nConnectez-vous à votre bibliothèque pour le valider ` +
+      `ou le refuser. Tant qu'il n'est pas validé, le document n'est visible de ` +
+      `personne d'autre.`;
+    const html =
+      `<p>Bonjour,</p><p><strong>${escapeHtml(info.auteur)}</strong> a déposé ` +
+      `« ${escapeHtml(info.titre)} » et vous a désigné comme directeur.</p>` +
+      `<p>Connectez-vous à votre bibliothèque pour le valider ou le refuser. ` +
+      `Tant qu'il n'est pas validé, le document n'est visible de personne d'autre.</p>`;
+    return this.send(email, subject, text, html);
+  }
+
   async notifyManagerPendingAccount(
     managerEmails: string[],
     accountEmail: string,
     matricule: string | null,
-  ): Promise<void> {
+  ): Promise<MailOutcome> {
     if (managerEmails.length === 0) {
       this.logger.warn(
         `Compte en attente (${matricule ?? 'sans matricule'}, ${accountEmail}) mais aucun gestionnaire actif à notifier.`,
       );
-      return;
+      // ⚠ CE CHEMIN RENDAIT `undefined`, DONC UN SUCCÈS POUR SON APPELANT.
+      // Une école sans gestionnaire actif laissait un compte en attente sans
+      // que personne ne l'apprenne — avec pour seule trace la ligne de journal
+      // ci-dessus, hors de portée de qui pouvait agir.
+      return { sent: false, reason: 'aucun_destinataire' };
     }
     const subject = 'Compte en attente d’activation — Gafeso';
     const intro = matricule
@@ -209,6 +262,6 @@ export class MailService {
       `<ul>${matriculeLineHtml}` +
       `<li>Email : <strong>${accountEmail}</strong></li></ul>` +
       `<p>Vérifiez son identité puis activez le compte depuis l'espace de gestion.</p>`;
-    await this.send(managerEmails.join(', '), subject, text, html);
+    return this.send(managerEmails.join(', '), subject, text, html);
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -64,7 +65,7 @@ export default function AuthorsIndexPage() {
   }, [page]);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="font-serif text-3xl font-bold">Auteurs</h1>
         <Link href="/opac" className="text-sm text-muted hover:text-ink">

@@ -258,6 +258,20 @@ export class CatalogingController {
     return result;
   }
 
+  @Get('index-sante')
+  @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
+  @ApiOperation({
+    summary: 'Écart entre le catalogue en base et l’index de recherche',
+    description:
+      'Trois états : « aligne », « derive » (réindexation à lancer), ' +
+      '« indisponible » (le moteur ne répond pas — `dansIndex` vaut alors null ' +
+      'et NON zéro : un index injoignable n’est pas un index vide).',
+  })
+  async indexSante(@CurrentTenant() tenant: ResolvedTenant | null) {
+    const { db, slug } = this.ctx(tenant);
+    return this.cataloging.indexSante(db, slug);
+  }
+
   @Post('reindex')
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Réindexer tout le catalogue dans Meilisearch' })

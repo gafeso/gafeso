@@ -29,6 +29,46 @@ export {
  * l'indexation, TOUT indexeur doit passer par ici — un document partiel
  * écraserait les champs des autres.
  */
+/**
+ * Les états d'une réponse de recherche.
+ *
+ * `'servi'` couvre les deux réponses RÉELLES — avec ou sans résultats. Zéro
+ * résultat est une réponse, l'indisponibilité n'en est pas une.
+ *
+ * ⚠ Vocabulaire ALIGNÉ sur le front (`ExistenceNotice` dans
+ * `apps/web/lib/server-api.ts` : `existe | introuvable | indisponible`). Le
+ * troisième terme est le même mot des deux côtés de l'API, exprès.
+ */
+export type EtatRecherche = 'servi' | 'indisponible';
+
+/**
+ * Réponse de `SearchService.search` — union DISCRIMINÉE, pas un objet avec un
+ * drapeau.
+ *
+ * ⚠ L'UNION EST LE POINT. Avec un drapeau (`indisponible?: boolean`) sur un
+ * `SearchResult` toujours rempli, un appelant qui l'ignore lit `totalHits: 0`
+ * et affirme « aucun résultat » — exactement le défaut qu'on corrige. Avec
+ * l'union, le compilateur refuse de lire `totalHits` avant d'avoir traité
+ * l'état. Le coût est assumé : quatre appelants à reprendre, une fois.
+ */
+export type ReponseRecherche =
+  | ({ etat: 'servi' } & SearchResult)
+  | { etat: 'indisponible'; motif: string };
+
+/**
+ * Réponse de `SearchService.countDocuments` — même union que la recherche.
+ *
+ * ⚠ `documents: 0` NE DOIT JAMAIS SERVIR DE REPLI. Un index injoignable rendu
+ * « 0 document » se lirait comme un index VIDE, donc comme une dérive maximale,
+ * donc comme une invitation à réindexer un fonds qui n'a peut-être rien. Or une
+ * réindexation complète sur un gros catalogue n'est pas gratuite : c'est
+ * exactement la « non-réponse qui INVITE À AGIR » de CLAUDE.md, et le geste
+ * qu'elle provoque est une écriture.
+ */
+export type ReponseComptage =
+  | { etat: 'servi'; documents: number }
+  | { etat: 'indisponible'; motif: string };
+
 export function buildRecordSearchDoc(record: {
   id: string;
   title: string;
@@ -136,32 +176,70 @@ export class SearchService {
     return this.engine.clearIndex(slug);
   }
 
+  /**
+   * Combien de documents l'index de cette école contient-il ?
+   *
+   * Même union que `search` : l'appelant DOIT traiter l'indisponibilité, et le
+   * compilateur l'y oblige. Voir `ReponseComptage` pour la raison exacte du
+   * refus de replier sur zéro.
+   */
+  async countDocuments(slug: string): Promise<ReponseComptage> {
+    try {
+      return { etat: 'servi', documents: await this.engine.countDocuments(slug) };
+    } catch (error) {
+      const motif = (error as Error).message;
+      this.logger.warn(
+        `Comptage d'index ${this.engine.name} indisponible (${slug}) : ${motif} — ` +
+          `état « indisponible » rendu (JAMAIS zéro document).`,
+      );
+      return { etat: 'indisponible', motif };
+    }
+  }
+
   /** Le moteur répond-il ? (exposé au healthcheck de l'API.) */
   health(): Promise<boolean> {
     return this.engine.health();
   }
 
   /**
-   * Recherche paginée avec facettes (OPAC, page constellation comprise). Ne DOIT
-   * jamais faire planter l'appelant : un index absent (école tout juste
-   * provisionnée) ou un moteur injoignable renvoient un résultat vide (facettes
-   * à 0), jamais une 500 — l'OPAC reste consultable, juste vide, le temps de
-   * relancer une réindexation (voir scripts/reindex.mjs).
+   * Recherche paginée avec facettes (OPAC, page constellation comprise).
+   *
+   * ⚠ TROIS ÉTATS, ET NON DEUX (backlog n°18, corrigé le 12 septembre 2026).
+   *
+   * Jusqu'ici, un moteur injoignable rendait un résultat VIDE : `totalHits: 0`,
+   * facettes à zéro. L'intention était bonne — l'OPAC ne devait pas rendre une
+   * 500 — mais la forme écrivait une non-réponse comme un FAIT : « aucun
+   * résultat » là où la vérité est « je ne sais pas ». Un Meilisearch tombé
+   * rendait donc une bibliothèque publiquement VIDE, avec un avertissement dans
+   * un journal que personne ne lit en production, sur la surface la plus
+   * visible du produit.
+   *
+   * Les trois états sont donc : servi avec des résultats, servi sans résultat,
+   * et INDISPONIBLE. Les deux premiers portent le même `etat: 'servi'` — zéro
+   * résultat est une réponse légitime, et c'est bien une réponse.
+   *
+   * ⚠ LA FORME REPREND CELLE DU FRONT, elle n'en invente pas une. `noticeExiste`
+   * et `noticePublique` (apps/web/lib/server-api.ts) rendent déjà
+   * `'existe' | 'introuvable' | 'indisponible'` pour la même raison, et sur la
+   * même surface publique. Un produit qui distingue ses non-réponses de deux
+   * façons différentes selon la couche ne les distingue pas.
+   *
+   * ⚠ ET C'EST À L'APPELANT DE TRANCHER, pas à cette méthode. Selon la surface,
+   * « je ne sais pas » se traduit par un 503 (la recherche publique, la
+   * constellation) ou par un silence honnête (un enrichissement facultatif qui
+   * disparaît). Cette méthode ne peut pas le savoir : elle rapporte, elle ne
+   * décide pas.
    */
-  async search(slug: string, params: SearchParams): Promise<SearchResult> {
+  async search(slug: string, params: SearchParams): Promise<ReponseRecherche> {
     try {
-      return await this.engine.search(slug, params);
+      return { etat: 'servi', ...(await this.engine.search(slug, params)) };
     } catch (error) {
+      const motif = (error as Error).message;
       this.logger.warn(
-        `Recherche ${this.engine.name} indisponible (${slug}) : ${(error as Error).message} — résultat vide renvoyé.`,
+        `Recherche ${this.engine.name} indisponible (${slug}) : ${motif} — ` +
+          `état « indisponible » rendu à l'appelant (JAMAIS un résultat vide).`,
       );
-      return {
-        hits: [],
-        totalHits: 0,
-        page: params.page,
-        totalPages: 0,
-        facetDistribution: Object.fromEntries((params.facets ?? []).map((f) => [f, {}])),
-      };
+      return { etat: 'indisponible', motif };
     }
   }
 }

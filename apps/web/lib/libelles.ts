@@ -300,12 +300,169 @@ export const LIBELLES = {
       'Vous n’avez pas la permission de modifier les règles de prêt (fonction « etablissement.regles »).',
     adherents:
       'Vous n’avez pas la permission de gérer les adhérents (fonction « adherents.gerer »).',
+    depot:
+      'Le dépôt de documents n’est pas ouvert à votre compte (fonction « depot.deposer »).',
+    encadrements:
+      'Le suivi des encadrements n’est pas ouvert à votre compte (fonction « encadrements.voir »).',
+    depotsAValider:
+      'La validation des dépôts n’est pas ouverte à votre compte (fonction « depot.valider »).',
   },
 
   /**
    * Adhérents (back-office) — écran neuf du 10 septembre 2026, backlog n° 8.
    * Entièrement soumis à la convention : aucun texte n'est écrit dans l'écran.
    */
+  /**
+   * « Mes encadrements » — P6-3, moitié front.
+   *
+   * ⚠ LE TEXTE QUI PORTE TOUT L'ÉCRAN est `ficheNonLiee`. L'API le dit dans la
+   * description de sa propre route : « aucun encadrement » et « votre compte
+   * n'est relié à aucune fiche d'auteur » sont DEUX choses. Un enseignant qui a
+   * dirigé quinze thèses verrait sinon qu'il n'en a dirigé aucune — sur l'écran
+   * qui sert à monter un dossier de promotion, et sans rien pouvoir y faire,
+   * puisque le rattachement se pose au catalogage.
+   */
+  mesEncadrements: {
+    titre: 'Mes encadrements',
+    introduction:
+      'Les mémoires et les thèses que vous avez dirigés, tels qu’ils sont enregistrés au catalogue.',
+    /** ⚠ Aucun compte tant qu'on ne sait pas : voir la note du bloc. */
+    chargement: 'Chargement de vos encadrements…',
+    /** Ne s’affiche QUE si la fiche est rattachée — sinon c’est un faux. */
+    aucun: 'Aucun mémoire ni aucune thèse ne vous est attribué comme directeur.',
+    ficheNonLieeTitre: 'Votre compte n’est pas encore rattaché à votre fiche d’auteur',
+    /**
+     * ⚠ Un recours doit NOMMER à qui s’adresser. « Contactez le support » ou
+     * « réessayez plus tard » ne sont pas des sorties : ici la personne ne peut
+     * rien faire seule, le rattachement se pose au catalogage.
+     */
+    ficheNonLiee:
+      'Vos encadrements existent peut-être déjà au catalogue : ils ne peuvent simplement pas ' +
+      'vous être présentés tant que votre compte n’est pas relié à votre fiche d’auteur. ' +
+      'Ce rattachement se fait au catalogage — demandez-le à la bibliothèque de votre établissement.',
+    /** Le nom sous lequel le catalogue enregistre ses encadrements. */
+    enregistreSous: (nom: string) => `Enregistrés sous le nom « ${nom} »`,
+    colonneAnnee: 'Année',
+    colonneEtudiant: 'Étudiant',
+    colonneTitre: 'Titre',
+    colonneType: 'Type',
+    colonneUniversite: 'Université de soutenance',
+    /** Une absence de donnée s’affiche comme une absence, jamais comme un vide. */
+    nonRenseigne: 'Non renseigné',
+    total: (n: number) => (n === 1 ? '1 encadrement' : `${n} encadrements`),
+    /**
+     * ⚠ L’export n’est PAS paginé, et le dire fait partie du texte : une pièce
+     * justificative tronquée sans le dire serait un faux dans un dossier.
+     */
+    exportCsv: 'Télécharger la liste complète (CSV)',
+    exportAide: 'Le fichier contient tous vos encadrements, pas seulement la page affichée.',
+    pageSur: (page: number, total: number) => `Page ${page} sur ${total}`,
+    pagePrecedente: 'Page précédente',
+    pageSuivante: 'Page suivante',
+    erreur: 'Vos encadrements n’ont pas pu être chargés.',
+  },
+
+  /**
+   * « Dépôts à valider » — l'écran du DIRECTEUR, 12 septembre 2026.
+   *
+   * ⚠ POURQUOI IL EXISTE. Trois routes servaient déjà le directeur —
+   * `GET /depots/a-valider`, `POST /depots/:id/valider`,
+   * `POST /depots/:id/refuser` — et AUCUN écran ne les ouvrait. La recette du
+   * circuit l'a montré : le mur du matin (« aucun directeur désignable ») était
+   * tombé, et le circuit restait infranchissable un cran plus loin. Un étudiant
+   * pouvait soumettre ; personne ne pouvait décider.
+   *
+   * ⚠ Et le garde `couverture-des-roles` ne pouvait pas le voir : il ne lit que
+   * `ROLES_SYSTEME`. `depot.valider` n'est portée que par un rôle DYNAMIQUE —
+   * donc hors de sa portée par construction.
+   */
+  depotsAValider: {
+    titre: 'Dépôts à valider',
+    introduction:
+      'Les mémoires et les thèses dont vous êtes le directeur désigné, et qui attendent votre décision.',
+    /** ⚠ Aucun compte tant qu'on ne sait pas : un « aucun dépôt » prématuré ferait partir. */
+    chargement: 'Chargement des dépôts…',
+    aucun: 'Aucun dépôt n’attend votre décision.',
+    soumisLe: (date: string) => `Soumis le ${date}`,
+    /**
+     * ⚠ LIRE AVANT DE DÉCIDER. L'API le dit dans sa propre description : sans
+     * cette route, « le circuit demandait à un directeur de valider un contenu
+     * qu'il ne pouvait pas lire ». Le bouton doit donc exister, et en premier.
+     */
+    lire: 'Lire le document',
+    sansDocument: 'Aucun document joint à ce dépôt.',
+    echecLecture: 'Le document n’a pas pu être ouvert.',
+    valider: 'Valider ce dépôt',
+    /**
+     * ⚠ Dit ce que la validation FAIT, et surtout ce qu'elle ne fait pas :
+     * aucune notice n'est créée ici. Sans cette phrase, un directeur croit
+     * avoir mis le document au catalogue, et s'étonne de ne pas l'y trouver.
+     */
+    validerSuite:
+      'Validé. La notice reste à créer par la bibliothèque : ce n’est pas fait automatiquement.',
+    refuser: 'Refuser',
+    champMotif: 'Motif du refus',
+    /**
+     * ⚠ LE MOTIF EST LU PAR L'ÉTUDIANT, ET IL NE S'EFFACE JAMAIS. Le lui dire
+     * ici est la seule occasion : une fois envoyé, il est à l'écran de
+     * quelqu'un d'autre, et rien ne permet de le reprendre.
+     */
+    motifAide:
+      'Ce motif sera lu par l’étudiant et restera attaché au dépôt. Dites ce qu’il faut corriger.',
+    motifObligatoire: 'Un refus sans motif laisse redéposer la même chose : écrivez-en un.',
+    refuserConfirmer: 'Envoyer le refus',
+    annuler: 'Annuler',
+    /** ⚠ Aucune donnée n'est supprimée — l'API le garantit, l'écran le dit. */
+    refuseSuite:
+      'Refus envoyé. Le dépôt et son document sont conservés, et l’étudiant voit votre motif.',
+    echec: 'La décision n’a pas pu être enregistrée.',
+  },
+
+  /**
+   * LA PORTE MANQUANTE DU CIRCUIT DE DÉPÔT — écran `/admin/roles`,
+   * 12 septembre 2026. Décision de Jean, arbitrage A.
+   *
+   * ⚠ LE VRAI ÉTAT, ET IL EST PIRE QUE « LE CIRCUIT N'EST PAS OUVERT ».
+   * `depot.deposer` est portée par le rôle SYSTÈME Étudiant, seedé dans CHAQUE
+   * école. `depot.valider` n'est portée par AUCUN rôle système, délibérément —
+   * « si personne ne peut valider, le circuit reste inerte plutôt qu'ouvert ».
+   *
+   * Conséquence : **toute école neuve est déjà à moitié ouverte.** Les étudiants
+   * peuvent déposer partout, personne ne peut décider nulle part. Un dépôt
+   * soumis reste alors à « soumis » sans sortie, et l'école en conclut que le
+   * dépôt ne marche pas.
+   *
+   * ⚠ La condition d'affichage prévue au départ — « seulement si le module
+   * `depot` est actif » — n'existe pas : il n'y a PAS de module `depot` au
+   * registre, et les routes de dépôt ne portent aucune garde de module. Mesuré
+   * avant d'écrire. Le bloc s'affiche donc dès qu'aucun rôle ne porte la
+   * fonction, ce qui est exactement le cas à corriger.
+   */
+  porteDuDepot: {
+    titre: 'Personne ne peut valider un dépôt',
+    /** Dit l'ASYMÉTRIE, pas « le circuit est fermé » — il est à moitié ouvert. */
+    constat:
+      'Vos étudiants peuvent déposer un mémoire ou une thèse : c’est ouvert par défaut. ' +
+      'Mais aucun rôle de votre établissement ne porte la fonction qui permet de les ' +
+      'valider ou de les refuser — un dépôt soumis resterait donc en attente sans réponse.',
+    /**
+     * ⚠ IL NOMME CE QUE LE RÔLE PORTERA. Un bouton « créer le rôle Enseignant »
+     * qui pose des droits sans les dire est un élargissement en aveugle.
+     */
+    ceQueLeRolePortera: (fonction: string) =>
+      `Le rôle proposé ne portera qu’une seule fonction : « ${fonction} » — voir et décider ` +
+      `les dépôts dont on est le directeur désigné, jamais ceux d’un collègue.`,
+    /** ⚠ Il PROPOSE, il ne crée pas : le formulaire s'ouvre pré-rempli. */
+    proposer: 'Préparer ce rôle',
+    apresProposition:
+      'Le formulaire est pré-rempli : vérifiez le nom et les fonctions, ajoutez-en si vous le ' +
+      'souhaitez, puis enregistrez. Rien n’est créé tant que vous n’avez pas enregistré.',
+    /** Nom et description proposés — modifiables avant enregistrement. */
+    nomPropose: 'Enseignant',
+    descriptionProposee:
+      'Dirige des mémoires et des thèses : valide ou refuse les dépôts dont il est le directeur désigné.',
+  },
+
   /** Collections de documents. */
   collections: {
     /**
@@ -372,26 +529,48 @@ export const LIBELLES = {
    * déjà constatées et cesse seulement de les accumuler — mesuré côté API : 61
    * prêts et 21 900 FCFA identiques avant et après extinction, le tarif
    * applicable tombant à zéro sans qu'aucun montant passé ne bouge. L'écran doit
-   * dire la même chose : faire disparaître le montant dû avec le module
+   * dire la même chose : faire disparaître le montant constaté avec le module
    * ressemblerait à une remise de dette, et cette information n'est lisible
    * nulle part ailleurs dans l'interface.
    *
    * ⚠ D'où le partage en deux. Ce qui DISPARAÎT est la fonction du module — le
    * calcul en cours, le détail « en cours sur les retards », l'encaissement. Ce
-   * qui RESTE est le montant dû, accompagné de la phrase qui explique pourquoi
+   * qui RESTE est le montant constaté, accompagné de la phrase qui explique pourquoi
    * il ne bouge plus. Sans cette phrase, un montant figé à côté de seize prêts
    * en retard se lit comme un calcul en panne.
    */
   amendes: {
-    /** ⚠ « dues », pas « Amendes » : le montant ne s'accroît plus, il est arrêté. */
-    dues: (montant: string) => `Amendes dues : ${montant}`,
+    /**
+     * ⚠ « CONSTATÉES (CUMUL) », ET PLUS « DUES ». Corrigé le 12 septembre 2026.
+     *
+     * `Checkout.fineAmount` n'est JAMAIS réduit : aucune route ne consigne un
+     * encaissement. « Dues » affirmait donc un SOLDE — une somme qui décroît
+     * quand on paie — là où le chiffre est un CUMUL de ce qui a été constaté.
+     * Une bibliothécaire qui encaisse 2 950 FCFA revoit le même montant le
+     * lendemain, et en conclut que son encaissement s'est perdu.
+     *
+     * C'est la même famille que le libellé du directeur : un mot exact sur son
+     * objet — le montant existe bien — et faux sur ce qu'il DÉCRIT.
+     */
+    constatees: (montant: string) => `Amendes constatées (cumul) : ${montant}`,
+    /**
+     * ⚠ SANS CETTE PHRASE, LE MOT SEUL NE SUFFIT PAS. « Constatées (cumul) »
+     * est exact mais opaque : il n'apprend rien à qui vient d'encaisser. Ce
+     * bloc documente déjà qu'un montant figé « se lit comme un calcul en
+     * panne » — c'est le même risque, déplacé du module éteint au paiement.
+     *
+     * Elle dit un FAIT du logiciel, pas une consigne de caisse : Gafeso ne sait
+     * pas encore enregistrer un paiement, et l'ignorer ferait chercher un bogue.
+     */
+    aucunEncaissementEnregistre:
+      'Gafeso n’enregistre pas encore les encaissements : ce cumul ne diminue pas quand un adhérent paie.',
     /**
      * ⚠ INFORMATION, PAS ALERTE. L'extinction est un choix de l'école ; la
      * signaler sur le ton de l'anomalie qualifierait d'erreur un réglage qu'on
      * vient de rendre possible.
      */
     conservees:
-      'Module Amendes éteint : les amendes déjà dues sont conservées, elles cessent seulement de s’accumuler.',
+      'Module Amendes éteint : les amendes déjà constatées sont conservées, elles cessent seulement de s’accumuler.',
     /**
      * ⚠ Trois cas au retour, pas deux. Brancher sur le MONTANT faisait écrire
      * « Rendu dans les délais » à un retour de onze jours de retard dès que le
@@ -403,6 +582,71 @@ export const LIBELLES = {
       `Retard de ${jours} jour${jours > 1 ? 's' : ''} — amende à encaisser : ${montant}.`,
     retourEnRetardSansAmende: (jours: number) =>
       `Retard de ${jours} jour${jours > 1 ? 's' : ''} — aucune amende à encaisser.`,
+    /**
+     * Le détail du guichet, jusqu'ici écrit en dur dans l'écran. Il sort du
+     * code parce que ce lot en RÉÉCRIT le vocabulaire — pas au passage.
+     */
+    detailConstateEtCourant: (constate: string, courant: string) =>
+      `Constatées (cumul) : ${constate} · en cours sur les retards : ${courant}`,
+    /**
+     * ⚠ `totalCourt` A VÉCU UNE HEURE. Je l'avais créé le 12 septembre 2026 en
+     * sortant du code la chaîne « Amendes : … » du guichet — sans voir qu'elle
+     * affichait `totalXof`, la somme d'un cumul historique et d'un encours du
+     * jour. Sortir un texte du code ne le rend pas vrai ; j'avais déplacé un
+     * nombre qui ne désigne rien, proprement.
+     *
+     * Remplacé par les deux grandeurs SÉPARÉES, qui sont les seules à avoir un
+     * sens : ce qui est constaté, et ce qui court aujourd'hui.
+     */
+    courantSurRetards: (montant: string) => `Amendes en cours sur les retards : ${montant}`,
+  },
+
+  /**
+   * LA PERTE D'UN DOCUMENT — P?, moitié front, 12 septembre 2026.
+   *
+   * ⚠ POURQUOI CE GESTE EXISTE. Le seul chemin pour clore un prêt était le
+   * RETOUR : pour un document perdu, il fallait donc déclarer un retour qui
+   * n'a pas eu lieu. Ce chemin remet l'exemplaire en circulation et prévient
+   * le lecteur suivant que son document l'attend au guichet — un mensonge qui
+   * se propage jusqu'à quelqu'un qui se déplace pour rien.
+   */
+  perte: {
+    /** Sur la ligne d'un prêt EN COURS, dans la fiche d'adhérent. */
+    declarer: 'Déclarer perdu',
+    /**
+     * ⚠ LA CONFIRMATION NOMME LE DOCUMENT. « Êtes-vous sûr ? » ne dit pas
+     * lequel, et c'est précisément ce qu'il faut relire avant un geste qui
+     * sort un exemplaire du fonds. Elle dit aussi les DEUX effets — l'état de
+     * l'exemplaire et le sort de l'amende — parce qu'aucun des deux ne se
+     * devine, et qu'aucun ne se défait.
+     */
+    confirmation: (titre: string, codeBarre: string) =>
+      `Déclarer « ${titre} » (${codeBarre}) perdu ? L’exemplaire passe en « perdu » et ` +
+      `sort du fonds : il ne pourra plus être prêté. L’amende est figée à son montant ` +
+      `du jour. Ce geste ne s’annule pas.`,
+    confirmer: 'Déclarer ce document perdu',
+    faite: (titre: string) => `« ${titre} » est déclaré perdu.`,
+    /**
+     * ⚠ INFORMATION, PAS ALERTE — et c'est une décision, pas une nuance de ton.
+     * Une file que plus aucun exemplaire ne peut servir n'est pas une anomalie :
+     * c'est un état qu'un rachat résout, et la bibliothécaire est la seule à
+     * pouvoir en décider. Le signaler sur le ton de l'erreur qualifierait de
+     * faute un geste qu'on vient de rendre possible.
+     *
+     * ⚠ Et il dit que les réservations sont CONSERVÉES, parce que l'API a
+     * tranché ainsi : signalées, jamais annulées — une réservation appartient
+     * au lecteur, et la lui retirer serait décider à sa place.
+     */
+    fileNonServable: (n: number) =>
+      n === 1
+        ? 'Une réservation en attente ne peut plus être servie : aucun autre exemplaire de ' +
+          'ce document ne circule. Elle est conservée — personne n’a perdu sa place.'
+        : `${n} réservations en attente ne peuvent plus être servies : aucun autre ` +
+          'exemplaire de ce document ne circule. Elles sont conservées — personne n’a ' +
+          'perdu sa place.',
+    /** Sur la liste des réservations du guichet. Même règle : dire, pas alarmer. */
+    holdNonServable: 'Aucun exemplaire ne circule',
+    echec: 'La perte n’a pas pu être déclarée.',
   },
 
   /**
@@ -418,6 +662,24 @@ export const LIBELLES = {
    * ÉCRITE COMME UN FAIT : elle dit que le système a compté et n'a rien trouvé,
    * quand il ne compte plus. Dans ce cas le bloc ne s'affiche pas du tout.
    */
+  /**
+   * Textes d'accessibilité.
+   *
+   * ⚠ CE SONT DES TEXTES VISIBLES au sens de la convention du dépôt : un
+   * `aria-label` annoncé à l'utilisateur est à traduire. La borne n'est pas
+   * « visible / invisible » mais « ce qui double un texte déjà affiché » — et
+   * aucun de ceux-ci n'en double un.
+   */
+  accessibilite: {
+    /** ⚠ Premier élément focalisable de la page : il n'a de sens qu'en tête. */
+    allerAuContenu: 'Aller au contenu',
+    /** Les trois `nav` de la coque s'annonçaient « navigation » à l'identique. */
+    navPrincipale: 'Navigation principale',
+    navDeLaSection: (section: string) => `Navigation de la section ${section}`,
+    ongletsDuGuichet: 'Opérations du guichet',
+    navDepliee: 'Navigation principale, menu déplié',
+  },
+
   statistiques: {
     rappelsEteints:
       'Module Rappels éteint : plus aucun envoi. Les rappels ci-dessous ont été envoyés avant l’extinction.',
@@ -573,6 +835,267 @@ export const LIBELLES = {
   },
 
   /** Registre des notices (back-office). */
+  /**
+   * Index des auteurs.
+   *
+   * ⚠ CES LIBELLÉS EXISTENT PARCE QUE L'ÉCRAN NE DISAIT RIEN. Mesuré sur un
+   * fonds de 8 000 notices : l'API rend **200 auteurs** par page et annonce
+   * `total`, `page`, `totalPages` ; l'écran ne lisait que `authors`. Il
+   * affichait donc 200 lignes sur 557, sans compteur et sans pagination — une
+   * liste tronquée présentée comme complète. Qui cherche un auteur au-delà du
+   * deux-centième ne le trouve pas, et rien ne lui dit qu'il manque quelque
+   * chose.
+   */
+  /**
+   * Santé de l'index de recherche — bloc de /admin/interoperabilite.
+   *
+   * ⚠ TROIS PIÈGES NOMMÉS PAR LA SESSION BACK, ET CHACUN A SA LIGNE ICI.
+   *
+   * 1. `indisponible` NE S'ÉCRIT JAMAIS « 0 sur 8 000 ». Le moteur ne répond
+   *    pas : on ne SAIT pas combien il contient. Écrire zéro fabriquerait
+   *    l'invitation à réindexer que toute la route existe pour éviter — et
+   *    réindexer parce qu'on croit l'index vide alors qu'il est seulement
+   *    injoignable, c'est le détruire pour de bon.
+   * 2. L'ÉCART EST SIGNÉ, et les deux signes ne disent pas la même chose :
+   *    positif, des notices manquent à l'index et sont invisibles à la
+   *    recherche ; négatif, l'index porte des documents que la base n'a plus,
+   *    donc des résultats qui mènent à une notice supprimée. Un « écart de 12 »
+   *    sans son sens laisse choisir la mauvaise réparation.
+   * 3. `dansIndex` vaut `null` quand le moteur est injoignable, jamais 0.
+   */
+  indexSante: {
+    titre: 'Index de recherche',
+    /** ⚠ Aucun nombre tant qu'on n'a pas la réponse : un compte est une affirmation. */
+    chargement: 'Vérification de l’index…',
+    aligne: (nombre: number) =>
+      `Index aligné sur le catalogue : ${nombre} notice(s) en base, autant dans l’index.`,
+    /** ⚠ Écart POSITIF : ce qui manque à l'index. */
+    manquantes: (combien: number, enBase: number) =>
+      `${combien} notice(s) absentes de l’index sur ${enBase} — elles ne ressortent pas dans la recherche. Une réindexation les y remet.`,
+    /** ⚠ Écart NÉGATIF : ce que l'index porte en trop. */
+    fantomes: (combien: number) =>
+      `${combien} document(s) de l’index ne correspondent plus à une notice — des résultats de recherche mènent à une notice supprimée. Une réindexation les retire.`,
+    /**
+     * ⚠ NI CHIFFRE D'INDEX, NI INVITATION. On dit ce qu'on sait — le compte en
+     * base — et on dit qu'on ne sait pas le reste.
+     */
+    indisponible: (enBase: number) =>
+      `Le moteur de recherche ne répond pas : le contenu de l’index est inconnu. Le catalogue compte ${enBase} notice(s) en base. Rien ne dit que l’index soit vide, et il ne faut pas le reconstruire sur cette seule information.`,
+    echec: 'État de l’index indisponible : la vérification a échoué.',
+
+    /**
+     * ⚠ LA CONFIRMATION DIT LE COÛT RÉEL, ET CE N'EST PAS LA DURÉE. Mesuré sur
+     * le fonds d'échelle : 0,5 à 0,8 s pour 8 000 notices. Annoncer « un travail
+     * long » serait faux ici, et une bibliothécaire qui attend une minute devant
+     * une opération d'une seconde apprend à ne plus lire les avertissements.
+     *
+     * Ce qui coûte, c'est que `reindexAll` VIDE l'index avant de le
+     * reconstruire : pendant l'opération, la recherche publique ne rend rien.
+     * Et si elle échoue en chemin, l'index reste vide jusqu'à la suivante. C'est
+     * ça qu'il faut savoir avant de cliquer, pas un nombre de secondes qui
+     * dépend du serveur de l'école.
+     */
+    reindexer: 'Réindexer le catalogue',
+    reindexerTitre: 'Réindexer tout le catalogue ?',
+    reindexerCout: (notices: number) =>
+      `L’index est d’abord VIDÉ, puis reconstruit à partir des ${notices} notice(s) de la base. Pendant l’opération, la recherche publique ne rend aucun résultat ; si elle échoue en chemin, l’index reste vide jusqu’à la prochaine.`,
+    reindexerDonnees: 'Aucune notice n’est modifiée : l’index est reconstruit depuis la base, qui reste la source de vérité.',
+    reindexerConfirmer: 'Réindexer',
+    reindexerAnnuler: 'Annuler',
+    reindexEnCours: 'Réindexation en cours…',
+    reindexFait: (indexees: number) => `Réindexation terminée : ${indexees} notice(s) dans l’index.`,
+    reindexEchec: 'La réindexation a échoué. L’index peut être incomplet — relancez-la.',
+  },
+
+  /**
+   * Inscription publique — le sort de l'email de définition de mot de passe.
+   *
+   * ⚠ L'API REND CE SORT DEPUIS TOUJOURS, AVEC UN COMMENTAIRE QUI LE DIT :
+   * « l'interface doit pouvoir dire la vérité ». L'écran public ne déclarait même
+   * pas le champ et annonçait « un email vous a été envoyé » dans tous les cas.
+   *
+   * ⚠ ET LE PUBLIC N'A AUCUN RECOURS, contrairement à l'écran d'administration.
+   * Un gestionnaire à qui l'envoi échoue voit le lien et le transmet. Un étudiant
+   * qui lit « un email vous a été envoyé » alors que rien n'est parti attend une
+   * messagerie muette — et le lien de définition de mot de passe est le SEUL
+   * chemin vers son compte. Le faux ne le trompe pas seulement : il l'immobilise.
+   */
+  /**
+   * Définition du mot de passe — l'écran au bout du lien reçu par courriel.
+   *
+   * ⚠ C'EST LE SEUL CHEMIN VERS LE COMPTE, et il n'a pas de libre-service : la
+   * seule route qui régénère un lien est une route d'ADMINISTRATION. Quand
+   * l'API répond « Lien invalide ou expiré. » — un lien de 24 h, un courriel lu
+   * le lendemain —, l'écran affichait ce fait et rien d'autre. La personne
+   * restait devant une porte close sans savoir qu'il fallait demander.
+   *
+   * ⚠ ET LA BRANCHE D'À CÔTÉ SAVAIT DÉJÀ LE DIRE. Le cas « jeton manquant dans
+   * l'adresse » finit par « ou contactez le gestionnaire de votre
+   * établissement ». Le cas « jeton refusé », lui, s'arrêtait au constat. Deux
+   * portes du même écran, une seule indiquait la sortie.
+   */
+  motDePasse: {
+    /** S'ajoute à TOUT échec : dans tous les cas, le recours est le même. */
+    recours:
+      'Si le problème persiste, demandez un nouveau lien au gestionnaire de votre établissement : il peut vous le transmettre directement.',
+  },
+
+  /**
+   * « Mon dépôt » — l'espace de l'étudiant qui dépose un mémoire ou une thèse.
+   *
+   * ⚠ CET ÉCRAN EXISTE POUR QU'ON N'AIT PAS À REDÉPOSER. L'API le dit dans sa
+   * propre description : « un étudiant qui dépose et n'entend plus rien
+   * redéposera ». Le suivi n'est donc pas un confort, c'est ce qui empêche les
+   * doublons — et un doublon de thèse, personne ne sait lequel est le bon.
+   */
+  monDepot: {
+    titre: 'Mon dépôt',
+    introduction:
+      'Déposez votre mémoire ou votre thèse, puis suivez son avancement jusqu’à la validation.',
+    /** ⚠ Aucun compte tant qu'on ne sait pas : un « aucun dépôt » prématuré ferait redéposer. */
+    chargement: 'Chargement de vos dépôts…',
+    aucun: 'Vous n’avez encore déposé aucun document.',
+    echecDocument: 'Le document n’a pas pu être envoyé.',
+    /** Les quatre états, dans les mots de l'étudiant et non ceux de la base. */
+    etats: {
+      brouillon: 'Brouillon',
+      soumis: 'Soumis — en attente de votre directeur',
+      valide: 'Validé par votre directeur',
+      refuse: 'Refusé',
+    } as Record<string, string>,
+    /**
+     * ⚠ LE MOTIF D'UN REFUS NE S'EFFACE JAMAIS, et l'écran doit le montrer : un
+     * refus sans sa raison laisse redéposer la même chose.
+     */
+    motifDuRefus: 'Motif du refus',
+    /** ⚠ Dit ce qu'il FAUT faire, pas seulement que c'est fini. */
+    refusSuite:
+      'Ce dépôt reste refusé : sa décision n’est pas annulable. Corrigez votre document et créez un NOUVEAU dépôt — les deux resteront visibles.',
+    fichier: 'Document',
+    aucunFichier: 'Aucun document joint pour l’instant.',
+    remplacerFichier: 'Remplacer le document',
+    choisirFichier: 'Joindre le document (PDF ou EPUB)',
+    /** ⚠ Dit POURQUOI on ne peut plus, pas seulement qu'on ne peut pas. */
+    fichierFige:
+      'Le document n’est plus remplaçable : il a été transmis à votre directeur avec le dépôt.',
+    soumettre: 'Soumettre à mon directeur',
+    /**
+     * ⚠ CE TEXTE A ÉTÉ RÉÉCRIT LE 12 SEPTEMBRE 2026, ET LA RAISON COMPTE PLUS
+     * QUE LE TEXTE. Il disait « votre établissement n'a pas encore ouvert la
+     * désignation » — vrai le matin, faux l'après-midi : le backend a livré
+     * `GET /depots/directeurs` et `PATCH /depots/:id/directeur`.
+     *
+     * Une phrase qui reste écrite sans plus être vraie ne se voit pas : elle
+     * est là, lisible, rassurante, et elle envoie l'étudiant demander à sa
+     * bibliothèque d'ouvrir ce qui est déjà ouvert. C'est la question qu'on se
+     * pose maintenant devant tout élargissement — « qu'est-ce qui reste écrit
+     * sans plus être vrai ? »
+     *
+     * Il ne subsiste QUE pour le cas où il est encore exact : la liste des
+     * directeurs est arrivée, et elle est VIDE — personne, dans cette école, ne
+     * porte `depot.valider`. Là, l'étudiant ne peut effectivement rien faire, et
+     * la phrase doit dire à qui s'adresser.
+     */
+    sansDirecteur:
+      'Soumission impossible : aucun directeur de mémoire ou de thèse n’est déclaré dans votre établissement. Signalez-le à votre bibliothèque — votre dépôt et son document sont conservés.',
+    /** Le menu de désignation, ouvert dès qu'un directeur est disponible. */
+    choisirDirecteur: 'Directeur de mémoire ou de thèse',
+    /** ⚠ Ni « aucun directeur » ni le menu tant que la liste n'est pas arrivée. */
+    chargementDirecteurs: 'Chargement des directeurs…',
+    aucunChoixDirecteur: 'Choisissez…',
+    directeurDesigne: (nom: string) => `Directeur désigné : ${nom}`,
+    directeurChange: 'Directeur enregistré.',
+    /** ⚠ Dit POURQUOI le bouton est gris, sinon il se lit comme une panne. */
+    sansDirecteurDesigne:
+      'Désignez votre directeur ci-dessus avant de soumettre : c’est lui qui recevra le dépôt.',
+    /**
+     * ⚠ L'ENVOI PEUT ÉCHOUER SANS QUE LA SOUMISSION ÉCHOUE. L'API rend l'issue
+     * de la notification exprès pour que l'écran puisse le dire : sinon
+     * l'étudiant attend une réponse d'un directeur qui n'a jamais été prévenu.
+     */
+    soumisEtPrevenu: 'Dépôt soumis : votre directeur a été prévenu.',
+    soumisNonPrevenu:
+      'Dépôt soumis, MAIS votre directeur n’a pas pu être prévenu par courriel. Signalez-le-lui, ou prévenez votre bibliothèque : le dépôt, lui, est bien enregistré.',
+    nouveau: 'Déposer un document',
+    champTitre: 'Titre du document',
+    champAuteur: 'Auteur',
+    champType: 'Type de document',
+    champAnnee: 'Année de soutenance',
+    creer: 'Créer le dépôt',
+    annuler: 'Annuler',
+  },
+
+  inscription: {
+    compteActive: 'Compte activé !',
+    emailParti:
+      'Un email vous a été envoyé avec un lien sécurisé pour définir votre mot de passe (valable 24 h).',
+    /** ⚠ Dit l'échec ET la sortie : sans recours, l'information ne sert à rien. */
+    emailNonParti:
+      'Votre compte est actif, mais l’email de définition de mot de passe N’A PAS PU ÊTRE ENVOYÉ. Contactez votre bibliothèque : elle peut vous transmettre le lien directement.',
+  },
+
+  /**
+   * Comptes — pagination et compteur d'onglets.
+   *
+   * ⚠ DEUX DÉFAUTS TROUVÉS À 481 COMPTES, INVISIBLES À CINQ.
+   *
+   * 1. L'onglet « Tous » affichait `data.total`, c'est-à-dire le total de la
+   *    requête COURANTE : « Tous(68) » quand on regardait les comptes en
+   *    attente, « Tous(413) » sur les actifs, et le vrai chiffre seulement
+   *    quand il était sélectionné. Un gestionnaire lisait donc le nombre de
+   *    l'onglet d'à côté. Le remède était sous la main : l'API rend `counts`,
+   *    la ventilation complète et stable quel que soit le filtre.
+   * 2. Cent lignes affichées sur 481, sans pagination et sans un mot — la même
+   *    liste tronquée que l'index des auteurs, à la même semaine.
+   */
+  comptes: {
+    compte: (total: number) => `${total} compte(s)`,
+    pageSur: (page: number, total: number) => `Page ${page} sur ${total}`,
+    pagePrecedente: 'Page précédente',
+    pageSuivante: 'Page suivante',
+  },
+
+  /**
+   * Arbre des collections — P6-1.
+   *
+   * ⚠ LA PHRASE CENTRALE DE CE LOT EST CELLE DU NON-HÉRITAGE, et elle existe
+   * parce que le contraire est ce que tout le monde suppose. Une sous-collection
+   * n'hérite de RIEN : sans règle propre, elle n'est visible de personne, même
+   * si sa parente en porte dix. Un administrateur qui pose une règle sur
+   * « Faculté de Droit » et croit avoir ouvert ses départements se tromperait
+   * en silence — et ce silence serait du côté du produit.
+   *
+   * ⚠ Elle ne s'affiche QUE là où elle détrompe : sur une sous-collection sans
+   * règle. Sur une racine sans règle, le fait est le même mais personne n'a cru
+   * hériter de quoi que ce soit — le dire partout apprendrait à ne plus le lire.
+   */
+  collectionsArbre: {
+    sansRegle: 'Aucune règle d’accès : cette collection n’est visible de personne.',
+    sansRegleSousCollection:
+      'Aucune règle d’accès propre : cette sous-collection n’est visible de personne. Les règles de la collection parente ne s’appliquent PAS — il n’y a pas d’héritage.',
+    /** Rappel discret, en tête de liste, pour qui découvre la hiérarchie. */
+    pasDHeritage:
+      'Une sous-collection n’hérite pas des règles de sa parente : chacune porte les siennes.',
+    profondeurMax: 'Trois niveaux au maximum : faculté, département, type de document.',
+  },
+
+  auteurs: {
+    /** ⚠ Pas de nombre tant qu'on ne l'a pas : un compteur est une affirmation. */
+    chargement: 'Chargement de l’index des auteurs…',
+    compte: (total: number) => `${total} auteur(s)`,
+    /**
+     * ⚠ `listeTronquee` A VÉCU UNE JOURNÉE, et sa disparition est le bon signe.
+     * Elle disait « 200 auteurs affichés sur 557 » parce que la route refusait
+     * `page` : dire la coupure était tout ce qu'on pouvait faire honnêtement,
+     * un pager n'ayant nulle part où aller. La route l'accepte depuis, et le
+     * parcours remplace l'aveu. On ne garde pas un libellé qui décrit une
+     * limite levée.
+     */
+    pageSur: (page: number, total: number) => `Page ${page} sur ${total}`,
+    pagePrecedente: 'Page précédente',
+    pageSuivante: 'Page suivante',
+  },
+
   catalogue: {
     /** Tant que le chargement n'a pas abouti, on ne dit PAS un nombre. */
     chargementEnCours: 'Chargement du catalogue…',

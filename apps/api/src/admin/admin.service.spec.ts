@@ -150,7 +150,7 @@ describe('AdminService — provisioning', () => {
     ({ service, prisma, tx } = makeService());
   });
 
-  it('crée le tenant puis exécute la DDL du schéma (schéma + 22 tables + 20 FK)', async () => {
+  it('crée le tenant puis exécute la DDL du schéma (schéma + 23 tables + 20 FK)', async () => {
     const result = await service.provisionTenant({
       name: 'Lycée Zinda',
       slug: 'zinda',
@@ -164,8 +164,16 @@ describe('AdminService — provisioning', () => {
     expect(createArg.data.settings).toEqual({ create: {} });
     expect(createArg.data.domains.create.domain).toBe('zinda.gafeso.bf');
 
-    // 1 SCHEMA + 6 TYPE + 22 TABLE + 6 reciblages enum + 20 FK = 55 instructions DDL
-    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(55);
+    // 1 SCHEMA + 6 TYPE + 23 TABLE + 6 reciblages enum + 20 FK = 56 instructions DDL
+    //
+    // ⚠ PASSÉ DE 55 À 56 LE 12 SEPTEMBRE 2026 : `deposits` (P6-2) entre dans
+    // TENANT_TABLES. Ce compte n'est pas décoratif — il a fait tomber la suite
+    // dès l'ajout, ce qui est exactement son office : une table tenant ajoutée
+    // sans y penser est une table absente de toutes les écoles existantes.
+    //
+    // ⚠ `deposits` N'AJOUTE AUCUNE CLÉ ÉTRANGÈRE (20 inchangé) : les tables
+    // tenant n'en portent pas, `LIKE ... INCLUDING ALL` ne les copiant jamais.
+    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(56);
     const first = tx.$executeRawUnsafe.mock.calls[0][0];
     expect(first).toBe('CREATE SCHEMA "tenant_zinda"');
 

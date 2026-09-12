@@ -28,7 +28,8 @@
     "db:studio": "npm run db:studio -w @gafeso/api",
     "seed:demo": "node scripts/seed-demo.mjs",
     "provision:production": "node scripts/provision-production.mjs",
-    "reindex": "node scripts/reindex.mjs"
+    "reindex": "node scripts/reindex.mjs",
+    "test:base": "npm run test:base -w @gafeso/api"
   },
   "devDependencies": {
     "turbo": "^2.5.0"

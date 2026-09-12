@@ -1,11 +1,5 @@
 // Petits composants UI maison (esprit shadcn/ui, sans dépendance).
-import {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
-} from 'react';
+import { ButtonHTMLAttributes, ComponentPropsWithoutRef, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef } from 'react';
 
 export function Button({
   className = '',
@@ -101,19 +95,28 @@ export function Alert({
   );
 }
 
-export function Card({
-  className = '',
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={`rounded-lg border border-line bg-white p-6 shadow-sm ${className}`}>
-      {children}
-    </div>
-  );
-}
+/**
+ * Carte. Transmet les attributs d'un `div` et accepte une `ref`.
+ *
+ * ⚠ Ajouté pour l'accessibilité, pas pour la souplesse : une confirmation de
+ * suppression doit pouvoir recevoir le FOCUS et un `aria-labelledby`. La forme
+ * d'avant ne prenait que `className` et `children`, ce qui obligeait à emballer
+ * la carte dans un `div` porteur — un nœud de plus dans l'arbre, et le focus au
+ * mauvais endroit.
+ */
+export const Card = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
+  function Card({ className = '', children, ...reste }, ref) {
+    return (
+      <div
+        ref={ref}
+        className={`rounded-lg border border-line bg-white p-6 shadow-sm ${className}`}
+        {...reste}
+      >
+        {children}
+      </div>
+    );
+  },
+);
 
 export function Badge({
   children,
@@ -124,7 +127,17 @@ export function Badge({
 }) {
   const tones = {
     neutral: 'bg-line/60 text-muted',
-    ocre: 'bg-ocre/15 text-ocre',
+    // ⚠ `text-ink`, PAS `text-ocre`. Mesuré sur les jetons : de l'ocre sur un
+    // fond d'ocre à 15 % posé sur le papier donne **2,56:1** — pour du 12 px
+    // gras, là où WCAG AA en demande 4,5. Et ce badge porte ce qu'une
+    // bibliothécaire lit toute la journée : « En retard », « Amendes dues :
+    // 2 800 FCFA », « En retard · 1 150 FCFA ». Avec l'encre : 12,60:1.
+    //
+    // Le teint reste ocre, donc le badge reste distinct du neutre et du vert ;
+    // c'est exactement le choix que `Alert` fait déjà pour son ton
+    // « warning » (`bg-ocre/10 text-ink`) — on s'aligne dessus plutôt que
+    // d'inventer une troisième convention.
+    ocre: 'bg-ocre/15 text-ink',
     green: 'bg-green-100 text-green-800',
   };
   return (

@@ -37,7 +37,11 @@ import {
   ecrireChampsDeProfil,
   lireChampsDeProfil,
 } from './champs-de-profil';
-import { DEFAULT_RECORD_TYPE, DEFENSE_RECORD_TYPES } from './description-profiles';
+import {
+  DEFAULT_RECORD_TYPE,
+  DEFENSE_RECORD_TYPES,
+  estUnTypeDeNotice,
+} from './description-profiles';
 import { profilPourTypeDeNotice } from './profil-de-notice';
 import { foldCategoryName, normalizeCategoryName } from '../categories/category-name';
 import { AuthorsService } from '../authors/authors.service';
@@ -56,6 +60,33 @@ export interface ImportMarcResult {
    * bibliothécaire, et les confondre serait le même silence sous une autre
    * forme (invariant I6).
    */
+  /**
+   * Sort des TYPES rencontrés dans le fichier (zone locale 900$a), sur le
+   * modèle exact des domaines ci-dessous — trois cas, jamais fondus en deux.
+   *
+   * ⚠ POURQUOI LE MÊME MODÈLE ET PAS UN AUTRE. Le vocabulaire des types est
+   * désormais FERMÉ (backlog n°22), et un import est le seul chemin par lequel
+   * une valeur étrangère peut se présenter. Deux issues étaient possibles :
+   * refuser la notice, ou l'importer sous le type par défaut. La seconde a été
+   * retenue — refuser ferait perdre une notice entière pour un champ local que
+   * la plupart des catalogues étrangers ne portent même pas.
+   *
+   * ⚠ MAIS ELLE N'EST ACCEPTABLE QU'À UNE CONDITION : que le repli se DISE.
+   * Un type remplacé en silence, c'est une thèse importée en `ouvrage`, donc
+   * un profil bibliographique, donc une absence d'ETD-MS que personne ne
+   * cherchera. La valeur d'origine reste dans `marcData` (I3), et elle est
+   * NOMMÉE ici avec son nombre d'occurrences.
+   */
+  types: {
+    /** Notices dont la source ne portait aucun type (pas de 900$a). */
+    sansValeur: number;
+    /** Notices dont le type était du vocabulaire et a été repris. */
+    reconnus: number;
+    /** Notices importées sous le type par défaut faute de reconnaître le leur. */
+    inconnus: number;
+    /** Les valeurs non reconnues, du plus fréquent au moins fréquent. */
+    valeursInconnues: { valeur: string; occurrences: number }[];
+  };
   categories: {
     /** Notices dont la source ne portait aucun domaine (pas de 900$b). */
     sansValeur: number;
@@ -226,6 +257,11 @@ export class CatalogingService {
         }),
         summary: dto.summary?.trim() || null,
         category,
+        // ⚠ L'EMBARGO SE POSE ICI, ET IL FALLAIT QU'IL SE POSE QUELQUE PART.
+        // La colonne, la décision d'accès, le contrat public et quatorze tests
+        // existaient depuis le matin — et aucune route ne l'écrivait. Une
+        // thèse sous confidentialité ne pouvait pas être déclarée telle.
+        embargoUntil: dto.embargoUntil ? new Date(dto.embargoUntil) : null,
         recordType,
         // P3-2 : le profil est DÉDUIT du type, jamais saisi. Une seule source,
         // donc aucune dérive possible entre les deux.
@@ -276,6 +312,9 @@ export class CatalogingService {
     let sansValeur = 0;
     let reconnues = 0;
     const inconnues = new Map<string, number>();
+    let typesSansValeur = 0;
+    let typesReconnus = 0;
+    const typesInconnus = new Map<string, number>();
 
     for (const marc of parsed) {
       const extracted = extractBiblio(marc.fields as MarcFields, format);
@@ -289,6 +328,21 @@ export class CatalogingService {
       // ne BLOQUE pas un import : une notice sans zone auteur reste importable.
       const linked = await this.withAuthorIds(db, extracted.contributors);
       const importedKeywords = normalizeKeywords(extracted.keywords);
+
+      // ⚠ LE TYPE : trois issues, comptées séparément, et la valeur d'origine
+      // n'est jamais perdue — elle reste dans `marcData` (I3). Un repli
+      // silencieux ferait d'une thèse un ouvrage, donc une notice absente
+      // d'ETD-MS que personne n'irait chercher.
+      const typeBrut = extracted.recordType?.trim() ?? '';
+      let typeDeLaNotice: string = DEFAULT_RECORD_TYPE;
+      if (!typeBrut) {
+        typesSansValeur++;
+      } else if (estUnTypeDeNotice(typeBrut)) {
+        typeDeLaNotice = typeBrut;
+        typesReconnus++;
+      } else {
+        typesInconnus.set(typeBrut, (typesInconnus.get(typeBrut) ?? 0) + 1);
+      }
 
       // Trois issues distinctes, comptées séparément (voir ImportMarcResult).
       const brute = extracted.category ?? parDefaut;
@@ -327,8 +381,8 @@ export class CatalogingService {
           // reconnue laisse le domaine VIDE — la notice est importée quand
           // même, et la valeur d'origine reste dans `marcData` (I3).
           category: categorieDeLaNotice,
-          recordType: extracted.recordType ?? DEFAULT_RECORD_TYPE,
-          profile: profilPourTypeDeNotice(extracted.recordType ?? DEFAULT_RECORD_TYPE),
+          recordType: typeDeLaNotice,
+          profile: profilPourTypeDeNotice(typeDeLaNotice),
           marcFormat: format,
           marcData: {
             leader: marc.leader,
@@ -349,19 +403,32 @@ export class CatalogingService {
     }
 
     await this.safeIndex(slug, docs);
-    const valeursInconnues = [...inconnues.entries()]
-      .map(([valeur, occurrences]) => ({ valeur, occurrences }))
-      .sort((a, b) => b.occurrences - a.occurrences || a.valeur.localeCompare(b.valeur));
+    const parFrequence = (m: Map<string, number>) =>
+      [...m.entries()]
+        .map(([valeur, occurrences]) => ({ valeur, occurrences }))
+        .sort((a, b) => b.occurrences - a.occurrences || a.valeur.localeCompare(b.valeur));
+    const valeursInconnues = parFrequence(inconnues);
     const nbInconnues = valeursInconnues.reduce((n, v) => n + v.occurrences, 0);
+    const typesValeursInconnues = parFrequence(typesInconnus);
+    const nbTypesInconnus = typesValeursInconnues.reduce((n, v) => n + v.occurrences, 0);
 
     this.logger.log(
       `Import MARC (${slug}) : ${imported} notices, ${skipped} ignorées ; ` +
         `domaines — ${reconnues} reconnus, ${nbInconnues} non reconnus ` +
-        `(${valeursInconnues.length} valeur(s) distincte(s)), ${sansValeur} absents.`,
+        `(${valeursInconnues.length} valeur(s) distincte(s)), ${sansValeur} absents ; ` +
+        `types — ${typesReconnus} reconnus, ${nbTypesInconnus} repliés sur ` +
+        `« ${DEFAULT_RECORD_TYPE} » (${typesValeursInconnues.length} valeur(s) ` +
+        `distincte(s)), ${typesSansValeur} absents.`,
     );
     return {
       imported,
       skipped,
+      types: {
+        sansValeur: typesSansValeur,
+        reconnus: typesReconnus,
+        inconnus: nbTypesInconnus,
+        valeursInconnues: typesValeursInconnues,
+      },
       categories: { sansValeur, reconnues, inconnues: nbInconnues, valeursInconnues },
     };
   }
@@ -546,6 +613,16 @@ export class CatalogingService {
       where: { id },
       data: {
         title: dto.title?.trim(),
+        // ⚠ TROIS ÉTATS, ET `undefined` N'EST PAS `null`. Champ absent : on ne
+        // touche à rien. `null` : on LÈVE l'embargo — geste légitime, le jury
+        // peut libérer une thèse avant la date prévue. Une date : on la pose.
+        // Les fondre ferait d'un PATCH partiel une levée d'embargo silencieuse.
+        embargoUntil:
+          dto.embargoUntil === undefined
+            ? undefined
+            : dto.embargoUntil === null
+              ? null
+              : new Date(dto.embargoUntil),
         // Chaîne vide = effacement volontaire du complément (champ optionnel).
         titleComplement:
           dto.titleComplement === undefined ? undefined : dto.titleComplement.trim() || null,
@@ -647,6 +724,75 @@ export class CatalogingService {
     await db.biblioRecord.delete({ where: { id } });
     await this.safeRemove(slug, id);
     return { deleted: true };
+  }
+
+  /**
+   * SANTÉ DE L'INDEX — l'écart entre ce que la base contient et ce que l'index
+   * porte. Backlog n°19.
+   *
+   * ## Pourquoi cette route existe
+   *
+   * Depuis le lot du plafond Meilisearch, `/opac/constellation` tire son TOTAL
+   * de la base et sa RÉPARTITION de l'index. Les deux s'accordent quand
+   * l'index est à jour ; ils divergent quand il a dérivé — réindexation
+   * échouée, notice supprimée sans désindexation.
+   *
+   * C'est un PROGRÈS par rapport à avant, où les deux venaient de l'index et
+   * étaient donc faux ensemble, donc cohérents, donc indétectables. Mais un
+   * écart que personne ne voit ne sert à rien : d'où cette route.
+   *
+   * ## Réservée au professionnel, jamais au public (décision du 12 septembre)
+   *
+   * Un lecteur ne peut RIEN faire d'une dérive d'index ; un bibliothécaire, si
+   * — il relance la réindexation. Un avertissement qu'on ne peut pas suivre
+   * d'un geste n'est pas une information, c'est une inquiétude. La route est
+   * donc derrière `catalogue.gerer`, comme la réindexation qu'elle recommande.
+   *
+   * ## Les trois états, et le troisième est le piège
+   *
+   * `aligne` · `derive` · `indisponible`.
+   *
+   * ⚠ `indisponible` NE DOIT JAMAIS S'ÉCRIRE COMME UNE DÉRIVE. Si le moteur ne
+   * répond pas, `dansIndex` vaut `null` et non zéro : « 0 document indexé sur
+   * 8 000 » se lirait comme la pire dérive possible et enverrait quelqu'un
+   * lancer une réindexation complète — une opération coûteuse sur un gros
+   * catalogue — pour réparer un problème qui n'existe pas. C'est la « non-
+   * réponse qui INVITE À AGIR » de CLAUDE.md, et le geste qu'elle provoque est
+   * une écriture.
+   *
+   * ⚠ Et une dérive EST une anomalie, pas un état que quelqu'un a pu vouloir :
+   * l'avertissement est donc légitime ici, contrairement à l'écart de noms d'un
+   * adhérent que la bibliothécaire a corrigé exprès. C'est la troisième
+   * question de CLAUDE.md — « quelqu'un a-t-il pu le vouloir ? » — et la
+   * réponse est non.
+   */
+  async indexSante(db: TenantDb, slug: string) {
+    const [enBase, comptage] = await Promise.all([
+      db.biblioRecord.count(),
+      this.search.countDocuments(slug),
+    ]);
+
+    if (comptage.etat === 'indisponible') {
+      return {
+        etat: 'indisponible' as const,
+        enBase,
+        // ⚠ `null`, jamais 0. Voir l'en-tête : zéro inviterait à réindexer.
+        dansIndex: null,
+        ecart: null,
+      };
+    }
+
+    const dansIndex = comptage.documents;
+    const ecart = enBase - dansIndex;
+    return {
+      etat: ecart === 0 ? ('aligne' as const) : ('derive' as const),
+      enBase,
+      dansIndex,
+      // Signé, et le signe se lit : positif = des notices manquent à l'index
+      // (invisibles à la recherche) ; négatif = l'index porte des documents que
+      // la base n'a plus (des résultats qui mènent à une notice supprimée).
+      ecart,
+    };
   }
 
   /** Réindexation complète de l'école (vide l'index puis réindexe tout). */

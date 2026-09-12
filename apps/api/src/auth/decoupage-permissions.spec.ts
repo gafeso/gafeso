@@ -10,6 +10,7 @@ import {
   DECOUPAGE,
   FONCTIONS_SYSTEME_AVANT_DECOUPAGE,
   fonctionsApresDecoupage,
+  ELARGISSEMENTS_ACCORDES,
 } from './decoupage-permissions';
 
 const ANCIENNES = Object.keys(DECOUPAGE);
@@ -32,11 +33,32 @@ describe('découpage — personne ne perd, personne ne gagne', () => {
     expect(collisions, 'une permission cible reçoit deux populations').toEqual([]);
   });
 
-  it('chaque rôle système reçoit EXACTEMENT l’image de ses anciennes fonctions', () => {
+  it('chaque rôle système reçoit l’image de ses anciennes fonctions, PLUS les élargissements DÉCLARÉS', () => {
+    // ⚠ CE TEST A FAIT SON OFFICE LE 12 SEPTEMBRE 2026 : le premier
+    // élargissement accordé depuis le découpage l'a fait tomber. On ne
+    // l'affaiblit pas — on DÉCLARE ce qui a été accordé, dans
+    // `ELARGISSEMENTS_ACCORDES`, avec sa date et son motif. Tout AUTRE ajout
+    // continue de le faire tomber, et c'est tout l'objet de la manœuvre : une
+    // ligne d'apparence anodine ne peut plus élargir en silence.
     for (const [nom, avant] of Object.entries(FONCTIONS_SYSTEME_AVANT_DECOUPAGE)) {
       const role = ROLES_SYSTEME.find((r) => r.name === nom);
       expect(role, `rôle ${nom} disparu`).toBeDefined();
-      expect([...role!.functions].sort(), nom).toEqual([...fonctionsApresDecoupage(avant)].sort());
+      const attendu = [
+        ...fonctionsApresDecoupage(avant),
+        ...(ELARGISSEMENTS_ACCORDES[nom]?.fonctions ?? []),
+      ].sort();
+      expect([...role!.functions].sort(), nom).toEqual(attendu);
+    }
+  });
+
+  it('⚠ chaque élargissement déclaré porte son MOTIF, et vise un rôle qui existe', () => {
+    // Une déclaration sans motif est une permission qu'on ne sait plus
+    // justifier — donc une qu'on ne saura pas retirer.
+    for (const [nom, { fonctions, motif }] of Object.entries(ELARGISSEMENTS_ACCORDES)) {
+      expect(ROLES_SYSTEME.map((r) => r.name), nom).toContain(nom);
+      expect(fonctions.length, nom).toBeGreaterThan(0);
+      expect(motif.length, `${nom} : le motif doit être écrit, pas symbolique`)
+        .toBeGreaterThan(40);
     }
   });
 

@@ -37,6 +37,24 @@
  * entrée. C'est légitime et doit rester.
  */
 
+/**
+ * Gabarit du label ISO 2709 (« leader ») EXIGÉ par marcxchange 2.0.
+ *
+ * Recopié du XSD de la norme (`__fixtures__/marcxchange-2-0.xsd`, type
+ * `leaderDataType`), et `reexposition-fidele.spec.ts` vérifie qu'il lui est
+ * toujours identique — sinon la vérification dériverait de la norme qu'elle
+ * prétend appliquer.
+ *
+ * ⚠ IL SERT À DÉCIDER DE NE PAS ÉMETTRE. Gafeso n'écrit aucun leader dans ses
+ * reconstructions (voir ci-dessus : ce serait une constante, donc une
+ * affirmation fausse). Mais une notice IMPORTÉE en porte un vrai, et celui-là
+ * doit ressortir — sauf s'il ne respecte pas le gabarit, cas où l'omettre est
+ * la seule sortie valide : `leader` est optionnel en 2.0, un leader malformé
+ * ne l'est pas.
+ */
+export const GABARIT_LEADER =
+  /^\d{5}[\x00-\x7F][\x00-\x7F]{4}\d\d\d{5}[\x00-\x7F]{3}\d\d\d[\x00-\x7F]$/;
+
 /** Préfixe de métadonnées OAI-PMH et valeur du paramètre `format` de l'export. */
 export const MARCXCHANGE_PREFIX = 'marcxchange';
 
@@ -66,9 +84,23 @@ export const MARCXCHANGE_FORMAT = 'UNIMARC';
 export const MARCXCHANGE_TYPE = 'Bibliographic';
 
 /** Balise ouvrante d'une notice, avec sa déclaration de dialecte. */
-export function ouvertureRecord(avecNamespace: boolean): string {
+/**
+ * ⚠ LE FORMAT EST UN PARAMÈTRE DEPUIS P5, ET C'EST UN POINT D'I4.
+ *
+ * Il était figé à `UNIMARC` — vrai pour une notice que Gafeso reconstruit, faux
+ * pour une notice IMPORTÉE en MARC21 et réexposée telle quelle. Déclarer
+ * `format="UNIMARC"` sur du MARC21 natif serait annoncer un dialecte qu'on ne
+ * produit pas : exactement ce qu'I4 interdit, et le moissonneur n'aurait aucun
+ * moyen de s'en apercevoir — les deux dialectes ont la même forme XML.
+ *
+ * Le défaut reste `UNIMARC` : c'est ce que Gafeso produit quand il reconstruit.
+ */
+export function ouvertureRecord(
+  avecNamespace: boolean,
+  format: string = MARCXCHANGE_FORMAT,
+): string {
   const ns = avecNamespace ? ` xmlns="${MARCXCHANGE_NAMESPACE}"` : '';
-  return `<record${ns} format="${MARCXCHANGE_FORMAT}" type="${MARCXCHANGE_TYPE}">`;
+  return `<record${ns} format="${format}" type="${MARCXCHANGE_TYPE}">`;
 }
 
 /**
@@ -81,9 +113,13 @@ export function ouvertureRecord(avecNamespace: boolean): string {
  *    n'a jamais calculée. La 2.0 le rend facultatif ; l'omettre dit la vérité,
  *    l'écrire mentirait sous `format="UNIMARC"`.
  */
-export function versMarcxchange(recordMarcjs: string, avecNamespace: boolean): string {
+export function versMarcxchange(
+  recordMarcjs: string,
+  avecNamespace: boolean,
+  format: string = MARCXCHANGE_FORMAT,
+): string {
   const sansLeader = recordMarcjs.replace(/^[ \t]*<leader>[^<]*<\/leader>\r?\n?/m, '');
-  return sansLeader.replace('<record>', ouvertureRecord(avecNamespace));
+  return sansLeader.replace('<record>', ouvertureRecord(avecNamespace, format));
 }
 
 /**

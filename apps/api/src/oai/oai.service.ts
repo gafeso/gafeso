@@ -11,6 +11,15 @@ import {
   versMarcxchange,
 } from '../cataloging/unimarc-xml';
 import { oaiDatestamp, oaiEnvelope, oaiError, tag, xmlEscape } from './oai-xml';
+import { versMarcxchangeDepuisNatif } from './reexposition-fidele';
+import {
+  ETDMS_NAMESPACE,
+  ETDMS_PREFIX,
+  ETDMS_SCHEMA_URL,
+  PROFIL_ETDMS,
+  exposableEnEtdms,
+  versEtdms,
+} from './etdms';
 
 export type TenantDb = PrismaClient;
 
@@ -23,7 +32,17 @@ export interface OaiTenant {
 }
 
 const PAGE_SIZE = 100;
-const FORMATS = ['oai_dc', MARCXCHANGE_PREFIX];
+const FORMATS = ['oai_dc', MARCXCHANGE_PREFIX, ETDMS_PREFIX];
+
+/**
+ * Formats servis pour TOUTE notice, quel que soit son profil.
+ *
+ * ⚠ ETD-MS n'y est PAS : il n'est proposé que pour le profil `academique`
+ * (I4). C'est ce qui rend `ListMetadataFormats?identifier=…` différent de
+ * `ListMetadataFormats` sans identifiant — le premier décrit CETTE notice, le
+ * second décrit l'entrepôt. Les confondre annoncerait ETD-MS sur un ouvrage.
+ */
+const FORMATS_UNIVERSELS = ['oai_dc', MARCXCHANGE_PREFIX];
 
 /** Erreur de protocole OAI (rendue en <error code=…>). */
 class OaiProtocolError extends Error {
@@ -41,17 +60,33 @@ type OaiRecord = {
   publishYear: number | null;
   language: string;
   publisher: string | null;
+  summary: string | null;
+  /** Profil de description (P3-2) : `bibliographique` ou `academique`. */
+  profile: string;
   // ⚠ P3-3 : les trois champs de profil ne sont plus des colonnes lues mais des
   // clés de `profileData`. Le type suit la LECTURE, pas la réponse — les trois
   // valeurs continuent de sortir à plat dans le MarcXchange.
   profileData: unknown;
+  /**
+   * P5-3 · La description d'ORIGINE et son dialecte, pour la réexposition
+   * fidèle (I3). `marcFormat` n'est PAS décoratif : c'est lui qui est déclaré
+   * dans l'attribut `format` quand le natif est servi.
+   */
+  marcData: unknown;
+  marcFormat: string;
   category: string | null;
   recordType: string;
   contributors: { name: string; role: string; position: number }[];
   keywords: { keyword: { name: string } }[];
 };
 
-const RECORD_SELECT = {
+/**
+ * ⚠ EXPORTÉ POUR ÊTRE GARDÉ, pas pour être réutilisé ailleurs.
+ * `colonnes-lues-et-servies.spec.ts` vérifie que toute colonne LUE par
+ * l'émission figure ici : le type et le select sont deux listes tenues à la
+ * main, et rien ne les reliait.
+ */
+export const RECORD_SELECT = {
   id: true,
   updatedAt: true,
   title: true,
@@ -60,10 +95,17 @@ const RECORD_SELECT = {
   publishYear: true,
   language: true,
   publisher: true,
+  summary: true,
+  profile: true,
   // ⚠ P3-3 : les trois champs de profil viennent de `profileData`. Les
   // colonnes existent encore (temps 1) mais ne sont plus LUES : c'est ce qui
   // prouve que leur suppression sera sans effet sur l'entrepôt OAI.
   profileData: true,
+  // ⚠ P5-3 : ces deux colonnes sont LUES pour être RÉEXPOSÉES telles quelles.
+  // Elles ne sont pas dans `contrat-notice-publique.ts` car elles ne sortent
+  // pas dans la notice publique — l'entrepôt OAI est une autre exposition.
+  marcData: true,
+  marcFormat: true,
   category: true,
   recordType: true,
   contributors: { orderBy: { position: 'asc' as const }, select: { name: true, role: true, position: true } },
@@ -92,7 +134,7 @@ export class OaiService {
         case 'Identify':
           return await this.identify(db, tenant, params, baseUrl, now);
         case 'ListMetadataFormats':
-          return this.listMetadataFormats(tenant, params, baseUrl, now);
+          return await this.listMetadataFormats(db, tenant, params, baseUrl, now);
         case 'ListSets':
           return await this.listSets(db, params, baseUrl, now);
         case 'ListIdentifiers':
@@ -135,9 +177,36 @@ export class OaiService {
     return oaiEnvelope(now, baseUrl, { verb: 'Identify' }, body);
   }
 
-  private listMetadataFormats(tenant: OaiTenant, params: Record<string, string | undefined>, baseUrl: string, now: Date) {
-    // identifier optionnel : la même liste s'applique à toutes les notices.
+  private async listMetadataFormats(
+    db: TenantDb,
+    tenant: OaiTenant,
+    params: Record<string, string | undefined>,
+    baseUrl: string,
+    now: Date,
+  ) {
     this.rejectExtraArgs(params, ['identifier']);
+
+    // ⚠ LA LISTE N'EST PLUS LA MÊME POUR TOUTES LES NOTICES, et c'est ETD-MS
+    // qui l'impose. Sans identifiant, on décrit ce que l'ENTREPÔT sait servir ;
+    // avec un identifiant, ce que CETTE notice peut recevoir. Répondre la liste
+    // complète dans les deux cas annoncerait ETD-MS sur un ouvrage — et un
+    // moissonneur de thèses viendrait le chercher, pour recevoir un refus qu'on
+    // lui avait promis inutile.
+    let etdmsPossible = true;
+    if (params.identifier) {
+      const id = this.parseIdentifier(params.identifier, tenant.slug);
+      const notice = await db.biblioRecord.findUnique({
+        where: { id },
+        select: { profile: true },
+      });
+      if (!notice) {
+        throw new OaiProtocolError(
+          'idDoesNotExist',
+          `Aucune notice pour l’identifiant « ${params.identifier} ».`,
+        );
+      }
+      etdmsPossible = exposableEnEtdms(notice);
+    }
     // Le schéma est celui de la norme, chez son mainteneur — on ne sert pas sa
     // copie : le schéma d'une norme appartient à la norme.
     const formats = `    <metadataFormat>
@@ -149,7 +218,16 @@ export class OaiService {
       <metadataPrefix>${MARCXCHANGE_PREFIX}</metadataPrefix>
       <schema>${MARCXCHANGE_SCHEMA_URL}</schema>
       <metadataNamespace>${MARCXCHANGE_NAMESPACE}</metadataNamespace>
-    </metadataFormat>`;
+    </metadataFormat>${
+      etdmsPossible
+        ? `
+    <metadataFormat>
+      <metadataPrefix>${ETDMS_PREFIX}</metadataPrefix>
+      <schema>${ETDMS_SCHEMA_URL}</schema>
+      <metadataNamespace>${ETDMS_NAMESPACE}</metadataNamespace>
+    </metadataFormat>`
+        : ''
+    }`;
     return oaiEnvelope(now, baseUrl, { verb: 'ListMetadataFormats', identifier: params.identifier }, `  <ListMetadataFormats>\n${formats}\n  </ListMetadataFormats>`);
   }
 
@@ -175,6 +253,20 @@ export class OaiService {
     const record = (await db.biblioRecord.findUnique({ where: { id }, select: RECORD_SELECT })) as OaiRecord | null;
     if (!record) {
       throw new OaiProtocolError('idDoesNotExist', `Aucune notice pour l’identifiant « ${params.identifier} ».`);
+    }
+    // ⚠ REFUS EXPLICITE, ET AVEC LE BON CODE. `cannotDisseminateFormat` est
+    // précisément l'erreur qu'OAI-PMH prévoit pour « ce format n'existe pas pour
+    // CETTE notice ». Rendre un `<thesis>` avec des champs vides serait annoncer
+    // une thèse là où il y a un ouvrage ; rendre `idDoesNotExist` ferait croire
+    // que la notice n'existe pas. Le message dit lequel des deux est vrai.
+    if (params.metadataPrefix === ETDMS_PREFIX && !exposableEnEtdms(record)) {
+      throw new OaiProtocolError(
+        'cannotDisseminateFormat',
+        `La notice « ${params.identifier} » est de profil « ${record.profile} » : ` +
+          `le format ${ETDMS_PREFIX} ne décrit que les travaux universitaires ` +
+          `(profil « ${PROFIL_ETDMS} »). Elle reste disponible en oai_dc et ` +
+          `${MARCXCHANGE_PREFIX}.`,
+      );
     }
     const body = `  <GetRecord>\n${this.recordXml(record, tenant, params.metadataPrefix, true)}\n  </GetRecord>`;
     return oaiEnvelope(now, baseUrl, { verb: 'GetRecord', identifier: params.identifier, metadataPrefix: params.metadataPrefix }, body);
@@ -232,16 +324,37 @@ export class OaiService {
   private recordXml(r: OaiRecord, tenant: OaiTenant, prefix: string, indentedForGetRecord: boolean): string {
     const pad = indentedForGetRecord ? '  ' : '  ';
     const meta =
-      prefix === MARCXCHANGE_PREFIX ? this.marcxchangeMetadata(r) : this.oaiDcMetadata(r, tenant);
+      prefix === MARCXCHANGE_PREFIX
+        ? this.marcxchangeMetadata(r)
+        : prefix === ETDMS_PREFIX
+          ? versEtdms(r, `oai:${tenant.slug}:${r.id}`, '        ')
+          : this.oaiDcMetadata(r, tenant);
     return `${pad}  <record>\n    ${this.headerXml(r, tenant)}\n      <metadata>\n${meta}\n      </metadata>\n${pad}  </record>`;
   }
 
   /**
-   * MarcXchange (ISO 25577) — RÉUTILISE le mapping du bloc 1. JAMAIS
-   * d'exemplaire ni de fichier. La notice DÉCLARE son dialecte
-   * (`format="UNIMARC"`) au lieu de le laisser deviner (invariant I4).
+   * MarcXchange (ISO 25577). La notice DÉCLARE son dialecte au lieu de le
+   * laisser deviner (invariant I4).
+   *
+   * ⚠ DEUX CHEMINS, ET LE PREMIER EST LA TENUE D'I3 (P5-3). Une notice
+   * IMPORTÉE porte sa description d'origine : c'est ELLE qu'on réexpose, à
+   * l'identique, avec le dialecte réellement reçu. Jusqu'au 11 septembre 2026
+   * l'entrepôt servait une RECONSTRUCTION dans tous les cas — rebâtie depuis
+   * la notice plate, donc amputée de tout ce que le modèle plat n'accueille
+   * pas (notes, vedettes matière, zones locales), et annoncée `UNIMARC` même
+   * pour du MARC21. Voir `reexposition-fidele.ts` et sa preuve de bout en bout.
+   *
+   * Le second chemin reste la reconstruction, pour les notices SAISIES dans
+   * Gafeso : elles n'ont jamais eu de MARC, et il faut bien leur en produire un.
    */
   private marcxchangeMetadata(r: OaiRecord): string {
+    const fidele = versMarcxchangeDepuisNatif(r.marcData, r.marcFormat);
+    // ⚠ Pas de réindentation : la reconstruction n'en fait pas non plus
+    // (`versMarcxchange` rend le XML de marcjs tel quel). Les deux chemins
+    // doivent produire la MÊME forme, sinon le format de sortie dépendrait de
+    // l'origine de la notice — un moissonneur n'a pas à le deviner.
+    if (fidele) return fidele;
+
     const el = recordToMarcxmlElement({
       id: r.id,
       title: r.title,
@@ -270,6 +383,12 @@ export class OaiService {
     }
     for (const k of r.keywords) lines.push(tag('dc:subject', k.keyword.name));
     if (r.category) lines.push(tag('dc:subject', r.category));
+    // ⚠ `dc:description` MANQUAIT, et 143 notices sur 352 portent un résumé.
+    // Le champ existait, la colonne était remplie, et aucune exposition ne
+    // l'émettait : un moissonneur recevait donc des notices muettes sur leur
+    // contenu, sans qu'aucune erreur ne le signale. C'est l'élément que les
+    // portails affichent en premier après le titre.
+    lines.push(tag('dc:description', r.summary));
     lines.push(tag('dc:publisher', r.publisher));
     lines.push(tag('dc:date', r.publishYear != null ? String(r.publishYear) : null));
     lines.push(tag('dc:type', r.recordType));
@@ -300,7 +419,10 @@ export class OaiService {
     if (!FORMATS.includes(prefix)) {
       throw new OaiProtocolError(
         'cannotDisseminateFormat',
-        `Format « ${prefix} » non supporté (oai_dc, ${MARCXCHANGE_PREFIX}).`,
+        `Format « ${prefix} » non supporté (${FORMATS.join(', ')}). ` +
+          `⚠ ${ETDMS_PREFIX} ne décrit que les travaux universitaires : ` +
+          `ListMetadataFormats?identifier=… dit, pour une notice donnée, ` +
+          `si elle peut le recevoir.`,
       );
     }
   }
@@ -320,6 +442,17 @@ export class OaiService {
     if (state.until) updatedAt.lte = this.parseOaiDate(state.until, true);
     if (state.from || state.until) where.updatedAt = updatedAt;
     if (state.set) where.category = state.set;
+    // ⚠ ETD-MS NE MOISSONNE QUE LE PROFIL ACADÉMIQUE (I4). Le filtre est ici,
+    // dans la clause qui sert À LA FOIS au comptage et à la page : les mettre
+    // ailleurs ferait diverger le total des lignes rendues, et le
+    // `resumptionToken` promènerait le moissonneur sur des pages vides.
+    //
+    // Un moissonneur qui demande ETD-MS sur un fonds sans travaux
+    // universitaires reçoit `noRecordsMatch` — l'erreur qu'OAI prévoit pour
+    // « rien ne correspond ». Ce n'est pas une liste vide déguisée : c'est le
+    // refus explicite que la norme attend, et il se distingue d'un entrepôt
+    // éteint (403 du garde de module).
+    if (state.prefix === ETDMS_PREFIX) where.profile = PROFIL_ETDMS;
     return where;
   }
 

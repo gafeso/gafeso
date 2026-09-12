@@ -28,7 +28,7 @@ souverain, frugal, auto-hébergeable, et pensé français d'abord.
 - **Front** : Next.js (SSR) · **API** : NestJS (monolithe modulaire).
 - **Données** : PostgreSQL (multi-schéma, un schéma par établissement), Prisma.
 - **Recherche** : Meilisearch (par défaut) ou Elasticsearch (option).
-- **Fichiers** : MinIO (compatible S3). **Cache** : Redis. **Reverse-proxy** : Caddy.
+- **Fichiers** : MinIO (compatible S3). **Cache** : en mémoire du processus. **Reverse-proxy** : Caddy.
 - Orchestration **Docker Compose**.
 
 Un modèle de **lecture hors-ligne** sécurisé alimente l'application mobile compagnon
@@ -48,6 +48,13 @@ git clone <url-du-depot> gafeso && cd gafeso
 
 Le fichier `.env.example` documente la configuration ; le template de production impose la
 génération de secrets forts (`openssl rand`). Voir `docs/` pour le déploiement détaillé.
+
+⚠ **Pour un environnement de DÉVELOPPEMENT** (`docker compose -f docker/docker-compose.yml up -d`),
+copiez `.env.example` en `.env` et **remplacez les valeurs `change_me_*`** avant le premier
+démarrage : mots de passe PostgreSQL et MinIO, clé Meilisearch. Elles portent volontairement des
+placeholders et non des valeurs prêtes à l'emploi — un secret livré dans un dépôt public est un
+secret qui finit en production. Et passez `--env-file .env` à `docker compose`, qui ne lit pas le
+`.env` de la racine par lui-même.
 
 ## Licence
 

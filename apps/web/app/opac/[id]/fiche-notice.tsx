@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
 import { LockIcon, MemberLock } from '@/components/member-lock';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import { formatTitle } from '@/lib/titles';
 import { splitContributors } from '@/components/contributors-editor';
 import { AuthorNames } from '@/components/contributors-summary';
@@ -53,9 +54,19 @@ const STATUS_LABELS: Record<string, string> = {
   WITHDRAWN: 'Retiré',
 };
 
-export function FicheNotice() {
+/**
+ * @param initial notice rendue CÔTÉ SERVEUR, vue publique. Elle n'est pas une
+ *        optimisation : sans elle, le HTML servi ne contenait que l'en-tête, et
+ *        la page la plus importante d'un catalogue était vide pour les moteurs.
+ *
+ * ⚠ Elle vient d'un appel ANONYME. Le composant rappelle quand même l'API au
+ * montage : c'est là que la session du lecteur s'applique, et que la vue
+ * s'enrichit de ce que le contrôle d'accès lui accorde. `initial` est donc un
+ * PLANCHER — jamais le mot de la fin.
+ */
+export function FicheNotice({ initial = null }: { initial?: RecordDetail | null }) {
   const { id } = useParams<{ id: string }>();
-  const [record, setRecord] = useState<RecordDetail | null>(null);
+  const [record, setRecord] = useState<RecordDetail | null>(initial);
   const [error, setError] = useState<string | null>(null);
   const [access, setAccess] = useState<RecordAccessStatus | null>(null);
   const [connected, setConnected] = useState(false);
@@ -110,7 +121,7 @@ export function FicheNotice() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
         </p>
@@ -128,7 +139,7 @@ export function FicheNotice() {
   if (!record) return null;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
       <Link href="/opac" className="text-sm text-muted hover:text-ink">
         ← Retour au catalogue
       </Link>

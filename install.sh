@@ -815,7 +815,7 @@ compose_up() {
   dc up -d $build_flag
 
   info "Attente des services (healthchecks)…"
-  local services="db redis meilisearch minio api web caddy"
+  local services="db meilisearch minio api web caddy"
   local timeout=900 elapsed=0
   while :; do
     local all_ok=1 line=""

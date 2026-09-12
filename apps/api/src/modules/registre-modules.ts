@@ -5,13 +5,20 @@
  * libellés, leurs dépendances et leur caractère noyau vivent ici. Seul l'ÉTAT
  * D'ACTIVATION est en base, et il est par établissement.
  *
- * ⚠ AUCUN MODULE INERTE N'EST DÉCLARÉ. Les cinq modules annoncés par
- * `architecture-cible-gafeso.md` §5 pour les phases P5 à P8 (`depot`,
- * `moissonnage`, `identifiants`, `statistiques`, `lecture-hors-ligne`) ne
- * figurent PAS ici : les déclarer afficherait dans l'écran d'activation des
- * interrupteurs qui n'éteignent rien. C'est le refus d'inertie, et il vaut
- * aussi pour un registre — surtout pour un registre, dont tout l'objet est de
- * dire ce qui est réellement activable.
+ * ⚠ AUCUN MODULE INERTE N'EST DÉCLARÉ. Les modules annoncés par
+ * `architecture-cible-gafeso.md` §5 pour les phases à venir (`moissonnage`,
+ * `identifiants`, `statistiques`, `lecture-hors-ligne`) ne figurent PAS ici :
+ * les déclarer afficherait dans l'écran d'activation des interrupteurs qui
+ * n'éteignent rien. C'est le refus d'inertie, et il vaut aussi pour un
+ * registre — surtout pour un registre, dont tout l'objet est de dire ce qui est
+ * réellement activable.
+ *
+ * ⚠ `depot` FIGURAIT DANS CETTE LISTE, ET CE N'EST PLUS VRAI depuis P6. La
+ * phrase ci-dessus le citait comme exemple de module inerte ; le circuit de
+ * dépôt existe maintenant — douze routes, un écran « Mon dépôt », un
+ * chiffrement à l'ingestion. C'est « qu'est-ce qui reste écrit sans plus être
+ * vrai ? » appliqué au registre lui-même : la règle était juste, son exemple
+ * avait cessé de l'être.
  */
 
 /**
@@ -138,6 +145,36 @@ export const MODULES: readonly ModuleDeclare[] = [
     motifEcrans: '\\binterop',
   },
   {
+    id: 'depot',
+    libelle: 'Dépôt',
+    description:
+      'Dépôt des mémoires et thèses par les étudiants, validation par le ' +
+      'directeur, catalogage par la bibliothèque. Éteint, les dépôts déjà ' +
+      'faits et leurs documents sont CONSERVÉS : seules les routes du circuit ' +
+      'refusent.',
+    // Un dépôt validé finit en NOTICE : sans catalogue, le circuit n'a pas de
+    // sortie. `catalogue` est noyau, donc la dépendance ne verrouille rien —
+    // elle dit le lien, et elle vaudra le jour où quelqu'un voudra l'éteindre.
+    dependances: ['catalogue'],
+    noyau: false,
+    ecrans: [{ chemin: 'mon-depot', quoi: 'l’écran Mon dépôt' }],
+    /**
+     * ⚠ LE MOTIF NE PEUT PAS ÊTRE `\bdépôts?\b`, ET C'EST MESURÉ. Ce mot
+     * apparaît sur `admin/interoperabilite` dans « migration, **dépôt légal**,
+     * partage avec une autre bibliothèque » — un tout autre sens. Le garde
+     * aurait exigé de déclarer l'écran d'interopérabilité comme perdant quelque
+     * chose quand le dépôt s'éteint, ce qui est faux. Un garde qui crie à tort
+     * se fait désactiver.
+     *
+     * ⚠ ET SA BORNE EST ÉCRITE PLUTÔT QUE TUE : il nomme les trois écrans du
+     * circuit, dont deux n'existent pas encore. Une page qui parlerait du dépôt
+     * sans employer ces mots resterait invisible au sens inverse du garde. Un
+     * garde approximatif qui dit qu'il l'est vaut mieux qu'un garde qu'on croit
+     * complet.
+     */
+    motifEcrans: 'mon.d[ée]p[ôo]t|d[ée]p[ôo]ts? à valider|d[ée]p[ôo]ts? à cataloguer',
+  },
+  {
     id: 'rappels',
     libelle: 'Rappels',
     description:
@@ -201,6 +238,23 @@ export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
     'oai/oai.controller.ts :: Get',
     'oai/oai.controller.ts :: Post',
     'sru/sru.controller.ts :: Get lookup',
+  ],
+  // ⚠ LES DOUZE ROUTES DU CIRCUIT, et la garde est posée sur la CLASSE : une
+  // treizième écrite demain l'hérite. Elles sont listées ici quand même —
+  // c'est ce compte exact qui oblige à revenir le jour où l'une change de nom.
+  depot: [
+    'depots/depots.controller.ts :: Post',
+    'depots/depots.controller.ts :: Get directeurs',
+    'depots/depots.controller.ts :: Patch :id/directeur',
+    'depots/depots.controller.ts :: Get mes-depots',
+    'depots/depots.controller.ts :: Post :id/document',
+    'depots/depots.controller.ts :: Post :id/soumettre',
+    'depots/depots.controller.ts :: Get :id/document',
+    'depots/depots.controller.ts :: Get a-valider',
+    'depots/depots.controller.ts :: Post :id/valider',
+    'depots/depots.controller.ts :: Post :id/refuser',
+    'depots/depots.controller.ts :: Get a-cataloguer',
+    'depots/depots.controller.ts :: Post :id/notice',
   ],
   rappels: [],
 };

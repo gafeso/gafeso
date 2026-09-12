@@ -143,15 +143,45 @@ export class AuthorsService {
    * Renomme une fiche d'autorité : PROPAGE partout (nom dénormalisé des
    * contributions + champ auteur des notices). Renvoie les notices à réindexer.
    */
-  async rename(db: TenantDb, id: string, displayNameRaw: string) {
+  async rename(
+    db: TenantDb,
+    id: string,
+    displayNameRaw: string,
+    fiche: {
+      bio?: string | null;
+      birthYear?: number | null;
+      deathYear?: number | null;
+    } = {},
+  ) {
     const displayName = displayNameRaw.trim();
     if (!displayName) throw new BadRequestException('Le nom ne peut pas être vide.');
     const author = await db.author.findUnique({ where: { id } });
     if (!author) throw new NotFoundException('Fiche auteur introuvable.');
 
+    // ⚠ LES DATES SE VÉRIFIENT L'UNE PAR L'AUTRE, SUR L'ÉTAT FINAL — pas sur le
+    // corps de la requête. Un PATCH qui ne pose que l'année de décès doit être
+    // confronté à la naissance DÉJÀ en base, sinon la règle ne s'applique qu'aux
+    // fiches saisies d'un coup, et une fiche « morte avant d'être née » entre
+    // par le chemin partiel. Un catalogue garde ses fiches des décennies.
+    const naissance = fiche.birthYear === undefined ? author.birthYear : fiche.birthYear;
+    const deces = fiche.deathYear === undefined ? author.deathYear : fiche.deathYear;
+    if (naissance != null && deces != null && deces < naissance) {
+      throw new BadRequestException(
+        `L’année de décès (${deces}) précède l’année de naissance (${naissance}).`,
+      );
+    }
+
     await db.author.update({
       where: { id },
-      data: { displayName, normalizedName: normalizeAuthorName(displayName) },
+      data: {
+        displayName,
+        normalizedName: normalizeAuthorName(displayName),
+        // ⚠ `undefined` = inchangé, `null` = effacé. Les fondre rendrait
+        // impossible la correction d'une date entrée par erreur.
+        bio: fiche.bio === undefined ? undefined : fiche.bio?.trim() || null,
+        birthYear: fiche.birthYear,
+        deathYear: fiche.deathYear,
+      },
     });
     const affected = await db.recordContributor.findMany({
       where: { authorId: id },
@@ -162,6 +192,67 @@ export class AuthorsService {
     const affectedRecordIds = [...new Set(affected.map((a) => a.recordId))];
     for (const recordId of affectedRecordIds) await this.refreshDenormalizedAuthor(db, recordId);
     return { affectedRecordIds, displayName };
+  }
+
+  /**
+   * RATTACHE une fiche d'autorité à un COMPTE — ou la détache (`userId: null`).
+   *
+   * ⚠ SANS CETTE ROUTE, `Author.userId` EST UNE COLONNE QUE PERSONNE NE REMPLIT.
+   * Elle a été posée en P6-1 sur décision de Jean, en relation facultative, pour
+   * que « Mes encadrements » (P6-3) soit calculable. Mesuré le 12 septembre 2026
+   * sur les deux écoles de développement : **zéro** fiche rattachée, et aucune
+   * écriture de ce champ dans tout `apps/api`. L'écran aurait donc répondu
+   * « votre compte n'est relié à aucune fiche » à tout le monde, pour toujours —
+   * un écran correct, complet, et incapable de rien montrer.
+   *
+   * C'est la famille « une méthode câblée à rien » vue le 11 septembre, prise
+   * par l'autre bout : ici c'est une COLONNE sans écrivain. Un inventaire de
+   * routes ne la voit pas, un inventaire de colonnes non plus — seule la
+   * question « qui écrit ceci ? » la trouve.
+   *
+   * ⚠ C'EST UN GESTE DE BIBLIOTHÉCAIRE, pas de l'intéressé. Rattacher une fiche
+   * d'autorité à un compte, c'est affirmer que cette personne est bien celle qui
+   * signe ces œuvres : une décision du fichier d'autorités, au même titre qu'une
+   * fusion de doublons. Laisser quelqu'un se rattacher lui-même à la fiche qu'il
+   * choisit ouvrirait la porte à s'attribuer les encadrements d'un homonyme —
+   * et l'écran qui en découle sert un dossier de promotion.
+   *
+   * ⚠ UN COMPTE, UNE FICHE. `Author.userId` est UNIQUE en base ; le refus le dit
+   * en NOMMANT la fiche déjà rattachée, sinon la personne cherche une erreur de
+   * saisie là où il y a un rattachement à défaire.
+   */
+  async rattacherAuCompte(db: TenantDb, id: string, userId: string | null) {
+    const author = await db.author.findUnique({ where: { id } });
+    if (!author) throw new NotFoundException('Fiche auteur introuvable.');
+
+    if (userId === null) {
+      return db.author.update({ where: { id }, data: { userId: null } });
+    }
+
+    // ⚠ LE COMPTE EST CHERCHÉ DANS LE CLIENT DE L'ÉCOLE : un identifiant venu
+    // d'ailleurs ne se trouve pas, et le refus est le même que pour un
+    // identifiant inventé. L'isolation ne repose donc pas sur une vérification
+    // qu'on pourrait oublier, mais sur le schéma qu'on interroge.
+    const compte = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (!compte) {
+      throw new BadRequestException('Ce compte n’existe pas dans cet établissement.');
+    }
+
+    const dejaRattachee = await db.author.findUnique({
+      where: { userId },
+      select: { id: true, displayName: true },
+    });
+    if (dejaRattachee && dejaRattachee.id !== id) {
+      throw new BadRequestException(
+        `Ce compte est déjà rattaché à la fiche « ${dejaRattachee.displayName} ». ` +
+          'Détachez-la d’abord.',
+      );
+    }
+
+    return db.author.update({ where: { id }, data: { userId } });
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -105,6 +106,38 @@ export class InventoryController {
   async close(@CurrentTenant() tenant: ResolvedTenant | null, @Param('id') id: string) {
     const { db } = this.db(tenant);
     return this.inventory.closeSession(db, id);
+  }
+
+  @Post('sessions/:id/reopen')
+  @ApiOperation({
+    summary: 'Rouvrir une session clôturée par erreur',
+    description:
+      '⚠ Sans elle, un clic coûtait le récolement entier : `scan` refuse sur ' +
+      'une session close en disant « rouvrez-en une NOUVELLE », c’est-à-dire ' +
+      'recommencer sur plusieurs milliers d’exemplaires. Refusée si les ' +
+      'manquants ont DÉJÀ été marqués — le catalogue a changé.',
+  })
+  async reopen(@CurrentTenant() tenant: ResolvedTenant | null, @Param('id') id: string) {
+    const { db } = this.db(tenant);
+    return this.inventory.reopenSession(db, id);
+  }
+
+  @Delete('sessions/:id/scans/:barcode')
+  @ApiOperation({
+    summary: 'Annuler un scan — un code-barres pointé par erreur',
+    description:
+      '⚠ Sans elle, une erreur de scan DÉFAIT SILENCIEUSEMENT le récolement : ' +
+      'l’exemplaire est marqué vu pour toujours, « marquer les manquants » ne ' +
+      'le signale pas, et un exemplaire réellement absent reste disponible au ' +
+      'catalogue. Session OUVERTE seulement.',
+  })
+  async annulerScan(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('id') id: string,
+    @Param('barcode') barcode: string,
+  ) {
+    const { db } = this.db(tenant);
+    return this.inventory.annulerScan(db, id, barcode);
   }
 
   @Post('sessions/:id/mark-missing')

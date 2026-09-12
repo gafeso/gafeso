@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Marc, Record as MarcRecord } from 'marcjs';
 import { CatalogingService } from './cataloging.service';
+import { DEFAULT_RECORD_TYPE } from './description-profiles';
 
 function makeSearch() {
   return {
@@ -110,7 +111,12 @@ describe('CatalogingService — notices', () => {
     expect(created.title).toBe('Droit foncier');
     expect(created.category).toBe('droit'); // forme canonique du référentiel
     expect(created.language).toBe('fr');
-    expect(created.recordType).toBe('book');
+    // ⚠ Le défaut valait `'book'` — une valeur qu'AUCUNE des 8 352 notices de
+    // la base ne portait, alors que le chemin se prend dès qu'on crée une
+    // notice sans type. Voir `vocabulaire-des-types.spec.ts` : la propriété
+    // qui compte (« le défaut est du vocabulaire ») y est écrite séparément,
+    // parce qu'un test qui restate la constante suivrait sa dégradation.
+    expect(created.recordType).toBe(DEFAULT_RECORD_TYPE);
 
     expect(search.indexRecords).toHaveBeenCalledTimes(1);
     const [slug, docs] = search.indexRecords.mock.calls[0];
@@ -171,6 +177,59 @@ describe('CatalogingService — notices', () => {
     const created = db.biblioRecord.create.mock.calls[0][0].data;
     expect(created.title).toBe('Droit foncier'); // pas de « : complément » stocké
     expect(created.titleComplement).toBe('principes et jurisprudence');
+  });
+
+  describe('⚠ L’EMBARGO — la date que personne ne pouvait poser', () => {
+    // ⚠ P6-4 avait livré la colonne, la décision d'accès, le contrat public et
+    // quatorze tests. AUCUNE ROUTE NE L'ÉCRIVAIT : une thèse sous
+    // confidentialité ne pouvait être déclarée telle par personne. Ces cas
+    // éprouvent le CHEMIN D'ÉCRITURE, que le garde structurel ne voit pas.
+
+    it('à la création : la date fournie est posée', async () => {
+      await service.createRecord(db, 'zinda', {
+        title: 'Thèse sous embargo',
+        keywords: ['droit', 'foncier', 'burkina'],
+        author: 'Traoré, Awa',
+        embargoUntil: '2030-01-01',
+      });
+      const cree = db.biblioRecord.create.mock.calls[0][0].data;
+      expect(cree.embargoUntil).toEqual(new Date('2030-01-01'));
+    });
+
+    it('à la création sans embargo : `null`, jamais `undefined`', async () => {
+      // `undefined` laisserait Prisma poser le défaut de colonne — le même
+      // aujourd'hui, et ce n'est pas une raison de s'en remettre à lui.
+      await service.createRecord(db, 'zinda', {
+        title: 'Ouvrage ordinaire',
+        keywords: ['droit', 'foncier', 'burkina'],
+        author: 'Traoré, Awa',
+      });
+      expect(db.biblioRecord.create.mock.calls[0][0].data.embargoUntil).toBeNull();
+    });
+
+    it('⚠ à la modification, TROIS ÉTATS — et `null` LÈVE l’embargo', async () => {
+      // Le jury peut libérer une thèse avant la date prévue : la levée doit
+      // être exprimable. Fondre `null` et `undefined` rendrait cette opération
+      // impossible — ou, pire, ferait de tout PATCH partiel une levée
+      // silencieuse.
+      db.biblioRecord.findUnique.mockResolvedValue({ id: 'rec-1', items: [], keywords: KW3 });
+      await service.updateRecord(db, 'zinda', 'rec-1', { embargoUntil: null });
+      expect(db.biblioRecord.update.mock.calls[0][0].data.embargoUntil).toBeNull();
+    });
+
+    it('à la modification, champ ABSENT : on ne touche à rien', async () => {
+      db.biblioRecord.findUnique.mockResolvedValue({ id: 'rec-1', items: [], keywords: KW3 });
+      await service.updateRecord(db, 'zinda', 'rec-1', { title: 'Autre titre' });
+      expect(db.biblioRecord.update.mock.calls[0][0].data.embargoUntil).toBeUndefined();
+    });
+
+    it('à la modification, une DATE : elle est posée', async () => {
+      db.biblioRecord.findUnique.mockResolvedValue({ id: 'rec-1', items: [], keywords: KW3 });
+      await service.updateRecord(db, 'zinda', 'rec-1', { embargoUntil: '2028-06-30' });
+      expect(db.biblioRecord.update.mock.calls[0][0].data.embargoUntil).toEqual(
+        new Date('2028-06-30'),
+      );
+    });
   });
 
   it('updateRecord : complément vide = effacement, absent = inchangé', async () => {
@@ -491,7 +550,7 @@ describe('CatalogingService — notices', () => {
     db.biblioRecord.findMany.mockResolvedValue([
       {
         id: 'a', title: 'A', author: null, isbn: null, category: null, language: 'fr',
-        publishYear: null, recordType: 'book', coverUrl: null,
+        publishYear: null, recordType: 'ouvrage', coverUrl: null,
         contributors: [
           { name: 'Second, B', role: 'AUTEUR_SECONDAIRE', position: 1 },
           { name: 'Principal, A', role: 'AUTEUR_PRINCIPAL', position: 0 },
@@ -509,7 +568,7 @@ describe('CatalogingService — notices', () => {
 
   it('notice sans contributeur (pas encore migrée) : repli sur author pour rester cherchable', async () => {
     db.biblioRecord.findMany.mockResolvedValue([
-      { id: 'a', title: 'A', author: 'Traoré, Awa', isbn: null, category: null, language: 'fr', publishYear: null, recordType: 'book', coverUrl: null },
+      { id: 'a', title: 'A', author: 'Traoré, Awa', isbn: null, category: null, language: 'fr', publishYear: null, recordType: 'ouvrage', coverUrl: null },
     ]);
     await service.reindexAll(db, 'zinda');
     const doc = search.indexRecords.mock.calls[0][1][0];
@@ -522,8 +581,8 @@ describe('CatalogingService — notices', () => {
 
   it('reindexAll vide puis réindexe tout le catalogue', async () => {
     db.biblioRecord.findMany.mockResolvedValue([
-      { id: 'a', title: 'A', author: null, isbn: null, category: 'droit', language: 'fr', publishYear: null, recordType: 'book', coverUrl: null },
-      { id: 'b', title: 'B', author: null, isbn: null, category: null, language: 'fr', publishYear: null, recordType: 'book', coverUrl: null },
+      { id: 'a', title: 'A', author: null, isbn: null, category: 'droit', language: 'fr', publishYear: null, recordType: 'ouvrage', coverUrl: null },
+      { id: 'b', title: 'B', author: null, isbn: null, category: null, language: 'fr', publishYear: null, recordType: 'ouvrage', coverUrl: null },
     ]);
     const result = await service.reindexAll(db, 'zinda');
     expect(result.indexed).toBe(2);
@@ -544,7 +603,7 @@ describe('CatalogingService — import MARC (fichier réel ISO 2709)', () => {
     db = makeDb();
   });
 
-  function unimarcFile(): Buffer {
+  function unimarcFile(type?: string): Buffer {
     const mk = (title: string, author: [string, string], isbn: string) => {
       const r = new MarcRecord();
       r.append(['010', '  ', 'a', isbn]);
@@ -552,6 +611,8 @@ describe('CatalogingService — import MARC (fichier réel ISO 2709)', () => {
       r.append(['200', '1 ', 'a', title]);
       r.append(['210', '  ', 'd', '2023']);
       r.append(['700', ' 1', 'a', author[0], 'b', author[1]]);
+      // Zone locale Gafeso : 900$a porte le TYPE de notice.
+      if (type) r.append(['900', '  ', 'a', type]);
       return Buffer.from(Marc.format(r, 'iso2709'), 'utf8');
     };
     const empty = new MarcRecord();
@@ -577,6 +638,47 @@ describe('CatalogingService — import MARC (fichier réel ISO 2709)', () => {
       reconnues: 0,
       inconnues: 2,
       valeursInconnues: [{ valeur: 'papyrologie', occurrences: 2 }],
+    });
+  });
+
+  it('⚠ TYPE inconnu : la notice est importée SOUS LE DÉFAUT, et la valeur est NOMMÉE', async () => {
+    // Le repli est le bon choix — refuser ferait perdre une notice entière
+    // pour un champ local que la plupart des catalogues étrangers ne portent
+    // même pas. Il n'est acceptable qu'à une condition : qu'il se DISE. Un
+    // type remplacé en silence, c'est une thèse importée en `ouvrage`, donc un
+    // profil bibliographique, donc une absence d'ETD-MS que personne ne
+    // cherchera. La valeur d'origine reste dans `marcData` (I3).
+    const result = await service.importMarc(
+      db, 'zinda', unimarcFile('monographie'), 'UNIMARC', 'Droit',
+    );
+
+    expect(result.imported).toBe(2);
+    expect(db.biblioRecord.create.mock.calls[0][0].data.recordType).toBe(DEFAULT_RECORD_TYPE);
+    expect(result.types).toEqual({
+      sansValeur: 0,
+      reconnus: 0,
+      inconnus: 2,
+      valeursInconnues: [{ valeur: 'monographie', occurrences: 2 }],
+    });
+  });
+
+  it('TYPE reconnu : il est repris tel quel, et le profil en est déduit', async () => {
+    const result = await service.importMarc(db, 'zinda', unimarcFile('these'), 'UNIMARC', 'Droit');
+
+    const data = db.biblioRecord.create.mock.calls[0][0].data;
+    expect(data.recordType).toBe('these');
+    expect(data.profile).toBe('academique');
+    expect(result.types).toMatchObject({ sansValeur: 0, reconnus: 2, inconnus: 0 });
+  });
+
+  it('TYPE absent : compté à part, et ce n’est pas la même chose qu’inconnu', async () => {
+    const result = await service.importMarc(db, 'zinda', unimarcFile(), 'UNIMARC', 'Droit');
+
+    expect(result.types).toEqual({
+      sansValeur: 2,
+      reconnus: 0,
+      inconnus: 0,
+      valeursInconnues: [],
     });
   });
 

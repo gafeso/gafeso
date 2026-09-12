@@ -12,6 +12,14 @@
   --primary: #0b5d34;
   --primary-dark: #083f24;
   --accent: #c1592c;
+  /* ⚠ L'ACCENT EN PETIT TEXTE A SON PROPRE JETON, et ce n'est pas un caprice.
+     `--accent` sur `--surface` donne 4,11:1 : assez pour un titre de 38 px
+     (seuil 3:1, le `em` du bandeau), pas pour les 12 px de `.cardEspace .cap`
+     (seuil 4,5:1). Deux usages, deux exigences — un seul jeton ne pouvait pas
+     satisfaire les deux sans abîmer le titre.
+     Celui-ci tient sur les TROIS fonds clairs : surface 5,90:1, bg 5,18:1,
+     bg-deep 4,56:1. */
+  --accent-texte: #9a4723;
   --accent-soft: #e8b98c;
   --highlight: #d9a441;
   --bg: #f1e7d2;
@@ -288,6 +296,16 @@
   box-shadow: 0 20px 40px -20px rgba(34, 28, 19, 0.25);
   max-width: 560px;
 }
+/* ⚠ `outline: none` RETIRAIT L'ANNEAU DE FOCUS SANS RIEN METTRE À LA PLACE, sur
+   le champ le plus utilisé du produit : la recherche de la page d'accueil
+   publique. Au clavier, rien n'indiquait où l'on était. L'anneau est reporté sur
+   la CARTE (`:focus-within`), qui est l'objet visuel — le champ, lui, n'a pas de
+   bordure propre. */
+.searchCard:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .searchCard input {
   flex: 1;
   border: none;
@@ -849,7 +867,7 @@
 .cardEspace .cap {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-texte);
   margin-top: 6px;
   position: relative;
   z-index: 2;
@@ -1080,7 +1098,11 @@
   padding-bottom: 40px;
   border-bottom: 1px solid rgba(251, 246, 234, 0.14);
 }
-.footer h5 {
+/* ⚠ La règle visait `h5`. Les titres du pied sont passés en `h2` — le niveau
+   disait une profondeur qui n'existe pas, et sautait h4 — donc la règle porte
+   désormais sur une CLASSE : l'apparence ne dépend plus du niveau de titre,
+   qui est une information de structure, pas de style. */
+.footer .titreDePied {
   font-family: var(--font-mono);
   font-size: 12px;
   text-transform: uppercase;

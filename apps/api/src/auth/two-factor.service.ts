@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
@@ -9,6 +10,7 @@ import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomInt } from 'crypto';
 import { MailService } from '../accounts/mail/mail.service';
+import { MailOutcome } from '../accounts/mail/mail-outcome';
 
 export type TenantDb = PrismaClient;
 
@@ -56,6 +58,8 @@ export interface TwoFactorStatus {
 
 @Injectable()
 export class TwoFactorService {
+  private readonly logger = new Logger(TwoFactorService.name);
+
   constructor(private readonly mail: MailService) {}
 
   /** L'utilisateur a-t-il la 2FA active ? */
@@ -221,9 +225,28 @@ export class TwoFactorService {
   }
 
   /** Génère et envoie un OTP email (repli) — 6 chiffres, TTL 10 min, compteur remis à zéro. */
-  async sendEmailOtp(db: TenantDb, userId: string): Promise<void> {
+  /**
+   * Envoie le code de repli par email — et REND CE QUI EST ARRIVÉ.
+   *
+   * ⚠ ELLE RENDAIT `void`, ET LA ROUTE ÉCRIVAIT `{ sent: true }` SANS LE
+   * MESURER. C'est le chemin le plus grave du produit pour ce défaut : c'est le
+   * REPLI de double authentification. Quelqu'un qui a perdu son appareil TOTP
+   * n'a plus que lui — un faux « Code envoyé par email ✓ » devant une boîte qui
+   * restera vide l'enferme dehors, et il n'a aucun moyen de savoir pourquoi.
+   *
+   * Relevé par la session frontend le 12 septembre 2026.
+   */
+  async sendEmailOtp(db: TenantDb, userId: string): Promise<MailOutcome> {
     const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user?.totpEnabledAt) return;
+    // ⚠ CE GARDE RENDAIT SILENCIEUSEMENT, donc un succès pour la route. Un
+    // compte sans TOTP n'a pas de repli à recevoir : le jeton d'étape est
+    // périmé (il n'est émis que lorsque la double authentification est
+    // requise), et redémarrer la connexion est la seule réponse vraie.
+    if (!user?.totpEnabledAt) {
+      throw new UnauthorizedException(
+        'Session de vérification expirée — recommencez la connexion.',
+      );
+    }
     const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
     await db.user.update({
       where: { id: userId },
@@ -233,7 +256,14 @@ export class TwoFactorService {
         emailOtpAttempts: 0,
       },
     });
-    await this.mail.sendTwoFactorCode(user.email, otp);
+    const resultat = await this.mail.sendTwoFactorCode(user.email, otp);
+    if (!resultat.sent) {
+      this.logger.warn(
+        `Code de repli 2FA non envoyé à ${user.email} : ${resultat.reason}` +
+          `${resultat.detail ? ` — ${resultat.detail}` : ''}`,
+      );
+    }
+    return resultat;
   }
 
   /** L'OTP email est-il proposable (SMTP configuré) ? */

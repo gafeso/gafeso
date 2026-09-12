@@ -22,9 +22,19 @@ function fauxMoteur(parAppel: { totalHits: number; facettes?: Record<string, Rec
       page: 1,
       totalPages: 0,
       facetDistribution: r.facettes ?? {},
+      // Le moteur dit toujours s'il a plafonné — ici jamais (petits totaux).
+      totalPlafonne: false,
     };
   });
-  return { search, service: new OpacService({ search } as never, {} as never, {} as never, {} as never) };
+  return {
+    search,
+    service: new OpacService(
+      { search } as never,
+      {} as never,
+      {} as never,
+      { forTenant: () => ({ biblioRecord: { count: async () => 0 } }) } as never,
+    ),
+  };
 }
 
 const CATALOGUE = {
@@ -98,12 +108,20 @@ describe('filtres inconnus — la garantie de coût', () => {
   it('les clés du chemin nominal restent celles du contrat', async () => {
     const { service } = fauxMoteur([{ totalHits: 12, facettes: CATALOGUE }]);
     const r = await service.searchCatalog('buc', {} as never);
+    // ⚠ `totalPlafonne` A ÉTÉ AJOUTÉ LE 11 SEPTEMBRE 2026, DÉLIBÉRÉMENT.
+    //
+    // Ce test a fait son travail : il a refusé le champ tant que personne ne
+    // l'avait inscrit ici. Le champ est INCONDITIONNEL, contrairement à
+    // `filtresInconnus` — absent, il vaudrait `undefined` chez le client, donc
+    // « total exact » à la lecture, ce qui est précisément l'affirmation fausse
+    // qu'il existe pour empêcher. Voir `plafond-du-moteur.spec.ts`.
     expect(Object.keys(r).sort()).toEqual([
       'facets',
       'hits',
       'page',
       'totalHits',
       'totalPages',
+      'totalPlafonne',
     ]);
   });
 });

@@ -40,6 +40,23 @@ import PageGuichet from '@/app/guichet/page';
 import FicheAdherent from '@/app/admin/adherents/[id]/page';
 import PageInteroperabilite from '@/app/admin/interoperabilite/page';
 import PageStatistiques from '@/app/admin/statistiques/page';
+import PageCatalogue from '@/app/admin/catalogue/page';
+import PageAuteurs from '@/app/admin/auteurs/page';
+import PageCategories from '@/app/admin/categories/page';
+import PageClasses from '@/app/admin/classes/page';
+import PageCollections from '@/app/admin/collections/page';
+import PageComptes from '@/app/admin/comptes/page';
+import PageEtablissement from '@/app/admin/etablissement/page';
+import PageJournal from '@/app/admin/journal/page';
+import PageRappels from '@/app/admin/rappels/page';
+import PageRecolement from '@/app/admin/recolement/page';
+import PageRoles from '@/app/admin/roles/page';
+import PageReglesDePret from '@/app/admin/regles-de-pret/page';
+import PageAccueilAdmin from '@/app/admin/accueil/page';
+import PageAdherents from '@/app/admin/adherents/page';
+import PageMonDepot from '@/app/mon-depot/page';
+import PageMesEncadrements from '@/app/mes-encadrements/page';
+import PageDepotsAValider from '@/app/depots-a-valider/page';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
 import { ouvrirSession } from './aide-session';
 import { poserAdresse } from './aide-navigation';
@@ -68,9 +85,81 @@ export const ECRANS = {
     composant: PageStatistiques,
     fichier: 'app/admin/statistiques/page.tsx',
   },
+  // ── Le reste de l'espace professionnel ────────────────────────────────────
+  //
+  // ⚠ AJOUTÉS EN BLOC, ET C'EST LE POINT. Les invariants de la coque — un repère
+  // principal, un lien d'évitement en tête, des barres de navigation nommées, pas
+  // un élément interactif sans nom — ne valent que sur les écrans qu'on leur
+  // soumet. Les tenir sur cinq écrans, c'était tenir cinq écrans ; les tenir sur
+  // la table entière, c'est tenir celui que quelqu'un ajoutera demain, à
+  // condition qu'il l'y inscrive. Le garde de fichiers rend cette inscription
+  // vérifiable : un écran déplacé casse le test au lieu de le rendre muet.
+  '/admin/catalogue': { composant: PageCatalogue, fichier: 'app/admin/catalogue/page.tsx' },
+  '/admin/auteurs': { composant: PageAuteurs, fichier: 'app/admin/auteurs/page.tsx' },
+  '/admin/categories': { composant: PageCategories, fichier: 'app/admin/categories/page.tsx' },
+  '/admin/classes': { composant: PageClasses, fichier: 'app/admin/classes/page.tsx' },
+  '/admin/collections': { composant: PageCollections, fichier: 'app/admin/collections/page.tsx' },
+  '/admin/comptes': { composant: PageComptes, fichier: 'app/admin/comptes/page.tsx' },
+  '/admin/etablissement': { composant: PageEtablissement, fichier: 'app/admin/etablissement/page.tsx' },
+  '/admin/journal': { composant: PageJournal, fichier: 'app/admin/journal/page.tsx' },
+  '/admin/rappels': { composant: PageRappels, fichier: 'app/admin/rappels/page.tsx' },
+  '/admin/recolement': { composant: PageRecolement, fichier: 'app/admin/recolement/page.tsx' },
+  '/admin/roles': { composant: PageRoles, fichier: 'app/admin/roles/page.tsx' },
+  '/admin/regles-de-pret': { composant: PageReglesDePret, fichier: 'app/admin/regles-de-pret/page.tsx' },
+  // ⚠ `/admin/parametres` n'est PAS dans cette table : c'est une redirection,
+  // pas un écran. Elle ne rend rien — lui demander un `<main>` ou un lien
+  // d'évitement n'aurait aucun sens, et l'y inscrire aurait fait échouer la
+  // suite sur une exigence qui ne la concerne pas.
+  '/admin/accueil': { composant: PageAccueilAdmin, fichier: 'app/admin/accueil/page.tsx' },
+  '/admin/adherents': { composant: PageAdherents, fichier: 'app/admin/adherents/page.tsx' },
+  // ⚠ « Mon dépôt » n'est PAS un écran du personnel : il vit hors de la coque,
+  // dans l'espace de l'étudiant. Il est dans cette table pour le garde de
+  // fichiers et le compte, pas pour les invariants de coque — qui ne s'y
+  // appliquent pas et ne lui sont pas soumis.
+  '/mon-depot': {
+    composant: PageMonDepot,
+    fichier: 'app/mon-depot/page.tsx',
+    // ⚠ HORS COQUE, et le dire ici évite deux erreurs. Cet écran est celui de
+    // l'ÉTUDIANT : il porte lui-même son en-tête et son repère, comme
+    // /mes-prets. Le monter dans la coque du personnel produirait deux `<main>`
+    // et lui appliquerait des invariants qui ne le concernent pas — c'est
+    // exactement ce qu'a fait le premier essai, et le test l'a dit.
+    horsCoque: true,
+  },
+  // ⚠ Même nature que « Mon dépôt » : l'écran de l'ENSEIGNANT, hors de la coque
+  // du personnel. Il porte son propre en-tête et son propre repère.
+  '/mes-encadrements': {
+    composant: PageMesEncadrements,
+    fichier: 'app/mes-encadrements/page.tsx',
+    horsCoque: true,
+  },
+  // Même nature : l'écran du DIRECTEUR, hors de la coque du personnel.
+  '/depots-a-valider': {
+    composant: PageDepotsAValider,
+    fichier: 'app/depots-a-valider/page.tsx',
+    horsCoque: true,
+  },
 } as const;
 
 export type Adresse = keyof typeof ECRANS;
+
+/** Les adresses montées DANS la coque — celles que ses invariants concernent. */
+/**
+ * Les écrans qui portent EUX-MÊMES leur en-tête et leur repère : « Mon dépôt »,
+ * « Mes encadrements ». Ils sont hors des invariants de COQUE — la coque n'est
+ * pas la leur — mais pas hors des invariants de PAGE : un repère principal et
+ * le lien qui y mène ne dépendent d'aucune coque.
+ *
+ * ⚠ Ils n'étaient couverts par RIEN jusqu'au 12 septembre 2026. L'exclusion
+ * était juste dans son motif et trop large dans son effet.
+ */
+export const ADRESSES_HORS_COQUE = (Object.keys(ECRANS) as Adresse[]).filter(
+  (a) => 'horsCoque' in ECRANS[a],
+);
+
+export const ADRESSES_DE_COQUE = (Object.keys(ECRANS) as Adresse[]).filter(
+  (a) => !('horsCoque' in ECRANS[a]),
+);
 
 /** Le fichier existe-t-il vraiment ? Lu depuis le disque, pas supposé. */
 export function fichierDEcranExiste(chemin: string): boolean {
@@ -172,12 +261,14 @@ export function monterEcran(adresse: Adresse, montage: Montage) {
   vi.stubGlobal('fetch', fetchSimule);
 
   const Ecran = cible.composant;
+  // ⚠ Un écran hors coque se monte NU : il porte son propre en-tête.
+  const rendu = 'horsCoque' in cible ? <Ecran /> : (
+    <AdminShell>
+      <Ecran />
+    </AdminShell>
+  );
   return {
-    ...render(
-      <AdminShell>
-        <Ecran />
-      </AdminShell>,
-    ),
+    ...render(rendu),
     appels,
     fetchSimule,
   };

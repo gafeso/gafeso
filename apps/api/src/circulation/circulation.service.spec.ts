@@ -37,6 +37,10 @@ function makeDb() {
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn(async ({ data }: any) => ({ id: 'hold-1', ...data })),
       update: vi.fn(async ({ where, data }: any) => ({ id: where.id, ...data })),
+      // ⚠ DÉCLARÉ POUR POUVOIR AFFIRMER QU'IL N'EST PAS APPELÉ. Sans ce
+      // doublon, « aucune réservation n'est promue en masse » ne s'écrit pas :
+      // `expect(undefined).not.toHaveBeenCalled()` lève au lieu d'assertir.
+      updateMany: vi.fn(async () => ({ count: 0 })),
     },
     biblioRecord: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -228,6 +232,11 @@ describe('CirculationService — retour', () => {
     const closeArg = db.checkout.updateMany.mock.calls[0][0];
     expect(closeArg.where).toEqual({ id: 'co-1', returnDate: null });
     expect(closeArg.data.fineAmount).toBe(150);
+    // ⚠ LE RETOUR SE NOMME, LUI AUSSI. Sans `closedAs: 'rendu'`, la colonne
+    // resterait NULL sur les prêts rendus APRÈS ce lot — et NULL voudrait de
+    // nouveau dire deux choses, « ouvert » et « rendu récemment ». Toute la
+    // migration existe pour que NULL veuille dire OUVERT, et rien d'autre.
+    expect(closeArg.data.closedAs).toBe('rendu');
     expect(db.item.update).toHaveBeenCalledWith({
       where: { id: 'item-1' },
       data: { status: 'AVAILABLE' },
@@ -474,5 +483,199 @@ describe('CirculationService — registres et amendes', () => {
       totalXof: 250,
     });
     expect(result.checkouts[0].overdue).toBe(true);
+  });
+});
+
+describe('⚠ CLORE UN PRÊT POUR PERTE — le geste qui n’existait pas', () => {
+  // ⚠ LE SEUL CHEMIN ÉTAIT UN MENSONGE. Clore un prêt ne se faisait que par un
+  // RETOUR ; pour un document perdu, la bibliothécaire devait déclarer un
+  // retour qui n'avait pas eu lieu — et ce chemin remet l'exemplaire en
+  // AVAILABLE, ou pire le met ON_HOLD et prévient le lecteur suivant que son
+  // document l'attend au guichet. Pour un livre que personne n'a.
+
+  // ⚠ LE JEU D'ESSAI REPREND LES FIXTURES PARTAGÉES (`ITEM`, `PATRON`, `RULE`).
+  // Ma première écriture inventait un exemplaire à `itemType: null` avec une
+  // règle à `itemType: null` : `resolveRule` ne les appariait pas comme je le
+  // croyais, l'amende sortait à 0, et j'ai cherché le défaut dans le service.
+  // Un contrôle négatif ne vaut que sur le cas RÉEL.
+  const PRET = {
+    id: 'co-1',
+    itemId: 'item-1',
+    patronId: 'pat-1',
+    dueDate: new Date(NOW.getTime() - 11 * DAY),
+    returnDate: null,
+    item: { ...ITEM, status: 'CHECKED_OUT', record: { title: 'Droit foncier' } },
+    patron: { ...PATRON },
+  };
+
+  function prepare(db: any, options: { circulables?: number; enAttente?: number } = {}) {
+    db.checkout.findUnique.mockResolvedValue(PRET);
+    db.circulationRule.findMany.mockResolvedValue([RULE]);
+    db.item.count = vi.fn().mockResolvedValue(options.circulables ?? 1);
+    db.hold.count = vi.fn().mockResolvedValue(options.enAttente ?? 0);
+  }
+
+  it('⚠ l’exemplaire passe en LOST — jamais AVAILABLE, jamais ON_HOLD', async () => {
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db);
+
+    await service.cloreVersPerte(db, 'co-1', NOW);
+
+    const statuts = db.item.update.mock.calls.map((c: any) => c[0].data.status);
+    expect(statuts).toEqual(['LOST']);
+    expect(statuts).not.toContain('AVAILABLE');
+    expect(statuts).not.toContain('ON_HOLD');
+  });
+
+  it('⚠ AUCUNE réservation n’est promue — il n’y a pas de document à mettre de côté', async () => {
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db, { enAttente: 2 });
+
+    await service.cloreVersPerte(db, 'co-1', NOW);
+
+    expect(db.hold.update).not.toHaveBeenCalled();
+  });
+
+  it('le prêt est CLOS et nommé « perte » — sinon il serait un retour', async () => {
+    // Sans `closedAs`, l'historique de l'adhérent affirmerait qu'il a rapporté
+    // un document qu'il a perdu.
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db);
+
+    await service.cloreVersPerte(db, 'co-1', NOW);
+
+    const data = db.checkout.updateMany.mock.calls[0][0].data;
+    expect(data.closedAs).toBe('perte');
+    expect(data.returnDate).toEqual(NOW);
+  });
+
+  it('⚠ l’amende est FIGÉE à sa valeur du jour — elle cesse de courir', async () => {
+    // 11 jours de retard × 50 FCFA. Le prêt étant clos, rien ne s'y ajoutera.
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db);
+
+    const r = await service.cloreVersPerte(db, 'co-1', NOW);
+    expect(r.fineXof).toBe(550);
+    expect(db.checkout.updateMany.mock.calls[0][0].data.fineAmount).toBe(550);
+  });
+
+  it('un prêt déjà clos est refusé, pas réécrit', async () => {
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db);
+    db.checkout.findUnique.mockResolvedValue({ ...PRET, returnDate: NOW });
+
+    await expect(service.cloreVersPerte(db, 'co-1', NOW)).rejects.toThrow(NotFoundException);
+  });
+
+  it('⚠ et la clôture est CONDITIONNELLE : un retour simultané gagne', async () => {
+    const service = new CirculationService();
+    const db = makeDb();
+    prepare(db);
+    db.checkout.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cloreVersPerte(db, 'co-1', NOW)).rejects.toThrow(ConflictException);
+  });
+
+  describe('⚠ Les réservations sont SIGNALÉES, jamais annulées ni notifiées', () => {
+    it('une autre copie existe : rien à signaler', async () => {
+      const service = new CirculationService();
+      const db = makeDb();
+      prepare(db, { circulables: 1, enAttente: 3 });
+
+      const r = await service.cloreVersPerte(db, 'co-1', NOW);
+      expect(r.reservationsSansExemplaire).toBe(0);
+    });
+
+    it('⚠ DERNIÈRE copie perdue : la file est signalée, et elle SURVIT', async () => {
+      // Annuler déciderait à la place du lecteur qu'il ne veut plus attendre ;
+      // prévenir sortirait du produit, et un rachat la semaine suivante aurait
+      // menti. Le chiffre va à la bibliothécaire, qui décide.
+      const service = new CirculationService();
+      const db = makeDb();
+      prepare(db, { circulables: 0, enAttente: 3 });
+
+      const r = await service.cloreVersPerte(db, 'co-1', NOW);
+      expect(r.reservationsSansExemplaire).toBe(3);
+      expect(db.hold.update).not.toHaveBeenCalled();
+      expect(db.hold.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('dernière copie perdue mais personne n’attend : zéro', async () => {
+      const service = new CirculationService();
+      const db = makeDb();
+      prepare(db, { circulables: 0, enAttente: 0 });
+
+      expect((await service.cloreVersPerte(db, 'co-1', NOW)).reservationsSansExemplaire).toBe(0);
+    });
+  });
+});
+
+describe('⚠ `servable` — une file qui attend un document qui n’existe plus', () => {
+  // ⚠ SANS CE CHAMP, L'INFORMATION NE VIVAIT QUE LE TEMPS D'UN ÉCRAN. La
+  // clôture pour perte la rend au moment du geste ; la bibliothécaire qui
+  // n'était pas là ce jour-là ne saurait jamais qu'une file attend un document
+  // qui n'existe plus.
+  //
+  // ⚠ Et ce n'est PAS une anomalie : un rachat la résout. Le champ informe, il
+  // n'alarme pas — personne n'a mal fait.
+
+  const RESERVATION = {
+    id: 'h-1',
+    recordId: 'rec-1',
+    status: 'PENDING',
+    priority: 0,
+    expiryDate: null,
+    record: { id: 'rec-1', title: 'Droit foncier' },
+    patron: { barcode: 'P-1', user: { firstName: 'Awa', lastName: 'Traoré' } },
+  };
+
+  function db(reservations: unknown[], recordsCirculables: string[]) {
+    return {
+      hold: { findMany: vi.fn(async () => reservations) },
+      item: { findMany: vi.fn(async () => recordsCirculables.map((recordId) => ({ recordId }))) },
+    } as any;
+  }
+
+  it('un exemplaire circule encore : `servable: true`', async () => {
+    const r = await new CirculationService().listActiveHolds(db([RESERVATION], ['rec-1']));
+    expect(r[0].servable).toBe(true);
+  });
+
+  it('⚠ plus aucun exemplaire ne circule : `servable: false`', async () => {
+    const r = await new CirculationService().listActiveHolds(db([RESERVATION], []));
+    expect(r[0].servable).toBe(false);
+  });
+
+  it('⚠ le relevé des exemplaires ne retient que les statuts CIRCULABLES', async () => {
+    // `DAMAGED` en est exclu délibérément : un exemplaire abîmé ne circule pas.
+    // S'il est réparé, il repasse `AVAILABLE` et le signal s'efface tout seul —
+    // c'est ce qui autorise ce champ à être prudent.
+    const base = db([RESERVATION], ['rec-1']);
+    await new CirculationService().listActiveHolds(base);
+    const where = base.item.findMany.mock.calls[0][0].where;
+    expect(where.status.in).toEqual(['AVAILABLE', 'CHECKED_OUT', 'ON_HOLD', 'IN_TRANSIT']);
+    expect(where.status.in).not.toContain('LOST');
+    expect(where.status.in).not.toContain('DAMAGED');
+  });
+
+  it('⚠ UNE SEULE requête d’exemplaires, quelle que soit la taille de la file', async () => {
+    // La vue guichet porte des dizaines de réservations : un `count` par ligne
+    // ferait un N+1 sur l'écran le plus consulté du métier.
+    const files = Array.from({ length: 30 }, (_, i) => ({
+      ...RESERVATION,
+      id: `h-${i}`,
+      recordId: `rec-${i % 4}`,
+    }));
+    const base = db(files, ['rec-0']);
+    await new CirculationService().listActiveHolds(base);
+    expect(base.item.findMany).toHaveBeenCalledTimes(1);
+    expect(base.item.findMany.mock.calls[0][0].where.recordId.in).toEqual([
+      'rec-0', 'rec-1', 'rec-2', 'rec-3',
+    ]);
   });
 });

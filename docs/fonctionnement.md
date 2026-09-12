@@ -14,7 +14,6 @@ lecture : [presentation-gafeso.md](presentation-gafeso.md).
 | **db** | Base de données principale. | PostgreSQL 16 |
 | **meilisearch** | Moteur de recherche (défaut). | Meilisearch |
 | *(elasticsearch)* | Moteur de recherche alternatif (option). | Elasticsearch 8 |
-| **redis** | Cache et files d'attente. | Redis 7 |
 | **minio** | Stockage objet S3-compatible (couvertures, fichiers). | MinIO |
 | **caddy** | Reverse proxy + HTTPS automatique. | Caddy 2 |
 
@@ -211,7 +210,7 @@ gafeso/
 ## 15. Deux mondes Docker
 
 - `docker/docker-compose.yml` = **développement** : lance seulement l'infra
-  (db, redis, meili, minio, mailpit) ; l'app tourne en `npm run dev` sur l'hôte.
+  (db, meili, minio, mailpit) ; l'app tourne en `npm run dev` sur l'hôte.
 - `docker/docker-compose.prod.yml` = **production** : lance **tout** (infra +
   api + web + Caddy), images construites depuis le dépôt. C'est celui qu'utilise
   l'installateur — voir [INSTALLATION.md](INSTALLATION.md).

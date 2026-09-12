@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { CarteIdentifiable } from './carte-identifiable.validator';
 import { Type } from 'class-transformer';
 import {
@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
   Validate,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreatePatronDto {
@@ -64,7 +65,45 @@ export class CreatePatronDto {
   expiryDate?: Date;
 }
 
-export class UpdatePatronDto extends PartialType(CreatePatronDto) {}
+/**
+ * ⚠ DEUX CHAMPS REDÉCLARÉS, ET C'EST NÉCESSAIRE : `PartialType` rend tout
+ * facultatif, il n'ajoute pas `| null`. Sans ces deux lignes, **une carte liée
+ * au mauvais compte ne pouvait JAMAIS être déliée**, et une date de fin de
+ * validité posée par erreur ne pouvait jamais être retirée.
+ *
+ * ⚠ LE LIEN DE COMPTE N'EST PAS UN DÉTAIL D'ÉTAT CIVIL. `cardForUser` part du
+ * compte pour trouver la carte : une carte liée au mauvais étudiant lui montre
+ * les prêts d'un autre. Le geste qui répare devait exister.
+ *
+ * Troisième fois le 12 septembre 2026 qu'un `null` inexprimable bloque une
+ * correction — après l'embargo et les dates de la fiche d'autorité. La forme
+ * est toujours la même : `@ValidateIf` au lieu d'`@IsOptional`, et le service
+ * distingue `undefined` (inchangé) de `null` (effacé).
+ */
+export class UpdatePatronDto extends PartialType(
+  // ⚠ `OmitType` AVANT `PartialType` : redéclarer un champ avec un type PLUS
+  // LARGE que celui de la classe de base est refusé par TypeScript. On retire
+  // donc les deux champs du parent plutôt que de les contredire — et le compte
+  // reste vérifiable, les deux sont redéclarés juste en dessous.
+  OmitType(CreatePatronDto, ['userId', 'expiryDate'] as const),
+) {
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Compte utilisateur lié. `null` DÉLIE la carte de son compte.',
+  })
+  @ValidateIf((_o, v) => v !== null && v !== undefined)
+  @IsUUID()
+  userId?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Fin de validité. `null` rend la carte à durée illimitée.',
+  })
+  @ValidateIf((_o, v) => v !== null && v !== undefined)
+  @Type(() => Date)
+  @IsDate()
+  expiryDate?: Date | null;
+}
 
 export class ListPatronsDto {
   @ApiPropertyOptional({ description: 'Filtrer par catégorie' })

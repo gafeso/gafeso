@@ -167,7 +167,32 @@ async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
  */
 export type ExistenceNotice = 'existe' | 'introuvable' | 'indisponible';
 
-export async function noticeExiste(id: string): Promise<ExistenceNotice> {
+/**
+ * Existence ET contenu public d'une notice, en UN seul appel.
+ *
+ * ⚠ MESURÉ LE 11 SEPTEMBRE 2026 : la fiche publique ne servait QUE l'en-tête.
+ * Texte visible du HTML d'une notice, scripts retirés :
+ *
+ *     « Gafeso Accueil Catalogue Se connecter Créer un compte ☰ »
+ *
+ * Ni titre, ni auteur, ni `<h1>`, ni `<main>` — le contenu n'arrivait qu'après
+ * l'exécution du JavaScript. Un moteur d'indexation n'y voit rien, et c'est la
+ * page la plus importante d'un catalogue : celle qu'on cherche à faire trouver.
+ *
+ * ⚠ Et l'ironie de l'enveloppe : on avait soigné son 404 POUR LES MACHINES —
+ * « une notice supprimée doit cesser d'être annoncée vivante » — pendant que sa
+ * réponse 200 ne portait rien pour elles. Le « introuvable » était honnête, le
+ * « trouvé » était vide.
+ *
+ * ⚠ L'APPEL EST ANONYME, DÉLIBÉRÉMENT. Le serveur ne porte pas la session du
+ * lecteur : ce qu'il rend est la vue PUBLIQUE, celle qu'un moteur doit voir.
+ * Le composant client rappelle ensuite l'API avec le jeton quand il y en a un,
+ * et complète. L'inverse — rendre côté serveur avec la session — publierait
+ * dans le HTML ce que le contrôle d'accès réserve aux membres.
+ */
+export async function noticePublique(
+  id: string,
+): Promise<{ etat: ExistenceNotice; notice: unknown | null }> {
   const host = await currentHost();
   const url = `${apiUrl()}/opac/records/${encodeURIComponent(id)}?__host=${encodeURIComponent(host)}`;
   try {
@@ -177,19 +202,24 @@ export async function noticeExiste(id: string): Promise<ExistenceNotice> {
       // vite, et le coût d'une vérification est faible.
       next: { revalidate: 60 },
     });
-    if (res.status === 404) return 'introuvable';
+    if (res.status === 404) return { etat: 'introuvable', notice: null };
     if (!res.ok) {
       console.error(`[server-api] ${url} → HTTP ${res.status} (existence de notice)`);
-      return 'indisponible';
+      return { etat: 'indisponible', notice: null };
     }
-    return 'existe';
+    return { etat: 'existe', notice: await res.json() };
   } catch (err) {
     console.error(
       `[server-api] échec du fetch ${url} : ${(err as Error).message}. ` +
         `La notice n'est PAS déclarée introuvable pour autant.`,
     );
-    return 'indisponible';
+    return { etat: 'indisponible', notice: null };
   }
+}
+
+/** Existence seule — conservée pour les appelants qui n'ont pas besoin du corps. */
+export async function noticeExiste(id: string): Promise<ExistenceNotice> {
+  return (await noticePublique(id)).etat;
 }
 
 export async function fetchTenantHome(): Promise<TenantHome | null> {

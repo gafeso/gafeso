@@ -124,7 +124,7 @@ ok "Rôle et base renommés."
 #    incohérente, susceptible de ne pas redémarrer.
 info "4/6 · Arrêt complet de la pile, puis recopie des volumes"
 run dc_old down
-for suffix in minio_data meili_data redis_data caddy_data caddy_config db_data; do
+for suffix in minio_data meili_data caddy_data caddy_config db_data; do
   src="${OLD_PROJECT}_${suffix}"; dst="${NEW_PROJECT}_${suffix}"
   docker volume inspect "$src" >/dev/null 2>&1 || continue
   run docker volume create "$dst"

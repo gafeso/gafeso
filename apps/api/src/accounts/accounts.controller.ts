@@ -41,7 +41,7 @@ import { AccountsService, TenantDb } from './accounts.service';
 import { RegisterDto } from './dto/register.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
-import { ListAccountsDto } from './dto/list-accounts.dto';
+import { ImporterEtudiantsAttendusDto, ListAccountsDto } from './dto/list-accounts.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -100,6 +100,7 @@ export class AccountsController {
   async importExpectedStudents(
     @CurrentTenant() tenant: ResolvedTenant | null,
     @UploadedFile() file: Express.Multer.File,
+    @Body() dto: ImporterEtudiantsAttendusDto,
   ) {
     if (!file) {
       throw new BadRequestException('Fichier CSV requis (champ « file »).');
@@ -107,7 +108,60 @@ export class AccountsController {
     return this.accounts.importExpectedStudents(
       this.db(tenant),
       file.buffer.toString('utf-8'),
+      { remplacer: dto.remplacer, confirmeRetraits: dto.confirmeRetraits },
     );
+  }
+
+  @Post('expected-students/import/apercu')
+  @UseGuards(JwtAuthGuard, FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.OUTILS_LECTEURS)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Ce que l’import ferait — aucune écriture',
+    description:
+      '⚠ DEUX ROUTES ET NON UN `dryRun`, comme pour la propagation des règles ' +
+      'd’accès : la lecture et l’écriture derrière deux VERBES distincts, jamais ' +
+      'derrière le même où une faute de frappe écrit. Rend `retraits.total` et ' +
+      '`retraits.premiers` — ce que le remplacement supprimerait. Le nombre ' +
+      'affiché ici doit être renvoyé en `confirmeRetraits` à l’import, sinon ' +
+      'le remplacement est refusé.',
+  })
+  @ApiBody({
+    schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  async apercuImportExpectedStudents(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Fichier CSV requis (champ « file »).');
+    }
+    return this.accounts.apercuImportExpectedStudents(
+      this.db(tenant),
+      file.buffer.toString('utf-8'),
+    );
+  }
+
+  @Delete('expected-students/:id')
+  @UseGuards(JwtAuthGuard, FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.OUTILS_LECTEURS)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Retirer une ligne d’étudiant attendu',
+    description:
+      '⚠ L’import fait un `upsert` PAR MATRICULE : un matricule saisi de ' +
+      'travers crée une ligne sous une autre clé, et réimporter le fichier ' +
+      'corrigé ne la retire pas. La liste accumulait des fantômes, comptés dans ' +
+      'l’effectif attendu. Une ligne déjà RÉCLAMÉE est refusée : elle explique ' +
+      'pourquoi un compte a été activé automatiquement.',
+  })
+  async retirerExpectedStudent(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('id') id: string,
+  ) {
+    return this.accounts.retirerExpectedStudent(this.db(tenant), id);
   }
 
   @Get()

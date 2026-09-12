@@ -63,12 +63,72 @@ export interface SearchParams {
 /** Résultat de recherche — forme consommée par l'OPAC (hits + facettes). */
 export interface SearchResult {
   hits: RecordSearchDoc[];
+  /**
+   * ⚠ CE NOMBRE N'EST UN TOTAL QUE SI `totalPlafonne` EST FAUX. Au-delà du
+   * plafond du moteur, c'est un PLANCHER — « au moins tant ».
+   */
   totalHits: number;
   page: number;
   totalPages: number;
   /** facette → { valeur: compteur }. */
   facetDistribution: Record<string, Record<string, number>>;
+  /**
+   * `true` quand le moteur a cessé de compter avant la fin : `totalHits` et
+   * `totalPages` sont alors des planchers, pas des totaux.
+   *
+   * ⚠ CHAMP OBLIGATOIRE, ET C'EST DÉLIBÉRÉ. Optionnel, il aurait valu
+   * `undefined` chez tout appelant qui l'ignore — c'est-à-dire « pas plafonné »
+   * à la lecture, donc l'affirmation fausse rétablie par omission. Obligatoire,
+   * le compilateur va chercher chaque moteur et chaque doublure.
+   */
+  totalPlafonne: boolean;
 }
+
+/**
+ * PLAFOND DE COMPTAGE DU MOTEUR — `maxTotalHits` de Meilisearch.
+ *
+ * ## Le défaut
+ *
+ * Le défaut de Meilisearch est **1 000**. Au-delà, `totalHits` se tait sans le
+ * dire : il rend 1 000 et `totalPages` suit. Sur un fonds de 8 000 notices
+ * (mesuré le 11 septembre 2026, index de développement `records_horizon`), la
+ * même réponse portait `totalHits: 1000` et une distribution de facettes
+ * totalisant **8 000** — les facettes, elles, ne sont pas plafonnées.
+ *
+ * La conséquence était PUBLIQUE : l'accueil affirmait « 1 000 ressources » pour
+ * un fonds de 8 000, et la recherche ne menait jamais au-delà de la 1 000ᵉ
+ * notice.
+ *
+ * ## Ce que coûte un plafond plus haut : rien, à cette échelle
+ *
+ * Mesuré le 11 septembre 2026 sur un index jetable de **200 000 documents**
+ * (25 fois le fonds d'essai), plafond porté de 1 000 à 10 000 puis 200 000 :
+ *
+ * | Requête | plafond 1 000 | plafond 200 000 |
+ * |---|---|---|
+ * | recherche vide, page 1 (20) | 1 ms | 1 ms |
+ * | recherche « e » (154 075 réponses), page 1 | 3 ms | 4 ms |
+ * | recherche vide, DERNIÈRE page atteignable | 0 ms | 2 ms (page 10 000) |
+ * | mémoire du conteneur | 185 Mo | 186 Mo |
+ *
+ * Le plafond ne borne pas un coût qui se paierait ici : il borne la pagination
+ * profonde d'un service public exposé, ce que Meilisearch dimensionne pour du
+ * SaaS ouvert. À l'échelle d'un catalogue d'école, le coût ne se mesure pas.
+ *
+ * ## Pourquoi 100 000 et pas l'infini
+ *
+ * Parce qu'un plafond plus haut reste un plafond, et qu'un jour quelqu'un le
+ * dépassera. C'est pourquoi la valeur est accompagnée de `totalPlafonne` : le
+ * chiffre ne sera jamais présenté comme exact quand il ne l'est pas. La valeur,
+ * elle, met la borne au-delà de tout fonds d'école réaliste — les plus grandes
+ * bibliothèques universitaires d'Afrique de l'Ouest se comptent en centaines de
+ * milliers de notices, pas en millions.
+ *
+ * ⚠ APPLIQUÉ PAR `ensureIndex`, donc à la première écriture d'index de chaque
+ * école. Une école dont l'index n'est jamais réécrit garde son ancien plafond
+ * jusqu'au prochain `/cataloging/reindex`.
+ */
+export const MAX_TOTAL_HITS = 100_000;
 
 /**
  * Réglages d'index partagés par les deux moteurs — source unique de vérité pour
@@ -122,6 +182,17 @@ export interface SearchEngine {
   clearIndex(slug: string): Promise<void>;
   /** Recherche paginée + facettes. */
   search(slug: string, params: SearchParams): Promise<SearchResult>;
+  /**
+   * Nombre de documents RÉELLEMENT dans l'index de cette école.
+   *
+   * ⚠ CE N'EST PAS `totalHits` D'UNE RECHERCHE VIDE, et la différence est tout
+   * l'objet de cette méthode : `totalHits` est écrêté par `maxTotalHits`, et
+   * il répond à une requête. Ici on demande à l'index ce qu'il CONTIENT —
+   * la seule grandeur comparable au `count()` de la base.
+   *
+   * Jette si le moteur ne répond pas : c'est `SearchService` qui traduit.
+   */
+  countDocuments(slug: string): Promise<number>;
   /** Le moteur répond-il ? (healthcheck, jamais jeter → false si KO). */
   health(): Promise<boolean>;
 }

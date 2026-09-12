@@ -113,7 +113,17 @@ export interface SituationAdherent {
   patron: { id: string; barcode: string; category: string };
   checkouts: PretEnCours[];
   holds: ReservationActive[];
-  fines: { recordedXof: number; accruingXof: number; totalXof: number };
+  /**
+   * ⚠ `totalXof` A ÉTÉ RETIRÉ DE CE TYPE le 12 septembre 2026, et c'est
+   * délibérément le TYPE qu'on a changé : le compilateur énumère les sites
+   * qui le lisaient, là où un grep en aurait manqué.
+   *
+   * L'API le rend encore, marqué `@deprecated` : il additionne un CUMUL
+   * HISTORIQUE et un ENCOURS DU JOUR — un nombre qui ne désigne rien, et que
+   * l'écran lisait comme un solde. Le front s'en détache : c'est la condition
+   * du backlog backend n° 32, qui le supprimera ensuite.
+   */
+  fines: { recordedXof: number; accruingXof: number };
 }
 
 /** Combien d'adhérents par page. Le maximum accepté par l'API est 100. */

@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
@@ -61,6 +62,33 @@ export default function RolesPage() {
   useEffect(() => {
     if (canManage) void load();
   }, [canManage, load]);
+
+  /**
+   * ⚠ LA PORTE MANQUANTE DU CIRCUIT DE DÉPÔT.
+   *
+   * `null` tant que les rôles ne sont pas chargés : afficher « personne ne peut
+   * valider » pendant le chargement serait un vide qui INVITE À AGIR, et le
+   * geste — créer un rôle — est une écriture. C'est la règle posée le
+   * 10 septembre sur « Aucun domaine créé ».
+   */
+  const porteDuDepotManque =
+    roles === null ? null : !roles.some((r) => r.functions.includes('depot.valider'));
+
+  /**
+   * PROPOSE, ne crée pas : le formulaire s'ouvre pré-rempli et l'administrateur
+   * enregistre lui-même. Exigence de Jean, et elle est juste — un bouton qui
+   * pose des droits sans les montrer est un élargissement en aveugle.
+   */
+  function proposerRoleDeValidation() {
+    setConfirmDelete(null);
+    setNotice(LIBELLES.porteDuDepot.apresProposition);
+    setForm({
+      id: null,
+      name: LIBELLES.porteDuDepot.nomPropose,
+      description: LIBELLES.porteDuDepot.descriptionProposee,
+      functions: ['depot.valider'],
+    });
+  }
 
   function startCreate() {
     setConfirmDelete(null);
@@ -149,6 +177,25 @@ export default function RolesPage() {
         sont fournis et non modifiables ; créez des rôles personnalisés pour
         ajuster finement les droits. L’effet est immédiat (résolu à chaque requête).
       </p>
+
+      {/*
+        ⚠ NI PENDANT LE CHARGEMENT, NI QUAND LA FONCTION EST PORTÉE. Et pas de
+        ton d'alerte : ce n'est pas une faute de l'école, c'est un défaut de
+        notre découpage — `depot.deposer` est donnée par défaut, `depot.valider`
+        ne l'est pas. L'école hérite d'une asymétrie qu'elle n'a pas choisie.
+      */}
+      {porteDuDepotManque === true && !form && (
+        <Card className="mt-4">
+          <h2 className="font-serif text-lg font-bold">{LIBELLES.porteDuDepot.titre}</h2>
+          <p className="mt-2 text-sm text-muted">{LIBELLES.porteDuDepot.constat}</p>
+          <p className="mt-2 text-sm text-muted">
+            {LIBELLES.porteDuDepot.ceQueLeRolePortera('depot.valider')}
+          </p>
+          <Button className="mt-3 min-h-11" onClick={proposerRoleDeValidation}>
+            {LIBELLES.porteDuDepot.proposer}
+          </Button>
+        </Card>
+      )}
 
       {notice && <Alert tone="success" className="mt-4">{notice}</Alert>}
       {error && <Alert tone="error" className="mt-4">{error}</Alert>}

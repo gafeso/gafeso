@@ -41,6 +41,9 @@ export const TENANT_TABLES = [
   // Statuts en TEXTE : aucune entrée TENANT_ENUMS/ENUM_COLUMNS nécessaire.
   'devices',
   'offline_licenses',
+  // Dépôt (P6-2) — table TENANT : elle porte l'identité d'un étudiant et son
+  // fichier. Statut en TEXTE : aucune entrée TENANT_ENUMS nécessaire.
+  'deposits',
 ] as const;
 
 /** Types enum à recréer dans chaque schéma tenant (mêmes libellés que le schéma Prisma). */

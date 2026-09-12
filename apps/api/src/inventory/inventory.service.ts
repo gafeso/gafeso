@@ -101,13 +101,92 @@ export class InventoryService {
     };
   }
 
+  /**
+   * LES TROIS ÉTATS D'UNE SESSION, et le troisième est neuf.
+   *
+   *   OPEN ──clore──▶ CLOSED ──marquer les manquants──▶ APPLIED
+   *     ▲                │
+   *     └────rouvrir─────┘
+   *
+   * ⚠ `APPLIED` EXISTE POUR QUE `rouvrir` PUISSE REFUSER. Une session dont on a
+   * marqué les manquants a CHANGÉ LE CATALOGUE : des exemplaires sont passés en
+   * `MISSING`. La rouvrir et rescanner produirait un second marquage sur un
+   * fonds déjà modifié, et plus personne ne saurait ce que le premier avait
+   * constaté. Tant qu'on n'a rien appliqué, en revanche, une clôture prématurée
+   * est une simple erreur de clic — et refaire des jours de scan pour ça serait
+   * absurde.
+   *
+   * Statut en TEXTE (colonne existante) : aucune migration, et le vocabulaire
+   * est déclaré au schéma à côté de la colonne.
+   */
   async closeSession(db: TenantDb, id: string) {
     const session = await this.requireSession(db, id);
-    if (session.status === 'CLOSED') return session;
+    if (session.status !== 'OPEN') return session;
     return db.inventorySession.update({
       where: { id },
       data: { status: 'CLOSED', closedAt: new Date() },
     });
+  }
+
+  /**
+   * ROUVRIR une session clôturée par erreur.
+   *
+   * ⚠ SANS ELLE, UN CLIC COÛTAIT LE RÉCOLEMENT ENTIER. `scan` refuse sur une
+   * session non ouverte en disant « rouvrez-en une NOUVELLE » — c'est-à-dire
+   * recommencer, sur un fonds de plusieurs milliers d'exemplaires.
+   *
+   * ⚠ REFUSÉE SUR UNE SESSION APPLIQUÉE, et le refus dit pourquoi : le
+   * catalogue a déjà été modifié.
+   */
+  async reopenSession(db: TenantDb, id: string) {
+    const session = await this.requireSession(db, id);
+    if (session.status === 'OPEN') return session;
+    if (session.status === 'APPLIED') {
+      throw new ConflictException(
+        'Les manquants de cette session ont déjà été marqués : le catalogue a ' +
+          'été modifié. Ouvrez une nouvelle session plutôt que de rouvrir ' +
+          'celle-ci — un second marquage porterait sur un fonds déjà changé.',
+      );
+    }
+    return db.inventorySession.update({
+      where: { id },
+      data: { status: 'OPEN', closedAt: null },
+    });
+  }
+
+  /**
+   * ANNULE UN SCAN — un code-barres pointé par erreur.
+   *
+   * ⚠ SANS ELLE, UNE ERREUR DE SCAN DÉFAIT SILENCIEUSEMENT LE RÉCOLEMENT. Un
+   * code-barres scanné par mégarde — l'étagère d'à côté, un marque-page —
+   * marque l'exemplaire VU pour toujours : `mark-missing` ne le signalera pas,
+   * et un exemplaire réellement absent restera `AVAILABLE` au catalogue. Le
+   * récolement échoue précisément à sa seule raison d'être, sur cet
+   * exemplaire-là, sans rien dire.
+   *
+   * ⚠ SESSION OUVERTE SEULEMENT : retirer un scan d'une session close
+   * changerait un rapport déjà lu, et d'une session appliquée, un rapport déjà
+   * appliqué au catalogue.
+   */
+  async annulerScan(db: TenantDb, id: string, rawBarcode: string) {
+    const session = await this.requireSession(db, id);
+    if (session.status !== 'OPEN') {
+      throw new ConflictException(
+        'Session close : un scan ne s’annule que pendant le récolement.',
+      );
+    }
+    const barcode = rawBarcode.trim();
+    if (!barcode) throw new BadRequestException('Code-barres vide.');
+
+    const supprime = await db.inventoryScan.deleteMany({
+      where: { sessionId: id, barcode },
+    });
+    if (supprime.count === 0) {
+      throw new NotFoundException(
+        `Aucun scan « ${barcode} » dans cette session : rien à annuler.`,
+      );
+    }
+    return { annule: true, barcode };
   }
 
   // ── Scan ────────────────────────────────────────────────────────────────
@@ -219,6 +298,20 @@ export class InventoryService {
     ip?: string,
   ): Promise<{ marked: number }> {
     const session = await this.requireSession(db, id);
+    // ⚠ LA SESSION DOIT ÊTRE CLOSE, ET CE GARDE N'EXISTAIT PAS. Sur une session
+    // OUVERTE, « les manquants » sont tout ce qui n'a pas ENCORE été scanné :
+    // au milieu d'un récolement de huit mille exemplaires, ce geste en marque
+    // sept mille comme introuvables. Et l'écran offrait le bouton dès qu'un
+    // manquant apparaissait — c'est-à-dire dès le premier scan.
+    if (session.status === 'OPEN') {
+      throw new ConflictException(
+        'Clôturez la session avant de marquer les manquants : tant qu’elle est ' +
+          'ouverte, « manquant » veut seulement dire « pas encore scanné ».',
+      );
+    }
+    if (session.status === 'APPLIED') {
+      throw new ConflictException('Les manquants de cette session ont déjà été marqués.');
+    }
     const report = await this.report(db, id);
     const ids = report.missing.map((m) => m.id);
     if (ids.length > 0) {
@@ -240,6 +333,11 @@ export class InventoryService {
       metadata: { count: ids.length, itemIds: ids },
       ip,
     });
+    // ⚠ LA SESSION PASSE À `APPLIED`, et c'est ce qui rend `rouvrir` refusable :
+    // le catalogue a changé, un second marquage porterait sur un fonds déjà
+    // modifié. L'écriture vient APRÈS le marquage, pas avant — annoncer un état
+    // qu'on n'a pas encore atteint est la faute qu'on corrige partout ailleurs.
+    await db.inventorySession.update({ where: { id }, data: { status: 'APPLIED' } });
     return { marked: ids.length };
   }
 

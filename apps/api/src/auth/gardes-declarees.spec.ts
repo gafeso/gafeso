@@ -135,9 +135,6 @@ const LIBRE_SERVICE: Record<string, string> = {
   'offline-licensing/offline-licensing.controller.ts :: Post entitlements': 'ses propres droits',
   'offline-licensing/offline-licensing.controller.ts :: Get my-documents': 'ses propres documents',
 
-  // Lecture en ligne : le droit est vérifié dans OpacService.getReadUrl
-  // (classe, abonnement, membersOnly) avant toute URL signée.
-  'opac/opac.controller.ts :: Get records/:id/read': 'lecture en ligne — droit vérifié dans OpacService.getReadUrl',
 };
 
 /**
@@ -149,6 +146,32 @@ const LIBRE_SERVICE: Record<string, string> = {
  * parce qu'elles sont ouvertes, mais parce que le relevé ne sait pas lire leur
  * garde.
  */
+/**
+ * DÉCIDÉ DANS LE SERVICE — plusieurs populations, une règle écrite à UN endroit.
+ *
+ * ⚠ CETTE CATÉGORIE EST NÉE LE 12 SEPTEMBRE 2026, ET ELLE CORRIGE UNE
+ * DÉCLARATION DEVENUE FAUSSE. `LIBRE_SERVICE` dit de lui-même : « le sujet de
+ * l'action est l'utilisateur du jeton, jamais un tiers ni un registre. Une
+ * route de cette liste qui se mettrait à accepter un identifiant d'autrui en
+ * paramètre cesserait d'y appartenir. »
+ *
+ * `Get records/:id/read` y figurait et prend l'identifiant d'une NOTICE : le
+ * critère était déjà démenti par une de ses propres entrées. La corriger
+ * plutôt que d'élargir le critère — un critère qu'on assouplit pour y faire
+ * entrer un cas ne trie plus rien.
+ *
+ * Ce qui distingue cette catégorie : la route sert PLUSIEURS populations
+ * (le propriétaire, un tiers désigné, le personnel), `@RequiresFunctions` ne
+ * sait pas dire « ou », et la règle vit au point de décision, testée.
+ */
+const DECIDE_DANS_LE_SERVICE: Record<string, string> = {
+  'opac/opac.controller.ts :: Get records/:id/read':
+    'lecture en ligne — classe, abonnement, embargo rejoués dans OpacService.getReadUrl',
+  'depots/depots.controller.ts :: Get :id/document':
+    'déposant, directeur désigné, ou `catalogue.gerer` — décidé dans ' +
+    'DepotsService.urlDeLectureDuDocument ; un tiers reçoit « introuvable »',
+};
+
 const AUTRE_MECANISME: Record<string, string> = {
   'admin/admin.controller.ts :: Post tenants': 'ApiKeyGuard — provisionnement',
   'admin/admin.controller.ts :: Get tenants': 'ApiKeyGuard',
@@ -167,6 +190,7 @@ const AUTRE_MECANISME: Record<string, string> = {
 const ROUTES_SANS_FONCTION: Record<string, string> = {
   ...PUBLIC_PAR_CONSTRUCTION,
   ...LIBRE_SERVICE,
+  ...DECIDE_DANS_LE_SERVICE,
   ...AUTRE_MECANISME,
 };
 
@@ -279,6 +303,7 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     const categories: [string, Record<string, string>][] = [
       ['public par construction', PUBLIC_PAR_CONSTRUCTION],
       ['libre-service', LIBRE_SERVICE],
+      ['décidé dans le service', DECIDE_DANS_LE_SERVICE],
       ['autre mécanisme', AUTRE_MECANISME],
     ];
     for (const [nom, table] of categories) {
@@ -312,8 +337,11 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     // à quoi on n'a pas pensé. Si ce nombre bouge, quelqu'un a ajouté ou retiré
     // une route joignable sans fonction — et doit le dire.
     const sansFonction = sousGarde.filter((r) => !r.declareDesFonctions);
-    expect(sansFonction.length).toBe(58);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(58);
+    // ⚠ 58 → 59 le 12 septembre 2026 : `GET /depots/:id/document`. Le compte a
+    // fait son office — il a fallu revenir ici, choisir une catégorie, et
+    // constater que celle qui convenait n'existait pas encore.
+    expect(sansFonction.length).toBe(59);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(59);
   });
 });
 

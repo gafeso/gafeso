@@ -72,6 +72,11 @@ function makeDeps(overrides: { granted?: boolean; readsAll?: boolean } = {}) {
 
 function makeDb(over: Record<string, any> = {}) {
   return {
+    // ⚠ `biblioRecord` EXIGÉ DEPUIS P6-4 : l'émission de licence consulte
+    // l'embargo de la notice — pour TOUT LE MONDE, personnel compris. Un
+    // document sous embargo ne sort pas sur un appareil, où la licence survit
+    // à la découverte de l'erreur. Ici, aucune notice n'est sous embargo.
+    biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null }) },
     device: {
       findUnique: vi.fn().mockResolvedValue({
         id: 'dev1',

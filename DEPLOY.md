@@ -17,13 +17,73 @@
 > pas de build manuel — conforme au principe « monolithe modulaire, pas de
 > microservices » du projet (voir [docs/fonctionnement.md](docs/fonctionnement.md)).
 
+
+## ⚠ Redis a été retiré — ce que ça demande au PROCHAIN déploiement
+
+*12 septembre 2026, backlog n°7.* Le service `redis` ne figure plus ni dans
+`docker/docker-compose.yml` ni dans `docker/docker-compose.prod.yml` : aucun
+code applicatif ne s'y connectait depuis le début (ni `ioredis` ni `bullmq`), et
+un service provisionné, sauvegardé et surveillé que personne n'appelle est une
+surface d'attaque plus une dépendance de déploiement.
+
+⚠ **Retirer un service d'un fichier NE l'arrête pas.** Un `docker compose up -d`
+ordinaire laisse le conteneur tourner en **orphelin** : il n'est plus décrit,
+donc plus mis à jour, et il continue de consommer de la mémoire et d'exposer un
+port interne. Sur les instances déjà déployées, le prochain déploiement doit
+donc nommer l'option :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --remove-orphans
+```
+
+Le **volume** `<projet>_redis_data` n'est PAS supprimé par cette option, et c'est
+voulu : une suppression de données ne se fait pas en passant. Il peut être
+retiré à la main une fois le conteneur parti et l'absence vérifiée
+(`docker volume rm <projet>_redis_data`).
+
+## ⚠ Avant d'ajouter un `ports:` à la pile de production
+
+*Écrit le 12 septembre 2026, backlog n°20.*
+
+Sur la machine de développement, la pile de production (`gafeso-prod-*`) et la
+pile de développement (`bibliocloud-*`) tournent **côte à côte**. La seule chose
+qui les sépare est que **la production ne publie aucun port hôte** :
+
+| | ports publiés |
+|---|---|
+| `bibliocloud-meilisearch-1` | `0.0.0.0:7700 → 7700` |
+| `bibliocloud-db-1` | `0.0.0.0:5433 → 5432` |
+| `gafeso-prod-meilisearch-1` | **aucun** (`7700/tcp`) |
+| `gafeso-prod-db-1` | **aucun** (`5432/tcp`) |
+
+Tout `localhost:7700` ou `localhost:5433` va donc sur le développement, et c'est
+ce qui permet de mesurer, sonder et muter sans risque pour les données réelles.
+
+⚠ **C'est une protection par ACCIDENT, pas par conception.** Rien ne l'impose et
+rien ne signalerait sa disparition. Un `ports:` ajouté à
+`docker-compose.prod.yml` pour un dépannage, un `docker run -p` laissé en place,
+et une commande de mesure qui croit parler au développement écrit dans la
+production.
+
+**Donc, avant d'exposer un port depuis la pile de production :** vérifiez à
+quelle pile répond le port, et remettez l'exposition en place seulement le temps
+du dépannage.
+
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}'
+```
+
+Cette page est l'endroit où cette règle a une chance d'être lue au bon moment —
+une protection par accident **documentée** vaut mieux qu'une protection par
+accident tue.
+
 ## Vue d'ensemble
 
 ```
 Internet ──443/80──▶ Caddy ──┬──▶ web (Next.js, standalone)
                               │        │
                               │        └─ /api/* proxifié en interne ─▶ api
-                              ├──▶ api (NestJS)  ──▶ db / redis / meilisearch / minio
+                              ├──▶ api (NestJS)  ──▶ db / meilisearch / minio
                               └──▶ minio (bucket "covers" public uniquement)
 ```
 
@@ -35,7 +95,7 @@ Internet ──443/80──▶ Caddy ──┬──▶ web (Next.js, standalone
 - **api** applique ses migrations Prisma en attente à chaque démarrage
   (`docker-entrypoint.sh` → `prisma migrate deploy`), avant de servir le
   trafic. Idempotent : ne rien avoir à appliquer ne fait rien.
-- **db / redis / meilisearch / minio** ne publient AUCUN port sur l'hôte —
+- **db / meilisearch / minio** ne publient AUCUN port sur l'hôte —
   joignables uniquement depuis le réseau Docker interne du projet.
 
 Deux fichiers Compose distincts, à ne pas confondre :
@@ -604,7 +664,7 @@ contrairement aux deux cas précédents, celui-ci touche une table **tenant**.
 
 ## Sécurité — rappels
 
-- `db`, `redis`, `meilisearch`, `minio` ne publient aucun port sur l'hôte :
+- `db`, `meilisearch`, `minio` ne publient aucun port sur l'hôte :
   seul Caddy (80/443) et, via lui, `web`/`api` sont exposés. Ne pas ajouter
   de mappage de port à ces services sans raison précise.
 - Tous les secrets (`.env.prod`) sont générés (pas de valeur par défaut) et

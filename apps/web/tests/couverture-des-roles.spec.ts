@@ -121,6 +121,18 @@ describe('la liste d’exceptions ne devient pas un tapis', () => {
     // contrainte » : y ajouter un défaut demain fera tomber ce test, et c'est
     // voulu — inscrire un droit sans porte doit être un geste conscient, pas
     // une ligne qui passe inaperçue dans une liste.
+    //
+    // ⚠ ET « DEMAIN » EST ARRIVÉ LE 12 SEPTEMBRE 2026 — DEUX FOIS DANS LA
+    // JOURNÉE. Le matin, `depot.deposer` a été accordée à l'Étudiant avant que
+    // l'écran « Mon dépôt » n'existe : ce test est tombé, la session backend a
+    // dû inscrire la dette sciemment, et c'est exactement le geste qu'il exige.
+    // Le soir, l'écran a été livré, la fonction a sa porte, la déclaration est
+    // repassée en 'exercee-ailleurs' — et ce test est tombé de nouveau, dans
+    // l'autre sens.
+    //
+    // C'est la mécanique voulue : le témoin tombe à CHAQUE changement d'état de
+    // la dette, jamais entre les deux. Une dette qui ne se rappelle pas
+    // d'elle-même n'est pas une dette, c'est un oubli en attente.
     const defauts = FONCTIONS_SANS_ECRAN.filter((f) => f.nature === 'defaut-connu');
     expect(defauts.map((f) => f.fonction)).toEqual([]);
   });

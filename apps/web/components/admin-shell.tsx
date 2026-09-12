@@ -21,6 +21,7 @@ import { useModulesActifs } from '@/lib/modules-actifs';
 import { moduleDeLaRoute, ongletDe, ongletsVisibles } from '@/lib/navigation';
 import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
+import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -39,8 +40,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (!functions) {
     return (
       <>
+        <LienDEvitement />
         <Header fonctions={null} />
-        <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+        <main id={ID_CONTENU} className="mx-auto max-w-5xl px-6 py-8">
+          {children}
+        </main>
       </>
     );
   }
@@ -64,9 +68,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (moduleRequis && modulesActifs && !modulesActifs.includes(moduleRequis)) {
     return (
       <>
+        <LienDEvitement />
         <Header fonctions={functions} />
-        <main className="mx-auto max-w-3xl px-6 py-8">
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+        <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
+          {/*
+            ⚠ UNE INFORMATION, PAS UNE ALERTE — et le texte le disait déjà
+            pendant que la forme disait le contraire. Un module désactivé est un
+            état que le produit permet de créer EXPRÈS : un administrateur l'a
+            éteint, la veille peut-être. Le peindre en rouge et l'annoncer comme
+            une alerte qualifie d'anomalie un réglage volontaire, et apprend à
+            lire les rouges comme du décor.
+            La règle du dépôt est écrite : ce que quelqu'un a pu vouloir
+            s'affiche en information ; l'avertissement est réservé à ce que
+            personne n'a pu vouloir.
+          */}
+          <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-muted">
             {LIBELLES.modules.ecranModuleInactif}
           </p>
         </main>
@@ -77,8 +93,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (onglets.length === 0) {
     return (
       <>
+        <LienDEvitement />
         <Header fonctions={functions} />
-        <main className="mx-auto max-w-3xl px-6 py-8">
+        <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
           <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
             Cet espace est réservé au personnel de la bibliothèque.
           </p>
@@ -100,6 +117,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <LienDEvitement />
       <Header fonctions={functions} />
 
       {/* Barre d'onglets. `flex-wrap` plutôt qu'un défilement horizontal : sur
@@ -140,7 +158,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
               {actif.libelle}
             </p>
-            <nav className="flex flex-col gap-1">
+            {/* ⚠ Trois `nav` dans cette coque, et deux s'annonçaient
+                « navigation » à l'identique. Un nom par barre, sinon le repère
+                ne repère rien. */}
+            <nav
+              aria-label={LIBELLES.accessibilite.navDeLaSection(actif.libelle)}
+              className="flex flex-col gap-1"
+            >
               {groupes.map((groupe, i) => (
                 <div key={groupe.titre ?? `g${i}`} className="flex flex-col gap-1">
                   {groupe.titre && (
@@ -171,7 +195,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </nav>
           </aside>
         )}
-        <div className="min-w-0 flex-1">{children}</div>
+        {/*
+          ⚠ `<main>` MANQUAIT ICI, ET SEULEMENT ICI. Les trois branches dégradées
+          de ce fichier en portent un depuis toujours ; la branche NOMINALE —
+          celle que tout le monde voit — rendait un `<div>`. Les chemins d'erreur
+          étaient donc mieux accessibles que le chemin normal, et rien ne le
+          disait parce qu'aucun relevé n'avait jamais été fait.
+        */}
+        <main id={ID_CONTENU} className="min-w-0 flex-1">
+          {children}
+        </main>
       </div>
     </>
   );

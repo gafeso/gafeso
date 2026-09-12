@@ -5,6 +5,11 @@ import { StorageService } from '../storage/storage.service';
 import { buildRecordSearchDoc, SearchService } from '../search/search.service';
 import { aplatirChampsDeProfil } from './champs-de-profil';
 import { ContentIngestionService } from '../offline-licensing/content-ingestion.service';
+import {
+  contentMatchesFormat,
+  verifierFichier,
+  type UploadedDigitalFile,
+} from './fichier-numerique';
 import { computeMetadataPatch, MetadataExtractionService } from './metadata-extraction.service';
 
 const EMPTY_EXTRACTED_METADATA = {
@@ -18,45 +23,13 @@ const EMPTY_EXTRACTED_METADATA = {
 
 export type TenantDb = PrismaClient;
 
-/** Types MIME acceptés → format interne. */
-const ACCEPTED_MIME: Record<string, DigitalFormat> = {
-  'application/pdf': DigitalFormat.PDF,
-  'application/epub+zip': DigitalFormat.EPUB,
-};
+// ⚠ Le vocabulaire du fichier numérique vit dans `fichier-numerique.ts` depuis
+// le 12 septembre 2026 : le circuit de dépôt a besoin des MÊMES règles, et deux
+// copies auraient donné deux jeux de seuils et deux formulations du refus.
+// `contentMatchesFormat` et `UploadedDigitalFile` restent ré-exportés ici : des
+// tests et des appelants les importent depuis ce module.
+export { contentMatchesFormat, type UploadedDigitalFile };
 
-const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200 Mo
-
-/**
- * Signature de début de fichier (« nombre magique ») attendue par format.
- *
- * Le type MIME d'un téléversement vient de l'en-tête MULTIPART, donc du client :
- * il se déclare, il ne se prouve pas. Un fichier texte annoncé
- * `application/pdf` était accepté (vérifié : HTTP 201), stocké, puis échouait
- * silencieusement à l'ingestion hors-ligne — le document n'était JAMAIS
- * disponible hors ligne et rien ne le disait.
- *
- * On vérifie donc les octets. EPUB étant un ZIP, sa signature est celle d'une
- * archive : cela n'écarte pas un ZIP qui ne serait pas un EPUB, mais élimine
- * le cas courant du fichier mal étiqueté par le poste du bibliothécaire.
- */
-const MAGIC_BYTES: Record<DigitalFormat, { bytes: Buffer; label: string }> = {
-  [DigitalFormat.PDF]: { bytes: Buffer.from('%PDF-'), label: 'PDF' },
-  [DigitalFormat.EPUB]: { bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04]), label: 'EPUB (archive ZIP)' },
-};
-
-/** Le contenu correspond-il vraiment au format annoncé ? */
-export function contentMatchesFormat(buffer: Buffer, format: DigitalFormat): boolean {
-  const magic = MAGIC_BYTES[format];
-  if (!magic) return false;
-  return buffer.subarray(0, magic.bytes.length).equals(magic.bytes);
-}
-
-export interface UploadedDigitalFile {
-  buffer: Buffer;
-  originalname: string;
-  mimetype: string;
-  size: number;
-}
 
 @Injectable()
 export class DigitalCopyService {
@@ -137,28 +110,9 @@ export class DigitalCopyService {
     });
     if (!record) throw new NotFoundException('Notice introuvable.');
 
-    const format = ACCEPTED_MIME[file.mimetype];
-    if (!format) {
-      throw new BadRequestException(
-        'Format non pris en charge : seuls les fichiers PDF et EPUB sont acceptés.',
-      );
-    }
-    if (file.size === 0) {
-      throw new BadRequestException('Fichier vide.');
-    }
-    // Le CONTENU doit correspondre au format annoncé, pas seulement l'en-tête.
-    if (!contentMatchesFormat(file.buffer, format)) {
-      throw new BadRequestException(
-        `Ce fichier est annoncé comme ${MAGIC_BYTES[format].label} mais son contenu ne ` +
-          `l'est pas (signature de début de fichier absente). Vérifiez qu'il n'est pas ` +
-          `corrompu, ni renommé depuis un autre format.`,
-      );
-    }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException(
-        `Fichier trop volumineux (${Math.round(file.size / 1024 / 1024)} Mo, 200 Mo maximum).`,
-      );
-    }
+    const verdict = verifierFichier(file);
+    if (!verdict.accepte) throw new BadRequestException(verdict.refus);
+    const format = verdict.format;
 
     const objectKey = `${recordId}/${Date.now()}-${sanitizeFileName(file.originalname)}`;
     await this.storage.putObject(objectKey, file.buffer, file.mimetype);

@@ -16,6 +16,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBELLES } from '@/lib/libelles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ListeAdherents from '@/app/admin/adherents/page';
 import FicheAdherent from '@/app/admin/adherents/[id]/page';
@@ -132,6 +133,19 @@ afterEach(() => {
   pousser.mockClear();
 });
 
+describe('Ce que le refus de suppression DOIT dire', () => {
+  /**
+   * ⚠ SA PROPRIÉTÉ, PAS SA VALEUR. Un refus qui ne NOMME pas ce qui l'empêche
+   * envoie chercher une panne au lieu d'une raison — c'est la cinquième
+   * propriété de cet écran, celle qui ne se négocie pas. Un test qui compare au
+   * libellé laisserait passer « Suppression impossible. » tout court.
+   */
+  it('il nomme l’historique, et dit qu’il est conservé', () => {
+    expect(LIBELLES.adherents.supprimerRefusHistorique).toMatch(/historique/i);
+    expect(LIBELLES.adherents.supprimerRefusHistorique).toMatch(/conservé/i);
+  });
+});
+
 describe('1 · sans la fonction, ni l’entrée ni l’écran', () => {
   it('l’entrée de menu n’apparaît pas', () => {
     const sansElle = BIB.filter((f) => f !== 'adherents.gerer');
@@ -246,6 +260,71 @@ describe('5 · inscription', () => {
     await waitFor(() =>
       expect(appels.filter((a) => a.startsWith('GET') && a.includes('/patrons?')).length).toBeGreaterThan(1),
     );
+  });
+});
+
+describe('⚠ Les amendes : aucun zéro affiché, aucun total qui ne désigne rien', () => {
+  /**
+   * ⚠ CE CAS EST DEVENU ATTEIGNABLE le 12 septembre 2026, en détachant l'écran
+   * de `fines.totalXof`.
+   *
+   * L'API marque ce champ `@deprecated` : il additionne un CUMUL HISTORIQUE et
+   * un ENCOURS DU JOUR — un nombre qui ne désigne rien, et que l'écran lisait
+   * comme un solde. Le remplacer par les deux grandeurs séparées fait
+   * apparaître le cas « rien de constaté, mais un retard court aujourd'hui »,
+   * où l'écran écrivait « 0 FCFA constatées aux retours passés · 450 FCFA
+   * courant ».
+   *
+   * Un zéro n'apprend rien et se lit comme un compte soldé. C'est le badge
+   * « En retard · 0 FCFA » déjà corrigé une fois sur cet écran.
+   */
+  // Les mêmes aides que le bloc voisin, où elles sont locales à son `describe`.
+  const ficheLocale = (openCheckouts: number) => ({ ...adherent(1), openCheckouts, activeHolds: 0 });
+  const situationSansCumul = {
+    patron: { id: 'p1', barcode: 'P-2026-0001', category: 'etudiant' },
+    checkouts: [
+      {
+        checkoutId: 'c1',
+        title: 'Droit constitutionnel burkinabè',
+        itemBarcode: 'BIB-000123',
+        recordId: 'r1',
+        dueDate: '2026-09-01T00:00:00.000Z',
+        renewals: 0,
+        overdue: true,
+        accruedFineXof: 450,
+      },
+    ],
+    holds: [],
+    fines: { recordedXof: 0, accruingXof: 450 },
+  };
+
+  it('⚠ rien de constaté : le « 0 FCFA » ne s’écrit pas', async () => {
+    brancher(BIB, {
+      '/patrons/p1/loans': prets(),
+      '/circulation/patrons/p1': situationSansCumul,
+      '/patrons/p1': ficheLocale(1),
+    });
+    render(<FicheAdherent />);
+    await screen.findByText('Awa Traoré');
+    // ⚠ On vise la SYNTHÈSE, pas la ligne du prêt : les deux portent « 450 FCFA ».
+    expect(
+      await screen.findByText(/courant sur les retards en cours/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/0 FCFA constatées/)).toBeNull();
+  });
+
+  it('⚠ rien de constaté : la phrase sur les encaissements ne s’affiche pas', async () => {
+    // Elle détrompe quelqu'un qui vient d'encaisser. Sans cumul, il n'y a rien
+    // à détromper — et un avertissement se place là où il détrompe, pas
+    // partout où le fait est vrai.
+    brancher(BIB, {
+      '/patrons/p1/loans': prets(),
+      '/circulation/patrons/p1': situationSansCumul,
+      '/patrons/p1': ficheLocale(1),
+    });
+    render(<FicheAdherent />);
+    await screen.findByText('Awa Traoré');
+    expect(screen.queryByText(LIBELLES.amendes.aucunEncaissementEnregistre)).toBeNull();
   });
 });
 

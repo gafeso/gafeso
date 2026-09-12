@@ -20,6 +20,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { JwtPayload } from '../auth/jwt.strategy';
+import { ClientIp } from '../audit/client-ip.decorator';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { CirculationService, TenantDb } from './circulation.service';
 import { HoldsService } from './holds.service';
 import {
@@ -41,6 +46,7 @@ export class CirculationController {
     private readonly holds: HoldsService,
     private readonly prisma: PrismaService,
     private readonly modules: ModulesService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -141,6 +147,51 @@ export class CirculationController {
     );
   }
 
+  @Post('checkouts/:id/perte')
+  @ApiOperation({
+    summary: 'Clore un prêt pour PERTE du document',
+    description:
+      '⚠ Sans ce geste, le seul chemin pour clore un prêt était le RETOUR — ' +
+      'donc, pour un document perdu, déclarer un retour qui n’a pas eu lieu. ' +
+      'Ce chemin remet l’exemplaire en AVAILABLE, ou le met ON_HOLD et prévient ' +
+      'le lecteur suivant que son document l’attend au guichet. Ici : ' +
+      'l’exemplaire passe en LOST, AUCUNE réservation n’est promue, et ' +
+      'l’amende est FIGÉE à sa valeur du jour puisque le prêt est clos.',
+  })
+  async perte(
+    @CurrentTenant() tenantOrNull: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @ClientIp() ip?: string,
+  ) {
+    const tenant = this.requireTenant(tenantOrNull);
+    const result = await this.circulation.cloreVersPerte(
+      this.db(tenantOrNull),
+      id,
+      new Date(),
+      await this.dueSettings(tenantOrNull),
+    );
+    // ⚠ TRACÉ. Clore pour perte met un exemplaire hors du fonds et fige une
+    // amende : c'est une décision, pas une opération de guichet ordinaire.
+    void this.audit.log({
+      tenantId: tenant.id,
+      actorId: user.sub,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: AUDIT_ACTIONS.CHECKOUT_CLOSE_LOST,
+      targetType: 'checkout',
+      targetId: id,
+      targetLabel: result.title,
+      ip,
+      metadata: {
+        itemBarcode: result.itemBarcode,
+        fineXof: result.fineXof,
+        overdueDays: result.overdueDays,
+      },
+    });
+    return result;
+  }
+
   @Get('overdues')
   @ApiOperation({ summary: 'Registre des retards (amende courue en FCFA)' })
   async overdues(@CurrentTenant() tenant: ResolvedTenant | null) {
@@ -167,7 +218,11 @@ export class CirculationController {
   @Get('holds')
   @ApiOperation({
     summary: 'File d’attente des réservations (vue guichet)',
-    description: 'Réservations actives par notice, dans l’ordre, avec l’adhérent.',
+    description:
+      'Réservations actives par notice, dans l’ordre, avec l’adhérent. ' +
+      'Chaque ligne porte `servable` : faux quand plus aucun exemplaire n’est ' +
+      'en état de circuler — la file attend un document qui n’existe plus. ' +
+      '⚠ Ce n’est PAS une anomalie : un rachat la résout. À dire sans alarmer.',
   })
   async listHolds(@CurrentTenant() tenant: ResolvedTenant | null) {
     return this.circulation.listActiveHolds(this.db(tenant));

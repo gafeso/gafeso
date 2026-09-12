@@ -184,7 +184,19 @@ export class ElasticsearchEngine implements SearchEngine {
       page: params.page,
       totalPages: size > 0 ? Math.ceil(total / size) : total > 0 ? 1 : 0,
       facetDistribution,
+      // ⚠ TOUJOURS FAUX ICI, ET C'EST JUSTE : la requête demande
+      // `track_total_hits: true`, donc Elasticsearch compte sans s'arrêter à
+      // son défaut de 10 000. C'est Meilisearch seul qui plafonnait, et la
+      // divergence était réelle — la même recherche rendait 1 000 d'un côté et
+      // le vrai total de l'autre. Si `track_total_hits` disparaissait un jour,
+      // cette ligne deviendrait un mensonge : elle est là pour le rappeler.
+      totalPlafonne: false,
     };
+  }
+
+  async countDocuments(slug: string): Promise<number> {
+    const res = await this.client.count({ index: this.indexUid(slug) });
+    return res.count;
   }
 
   async health(): Promise<boolean> {

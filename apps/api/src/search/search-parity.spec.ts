@@ -11,8 +11,20 @@ import { RecordSearchDoc, SearchEngine } from './search-engine';
  * ordinaire (qui reste à 423, sans dépendance réseau). Lancer :
  *
  *   docker compose --profile elasticsearch up -d elasticsearch
- *   SEARCH_PARITY=1 MEILI_MASTER_KEY=meili_dev_master_key \
+ *   SEARCH_PARITY=1 MEILI_MASTER_KEY='<la clé de votre .env>' \
  *     npx vitest run src/search/search-parity.spec.ts
+ *
+ * ⚠ LA LIGNE CI-DESSUS MONTRAIT LA VALEUR, ET LE DÉFAUT PLUS BAS LA PORTAIT EN
+ * DUR. Corrigé le 12 septembre 2026. `CLAUDE.md` l'interdit en toutes lettres —
+ * « la documentation d'une procédure qui prend un secret montre la VARIABLE,
+ * jamais la VALEUR » — et la règle ne se module pas selon la valeur du secret,
+ * sinon il faut juger à chaque fois, et c'est ce jugement exercé à chaud qui a
+ * produit les cinq occurrences précédentes.
+ *
+ * Aggravant ici, et c'est ce qui a décidé du lot : `apps/` part dans
+ * l'instantané public (`scripts/publier-instantane.sh`), donc cette valeur
+ * était PUBLIÉE — et c'était la clé réellement en service sur la base de
+ * développement, pas une valeur d'exemple.
  *
  * Les différences de CLASSEMENT inévitables (typo-tolérance Meili vs fuzziness
  * ES) ne sont PAS asserties à l'identique — on vérifie l'ENSEMBLE de résultats,
@@ -21,17 +33,39 @@ import { RecordSearchDoc, SearchEngine } from './search-engine';
 
 const SLUG = 'paritytest';
 
-// Config minimale : lit process.env avec des défauts de dev.
+/**
+ * Configuration minimale : `process.env`, avec des défauts pour les seules
+ * valeurs qui ne sont PAS des secrets — une adresse d'hôte locale n'en est pas
+ * une. `MEILI_MASTER_KEY` n'a donc aucun défaut : elle vient de
+ * l'environnement, ou elle manque, et alors on le DIT.
+ */
 const cfg = {
   get<T = string>(key: string): T | undefined {
-    const defaults: Record<string, string> = {
+    const defauts: Record<string, string> = {
       MEILI_HOST: 'http://localhost:7700',
-      MEILI_MASTER_KEY: 'meili_dev_master_key',
       ELASTIC_NODE: 'http://localhost:9200',
     };
-    return (process.env[key] ?? defaults[key]) as T | undefined;
+    return (process.env[key] ?? defauts[key]) as T | undefined;
   },
 } as unknown as ConfigService;
+
+/**
+ * ⚠ SANS CLÉ, CETTE SUITE DOIT ÊTRE ROUGE, PAS VERTE.
+ *
+ * Elle est gatée par `SEARCH_PARITY=1` : quelqu'un qui pose ce drapeau a
+ * l'intention de mesurer. Si la clé manque, chaque appel à Meilisearch échouera
+ * en 401 et les scénarios tomberaient de toute façon — mais sur des messages
+ * d'authentification incompréhensibles, à dix endroits. Une assertion unique et
+ * nommée vaut mieux, et c'est la leçon promue en tête de `CLAUDE.md` :
+ * `if (préparation manquante) return` rend VERT un test qui n'a rien exercé.
+ */
+function exigerLaCle(): void {
+  expect(
+    process.env.MEILI_MASTER_KEY,
+    'MEILI_MASTER_KEY absente : cette suite ne peut RIEN mesurer sans elle. ' +
+      'Passez-la en variable d’environnement (la valeur est dans votre .env).',
+  ).toBeTruthy();
+}
 
 // Jeu de données contrôlé — expectations EXACTES.
 function doc(over: Partial<RecordSearchDoc> & { id: string; title: string }): RecordSearchDoc {
@@ -105,6 +139,7 @@ describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
     let ready = false;
 
     beforeAll(async () => {
+      exigerLaCle();
       engine = make();
       if (!(await engine.health())) {
         console.warn(`[parité] ${engine.name} injoignable — scénarios ignorés.`);

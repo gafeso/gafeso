@@ -64,10 +64,59 @@ export const DEFENSE_RECORD_TYPES = [
 ] as const;
 
 /**
+ * ── LE VOCABULAIRE DES TYPES DE NOTICE, FERMÉ (backlog n°22) ───────────────
+ *
+ * ⚠ IL ÉTAIT OUVERT, ET LA MESURE A MONTRÉ CE QUE ÇA COÛTAIT. `recordType`
+ * était validé par `@IsString()` : n'importe quelle chaîne entrait en base.
+ * Un vocabulaire qu'on n'applique pas n'est pas un vocabulaire, c'est un
+ * commentaire.
+ *
+ * ⚠ ET LE DÉFAUT LE PLUS PARLANT ÉTAIT LA VALEUR PAR DÉFAUT ELLE-MÊME.
+ * `DEFAULT_RECORD_TYPE` valait `'book'` — relevé sur la base de développement
+ * le 12 septembre 2026 : sur 8 352 notices réparties en quatre valeurs
+ * (`ouvrage` 3 437, `memoire` 2 399, `these` 1 312, `publication` 1 204),
+ * `'book'` n'apparaît PAS UNE FOIS. Le chemin n'est pourtant pas mort : il se
+ * prend dès qu'une notice est créée sans type. Une bibliothécaire qui saisit
+ * un livre sans choisir son type aurait donc fabriqué une CINQUIÈME valeur, en
+ * anglais, à côté d'`ouvrage` — et une facette de plus dans l'OPAC, sans que
+ * rien ne le signale.
+ *
+ * Le défaut par défaut est donc `'ouvrage'` : la valeur que 3 437 notices
+ * portent déjà pour ce cas, dans la même langue que le reste du vocabulaire.
+ *
+ * ⚠ CE QUI ENTRE DANS LA LISTE ET POURQUOI. Les quatre valeurs RÉELLES, plus
+ * les trois types de soutenance déclarés dans `DEFENSE_RECORD_TYPES` qui
+ * n'ont encore aucune notice (`licence`, `master`, `these_unique`). Fermer sur
+ * les seules valeurs observées interdirait de cataloguer le premier mémoire de
+ * licence — on ferme sur ce que le produit sait décrire, pas sur ce qu'il a
+ * déjà décrit.
+ */
+export const RECORD_TYPES = [
+  /** Le fonds classique — livres, manuels, usuels. Le défaut. */
+  'ouvrage',
+  /** Articles, rapports, actes. Bibliographique : ni jury, ni soutenance. */
+  'publication',
+  // Les types de soutenance — `DEFENSE_RECORD_TYPES` en est le sous-ensemble,
+  // et un test le vérifie plutôt que de le supposer.
+  'these',
+  'memoire',
+  'licence',
+  'master',
+  'these_unique',
+] as const;
+
+export type RecordType = (typeof RECORD_TYPES)[number];
+
+/**
  * Le type posé sur une notice dont rien n'indique le type.
  *
  * ⚠ Il était écrit en dur à TROIS endroits du service (création, import ×2).
  * Même motif que la liste ci-dessus : un vocabulaire répété est un vocabulaire
  * qui divergera.
  */
-export const DEFAULT_RECORD_TYPE = 'book';
+export const DEFAULT_RECORD_TYPE: RecordType = 'ouvrage';
+
+/** Le type est-il du vocabulaire ? Une seule définition, trois portes. */
+export function estUnTypeDeNotice(valeur: string | null | undefined): valeur is RecordType {
+  return !!valeur && (RECORD_TYPES as readonly string[]).includes(valeur.trim());
+}

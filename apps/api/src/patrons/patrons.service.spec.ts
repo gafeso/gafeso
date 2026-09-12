@@ -132,3 +132,49 @@ describe('PatronsService', () => {
     );
   });
 });
+
+describe('⚠ DÉLIER une carte de son compte — le geste qui n’existait pas', () => {
+  // ⚠ `UpdatePatronDto` héritait de `PartialType(CreatePatronDto)` : tout
+  // facultatif, mais AUCUN champ nullable. Une carte liée au mauvais compte ne
+  // pouvait donc JAMAIS être déliée — et `cardForUser` part du compte pour
+  // trouver la carte : l'étudiant voyait les prêts d'un autre, sans recours.
+  //
+  // Troisième `null` inexprimable du 12 septembre 2026, après l'embargo et les
+  // dates de la fiche d'autorité.
+
+  function service(patron: Record<string, unknown> = { id: 'p1' }) {
+    const update = vi.fn(async (a: { where: unknown; data: Record<string, unknown> }) => a);
+    const db = {
+      patron: { findUnique: vi.fn(async () => patron), update },
+      user: { findUnique: vi.fn(async () => ({ id: 'u1' })) },
+    } as never;
+    return { svc: new PatronsService(), db, update };
+  }
+
+  it('⚠ `null` DÉLIE la carte', async () => {
+    const { svc, db, update } = service();
+    await svc.updatePatron(db, 'p1', { userId: null });
+    expect(update.mock.calls[0][0].data.userId).toBeNull();
+  });
+
+  it('un champ ABSENT laisse le lien intact', async () => {
+    const { svc, db, update } = service();
+    await svc.updatePatron(db, 'p1', { category: 'personnel' });
+    expect(update.mock.calls[0][0].data.userId).toBeUndefined();
+  });
+
+  it('⚠ et `null` sur la date de validité rend la carte illimitée', async () => {
+    // Une carte expirée refuse TOUT prêt : une date posée par erreur privait
+    // l'adhérent du service jusqu'à une intervention en base.
+    const { svc, db, update } = service();
+    await svc.updatePatron(db, 'p1', { expiryDate: null });
+    expect(update.mock.calls[0][0].data.expiryDate).toBeNull();
+  });
+
+  it('délier n’interroge PAS les comptes — `null` n’est pas un identifiant', async () => {
+    const { svc, db } = service();
+    await svc.updatePatron(db, 'p1', { userId: null });
+    const users = (db as unknown as { user: { findUnique: ReturnType<typeof vi.fn> } }).user;
+    expect(users.findUnique).not.toHaveBeenCalled();
+  });
+});

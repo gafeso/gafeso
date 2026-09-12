@@ -100,6 +100,22 @@ export const CHAMPS_STRUCTURE = ['profile', 'profileData'] as const;
 export const CHAMPS_TECHNIQUES = ['createdAt', 'updatedAt'] as const;
 
 /**
+ * COUCHE À PART — ce qui règle l'ACCÈS au fichier, pas la description. P6-4.
+ *
+ * ⚠ `embargoUntil` N'EST NI DU NOYAU NI D'UN PROFIL, et le ranger dans l'un des
+ * deux aurait été une erreur de couche. Le noyau et les profils DÉCRIVENT le
+ * document — titre, auteur, université de soutenance. Celui-ci ne décrit rien :
+ * il dit à partir de QUAND le fichier peut être lu. Une thèse sous embargo et
+ * la même thèse libérée sont le même document, décrit à l'identique.
+ *
+ * ⚠ IL EST POURTANT SERVI PUBLIQUEMENT (voir `contrat-notice-publique.ts`), et
+ * c'est le point de l'embargo : les métadonnées restent visibles, le fichier
+ * non. Une notice dont le fichier refuse sans dire pourquoi serait le faux
+ * silencieux qu'on corrige partout ailleurs.
+ */
+export const CHAMPS_ACCES = ['embargoUntil'] as const;
+
+/**
  * Relations d'intégrité, traversées par AUCUN code depuis la notice.
  *
  * 🔴 `offlineLicenses` rattache les licences hors ligne signées à la notice.
@@ -125,6 +141,7 @@ export const CLASSEMENT_NOTICE: Record<string, readonly string[]> = {
   description: CHAMPS_DESCRIPTION,
   metadonneesNatives: CHAMPS_METADONNEES_NATIVES,
   structure: CHAMPS_STRUCTURE,
+  acces: CHAMPS_ACCES,
   techniques: CHAMPS_TECHNIQUES,
   integrite: CHAMPS_INTEGRITE,
 };

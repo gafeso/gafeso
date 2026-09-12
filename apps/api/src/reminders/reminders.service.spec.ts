@@ -7,7 +7,11 @@ const day = (iso: string) => new Date(`${iso}T12:00:00.000Z`);
 
 function service(overrides: { prisma?: any; mail?: any; modules?: any } = {}) {
   const prisma = overrides.prisma ?? {};
-  const mail = overrides.mail ?? { sendCirculationReminder: vi.fn().mockResolvedValue(undefined) };
+  // ⚠ `{ sent: true }` et non `undefined` : `MailService` rend une issue depuis
+  // le 12 septembre 2026, et une doublure plus permissive que le service réel
+  // rend le test aveugle là où le service décide.
+  const mail =
+    overrides.mail ?? { sendCirculationReminder: vi.fn().mockResolvedValue({ sent: true }) };
   // ⚠ P4-1 : l'activation des rappels vient du REGISTRE. La doublure rend
   // `true` par défaut — un test de planification ne doit pas échouer parce que
   // le module serait éteint, ce qui n'est pas son sujet.
@@ -110,7 +114,7 @@ describe('RemindersService — idempotence & envoi (processReminder via runForTe
   });
 
   it('premier passage : envoie et journalise SENT', async () => {
-    const mail = { sendCirculationReminder: vi.fn().mockResolvedValue(undefined) };
+    const mail = { sendCirculationReminder: vi.fn().mockResolvedValue({ sent: true }) };
     const svc = service({ prisma: prismaWith(store, [checkout()]), mail });
     const r = await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
     expect(r.sent).toBe(1);
@@ -119,7 +123,7 @@ describe('RemindersService — idempotence & envoi (processReminder via runForTe
   });
 
   it('deuxième passage : AUCUN doublon (déjà SENT)', async () => {
-    const mail = { sendCirculationReminder: vi.fn().mockResolvedValue(undefined) };
+    const mail = { sendCirculationReminder: vi.fn().mockResolvedValue({ sent: true }) };
     const svc = service({ prisma: prismaWith(store, [checkout()]), mail });
     await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
     await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
@@ -128,12 +132,55 @@ describe('RemindersService — idempotence & envoi (processReminder via runForTe
     expect(store.rows[0].status).toBe('SENT');
   });
 
+  it('⚠ SANS SMTP : journalise FAILED, PAS « SENT » — le mensonge était persisté', async () => {
+    // LE défaut du 12 septembre 2026. `MailService` traitait « SMTP absent »
+    // comme un envoi réussi : aucune exception, donc ce chemin marquait SENT et
+    // comptait le rappel. Le mensonge ne vivait pas dans une réponse HTTP —
+    // il était ÉCRIT dans `reminder_log`, puis AFFICHÉ dans les statistiques de
+    // l'école. Un bibliothécaire lisait « rappels envoyés » pour des courriels
+    // jamais partis, et les adhérents n'étaient jamais prévenus de leur retard.
+    const mail = {
+      sendCirculationReminder: vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_absent' }),
+    };
+    const svc = service({ prisma: prismaWith(store, [checkout()]), mail });
+
+    const r = await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
+
+    expect(r.sent).toBe(0);
+    expect(r.failed).toBe(1);
+    expect(store.rows[0].status).toBe('FAILED');
+    expect(store.rows[0].error).toContain('smtp_absent');
+  });
+
+  it('⚠ et il sera RETENTÉ : le jour où la messagerie est réglée, il part', async () => {
+    // Conséquence assumée de marquer FAILED plutôt que SENT : tant que SMTP est
+    // absent, le rappel revient à chaque passage. C'est le bon sens du
+    // compromis — l'alternative est de mentir une fois pour toutes.
+    const mail = {
+      sendCirculationReminder: vi
+        .fn()
+        .mockResolvedValueOnce({ sent: false, reason: 'smtp_absent' })
+        .mockResolvedValueOnce({ sent: true }),
+    };
+    const svc = service({ prisma: prismaWith(store, [checkout()]), mail });
+
+    await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
+    const r2 = await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));
+
+    expect(mail.sendCirculationReminder).toHaveBeenCalledTimes(2);
+    expect(r2.sent).toBe(1);
+    expect(store.rows[0].status).toBe('SENT');
+  });
+
   it('échec SMTP : journalise FAILED, ne bloque pas, retenté au passage suivant', async () => {
     const mail = {
       sendCirculationReminder: vi
         .fn()
+        // ⚠ REJET conservé EXPRÈS : le filet `catch` de `processReminder`
+        // couvre encore l'inattendu, et il doit rester éprouvé. Le cas de la
+        // panne SMTP ANNONCÉE (issue `smtp_error`) a son propre test plus bas.
         .mockRejectedValueOnce(new Error('SMTP down'))
-        .mockResolvedValueOnce(undefined),
+        .mockResolvedValueOnce({ sent: true }),
     };
     const svc = service({ prisma: prismaWith(store, [checkout()]), mail });
     const r1 = await svc.runForTenant('t1', 'bibliotheque', day('2026-07-18'));

@@ -81,3 +81,31 @@ body {
     50% { stroke-opacity: 0.7; }
   }
 }
+
+
+/*
+ * Lien d'évitement — positionné EN CSS SIMPLE, pas en variantes utilitaires.
+ *
+ * ⚠ DEUX TENTATIVES ONT ÉCHOUÉ AVANT CELLE-CI, et toutes deux mesurées au
+ * navigateur, jamais par un test — jsdom n'a pas de mise en page, donc aucune
+ * assertion ne pouvait les voir :
+ *   1. `sr-only focus:not-sr-only` — la forme qu'on lit partout : le lien
+ *      focalisé restait à 1×1 px en (-1, -1), fond transparent ;
+ *   2. `top-[-100px] focus:top-4` — la boîte devenait correcte (139×36, fond
+ *      vert, texte blanc) et restait à `top: -100px` : la variante `focus:`
+ *      perdait contre la valeur arbitraire, question d'ordre dans la feuille.
+ *
+ * Deux corrections au même endroit sans que le symptôme disparaisse : le défaut
+ * n'était dans aucune des deux écritures, il était dans le fait de se remettre
+ * à l'ordre d'émission de Tailwind pour une garantie visuelle. `:focus` ajoute
+ * une classe de spécificité — il gagne toujours, quel que soit l'ordre.
+ */
+.lien-evitement {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+}
+
+.lien-evitement:focus {
+  top: 1rem;
+}

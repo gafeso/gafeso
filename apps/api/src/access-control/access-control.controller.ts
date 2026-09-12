@@ -18,6 +18,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ClientIp } from '../audit/client-ip.decorator';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthzService } from '../auth/authz.service';
@@ -41,6 +44,7 @@ export class AccessControlController {
     private readonly accessControl: AccessControlService,
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
+    private readonly audit: AuditService,
   ) {}
 
   private requireTenant(tenant: ResolvedTenant | null): ResolvedTenant {
@@ -115,7 +119,7 @@ export class AccessControlController {
       return { granted: true };
     }
     const ctx = await this.studentContext(resolved, user.sub);
-    return this.accessControl.getRecordAccessStatus(ctx, recordId);
+    return this.accessControl.getRecordAccessStatus(db, ctx, recordId);
   }
 
   // ── Administration (école) ──────────────────────────────────
@@ -196,6 +200,95 @@ export class AccessControlController {
     @Body() dto: UpdateCollectionDto,
   ) {
     return this.accessControl.updateCollection(id, this.requireTenant(tenant).id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.COLLECTIONS_GERER)
+  @ApiOperation({
+    summary: 'Supprimer une collection — refusé si elle n’est pas VIDE (admin)',
+    description:
+      '⚠ « Vide » inclut les RÈGLES D’ACCÈS : une collection sans document mais ' +
+      'portant des règles porte quand même des décisions, et l’écran la montre ' +
+      'vide. Le refus COMPTE ce qui bloque — « 12 document(s), 3 règle(s) ' +
+      'd’accès, 2 sous-collection(s) » — parce qu’un refus qui ne compte pas ' +
+      'envoie chercher à l’aveugle. Pas de cascade : elle emporterait des ' +
+      'règles d’accès, c’est-à-dire des décisions. La collection SOCLE ne se ' +
+      'supprime pas.',
+  })
+  async deleteCollection(
+    @CurrentTenant() tenantOrNull: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @ClientIp() ip?: string,
+  ) {
+    const tenant = this.requireTenant(tenantOrNull);
+    const result = await this.accessControl.removeCollection(id, tenant.id);
+    // ⚠ TRACÉ. Une collection porte des règles d'accès : la supprimer, même
+    // vide, retire un objet dont d'autres décisions ont pu dépendre.
+    void this.audit.log({
+      tenantId: tenant.id,
+      actorId: user.sub,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: AUDIT_ACTIONS.COLLECTION_DELETE,
+      targetType: 'collection',
+      targetId: id,
+      targetLabel: result.name,
+      ip,
+    });
+    return result;
+  }
+
+  /**
+   * CE QUE LA PROPAGATION FERAIT — elle ne fait rien.
+   *
+   * ⚠ DEUX ROUTES ET NON UNE, et c'est l'exigence du lot : l'action LISTE ce
+   * qu'elle va toucher avant d'écrire. Un `dryRun` en paramètre aurait mis la
+   * lecture et l'écriture derrière le même verbe, où une faute de frappe
+   * élargit des droits.
+   */
+  @Get(':id/propagation')
+  @UseGuards(FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.COLLECTIONS_GERER)
+  @ApiOperation({
+    summary: 'Ce que la propagation des règles ferait (aucune écriture)',
+    description:
+      'Rend les règles de la collection, les sous-collections qui les ' +
+      'recevraient, celles qui les portent déjà, celles ÉCARTÉES avec leur ' +
+      'motif, et le nombre total de règles qui seraient écrites.',
+  })
+  async previsualiserPropagation(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('id') id: string,
+  ) {
+    return this.accessControl.previsualiserPropagation(id, this.requireTenant(tenant).id);
+  }
+
+  /**
+   * Applique les règles de la collection à ses sous-collections.
+   *
+   * ⚠ C'EST UN ÉLARGISSEMENT DE DROITS. Il est donc écrit dans le journal
+   * d'audit, avec les collections touchées NOMMÉES — et l'entrée est écrite
+   * dans la MÊME TRANSACTION que les règles : si la trace échoue, rien n'est
+   * élargi. Voir le motif complet sur `propagerRegles`.
+   */
+  @Post(':id/propagation')
+  @UseGuards(FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.COLLECTIONS_GERER)
+  @ApiOperation({ summary: 'Propager les règles d’accès aux sous-collections (admin)' })
+  async propagerRegles(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @CurrentUser() user: JwtPayload,
+    @ClientIp() ip: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.accessControl.propagerRegles(id, this.requireTenant(tenant).id, {
+      id: user.sub,
+      email: user.email,
+      role: user.role,
+      ip,
+    });
   }
 
   @Post(':id/titles')

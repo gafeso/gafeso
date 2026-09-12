@@ -83,7 +83,7 @@ Le détail exhaustif est dans **[fonctionnalites.md](fonctionnalites.md)**.
              │  api   │───┬─────────┬──────────┬─────────┐
              └────────┘   │         │          │         │
                       ┌───▼──┐ ┌────▼───┐ ┌────▼───┐ ┌───▼───┐
-                      │  db  │ │ meili  │ │ redis  │ │ minio │
+                      │  db  │ │ meili  │ │ minio │
                       │ PG16 │ │ /elastic│ │        │ │       │
                       └──────┘ └────────┘ └────────┘ └───────┘
 ```
@@ -105,7 +105,7 @@ Le détail exhaustif est dans **[fonctionnalites.md](fonctionnalites.md)**.
 | ORM | **Prisma 5** |
 | Recherche | **Meilisearch** (défaut) ou **Elasticsearch** (option), derrière une interface commune |
 | Stockage objet | **MinIO** (S3-compatible) — couvertures, fichiers numériques |
-| Cache / files | **Redis** |
+| Cache | **En mémoire du processus** |
 | Emails | SMTP (mode dégradé propre si non configuré) |
 | Reverse proxy / TLS | **Caddy 2** (HTTPS Let's Encrypt automatique) |
 | Conteneurisation | **Docker Compose** |

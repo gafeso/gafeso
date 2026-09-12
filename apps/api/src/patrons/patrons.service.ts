@@ -275,6 +275,16 @@ export class PatronsService {
     return { ...patron, openCheckouts, activeHolds, nomsDivergents: nomsDivergents(patron) };
   }
 
+  /**
+   * ⚠ `undefined` N'EST PAS `null`, ET LES DEUX SONT NÉCESSAIRES. Champ absent :
+   * on ne touche à rien. `null` : on EFFACE.
+   *
+   * Sans cette distinction, **une carte liée au mauvais compte ne pouvait
+   * jamais être déliée** — et `cardForUser` part du compte pour trouver la
+   * carte : l'étudiant voyait les prêts d'un autre, sans recours. Une date de
+   * fin de validité posée par erreur ne pouvait pas davantage être retirée, et
+   * une carte expirée refuse tout prêt (`checkout`).
+   */
   async updatePatron(db: TenantDb, id: string, dto: UpdatePatronDto) {
     await this.ensurePatron(db, id);
     if (dto.userId) {

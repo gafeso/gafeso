@@ -42,20 +42,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── Redis : cache + files d'attente BullMQ ──
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
   # ── Meilisearch : moteur de recherche (OPAC) ──
   meilisearch:
     image: getmeili/meilisearch:v1.10
@@ -108,8 +94,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       meilisearch:
         condition: service_healthy
       minio:
@@ -127,8 +111,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis (32 caractères aléatoires minimum)}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY requis (24 caractères aléatoires minimum)}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MINIO_ENDPOINT: minio
@@ -246,7 +228,6 @@ services:
 
 volumes:
   db_data:
-  redis_data:
   meili_data:
   minio_data:
   caddy_data:

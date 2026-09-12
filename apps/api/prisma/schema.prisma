@@ -196,6 +196,16 @@ model ExternalLibrary {
 // A collection can hold commercial titles AND/OR external resources.
 // Access is granted to classes / subscription tiers.
 
+/// ⚠ HIÉRARCHIE (P6-1, 12 septembre 2026) — Faculté → Département → Type.
+///
+/// `parentId` est FACULTATIF : toutes les collections existantes restent des
+/// racines, aucune ne bouge, rien ne se perd.
+///
+/// Deux propriétés sont garanties EN BASE par un trigger, pas par la seule
+/// validation applicative — voir la migration `collections_hierarchie` et
+/// `src/collections/hierarchie.ts` :
+///  · profondeur maximale de 3 niveaux ;
+///  · aucun cycle (une collection n'est jamais son propre ancêtre).
 model Collection {
   id          String            @id @default(uuid())
   name        String // "Ressources Droit L1", "Abonnement Médecine 2026"
@@ -209,13 +219,23 @@ model Collection {
   // Collection SOCLE créée au provisioning de l'école : elle reçoit
   // automatiquement les documents numérisés, et porte la règle d'accès par
   // défaut. Une école n'en a qu'une (index unique partiel côté migration).
-  // Modifiable et supprimable comme n'importe quelle collection.
+  // ⚠ MODIFIABLE, MAIS PAS SUPPRIMABLE — et la ligne disait le contraire
+  // jusqu'au 12 septembre 2026, sans jamais avoir été vraie : AUCUNE collection
+  // ne se supprimait alors. `DigitalCopyService` rattache chaque document
+  // numérisé au socle et sort EN SILENCE s'il n'y en a pas ; sans socle, un
+  // document téléversé n'entre dans aucune collection et n'est visible de
+  // personne, sans erreur ni trace.
   isDefault   Boolean           @default(false) @map("is_default")
+  /// Collection parente, ou `null` pour une racine. Auto-relation.
+  parentId    String?           @map("parent_id")
+  parent      Collection?       @relation("HierarchieCollections", fields: [parentId], references: [id])
+  children    Collection[]      @relation("HierarchieCollections")
   titles      CollectionTitle[]
   accessRules AccessRule[]
   createdAt   DateTime          @default(now()) @map("created_at")
 
   @@index([tenantId])
+  @@index([parentId])
   @@map("collections")
 }
 
@@ -417,6 +437,8 @@ model User {
   subscriptionTier String           @default("free") @map("subscription_tier")
   passwordTokens   PasswordToken[]
   patron           Patron?
+  /// Fiche d'autorité de cette personne, si elle en a une (P6-1).
+  authorFiche      Author?
   enrollments      Enrollment[]
   devices          Device[]
   offlineLicenses  OfflineLicense[]
@@ -580,6 +602,18 @@ model BiblioRecord {
   publicationCity   String?             @map("publication_city")
   defenseUniversity String?             @map("defense_university")
   defensePlace      String?             @map("defense_place")
+  /// ⚠ EMBARGO (P6-4) — date de LEVÉE, jamais un drapeau.
+  ///
+  /// Un booléen « sous embargo » exigerait que quelqu'un pense à le baisser, et
+  /// « un embargo qu'il faut penser à lever ne se lève jamais ». Une DATE se
+  /// lève toute seule : la décision COMPARE, elle ne consulte pas un état.
+  /// Aucune tâche planifiée, donc rien qui puisse ne pas tourner.
+  ///
+  /// ⚠ ET CE SONT LES MÉTADONNÉES QUI RESTENT VISIBLES, PAS LE FICHIER. Cacher
+  /// la notice entière rendrait la thèse introuvable — or l'intérêt du dépôt
+  /// est précisément qu'elle soit CITABLE pendant son embargo, et c'est ce que
+  /// DICAMES moissonne.
+  embargoUntil      DateTime?           @map("embargo_until")
   summary           String? // résumé/description — §3, tous types
   coverUrl          String?             @map("cover_url")
   category          String? // maps to constellation domain: "droit", "medecine"...
@@ -657,6 +691,137 @@ model RecordContributor {
 // accents, espaces réduits) : l'autocomplétion et la migration s'y appuient
 // pour éviter les doublons. Index (pas unique) : les homonymes restent
 // possibles, l'app guide la réutilisation et la fusion nettoie les doublons.
+/// LE DÉPÔT — P6-2, 12 septembre 2026. Table TENANT (elle porte l'identité
+/// d'un étudiant et son fichier).
+///
+/// ⚠ POURQUOI UNE TABLE DISTINCTE ET NON UN ÉTAT SUR `BiblioRecord`. Mesuré
+/// avant de trancher : un état sur la notice demandait de reprendre 31 sites de
+/// lecture dont 14 PUBLICS, et un seul oublié faisait sortir un dépôt non
+/// validé en OPAC ou dans l'entrepôt OAI — où un moissonneur l'archive.
+///
+/// ⚠ ET SURTOUT L'INVARIANT I1. `BiblioRecord.id` ne change JAMAIS : c'est le
+/// `docId` inscrit dans les licences hors-ligne signées déjà déployées sur des
+/// téléphones. Avec un état sur la notice, un dépôt REFUSÉ laisserait un
+/// identifiant mort-né dans la table même que ces licences indexent. Ici
+/// l'identifiant de notice naît à la CATALOGATION, donc après toute hésitation.
+///
+/// ## Les quatre états, et ce que `recordId` n'est PAS
+///
+/// `brouillon` → `soumis` → `valide` | `refuse`. Le directeur valide le
+/// CONTENU ; la notice, elle, est créée par le BIBLIOTHÉCAIRE à l'étape de
+/// complétion (décision du 12 septembre : un étudiant n'a pas à fournir trois
+/// mots-clés, c'est du catalogage et il les choisirait mal).
+///
+/// ⚠ `recordId` N'EST DONC PAS UN CINQUIÈME ÉTAT, c'est un RÉSULTAT. « Le
+/// directeur a-t-il validé ? » et « la notice existe-t-elle ? » sont deux
+/// questions sur deux axes : les confondre dans un seul enum obligerait à
+/// inventer `valide_non_catalogue`, et le jour où le catalogage se défait
+/// l'enum mentirait. Le prédicat « en attente de catalogage » est nommé une
+/// seule fois, dans `depots/etats.ts`.
+///
+/// ⚠ AUCUNE DONNÉE N'EST SUPPRIMÉE par un refus : le dépôt reste, avec son
+/// motif et son fichier.
+model Deposit {
+  id     String @id @default(uuid())
+  /// `brouillon` | `soumis` | `valide` | `refuse`. TEXTE et non enum Postgres :
+  /// c'est la convention des tables tenant (voir TENANT_TABLES), un enum devant
+  /// être recréé dans chaque schéma d'école.
+  status String @default("brouillon")
+
+  /// ⚠ LE DÉPOSANT EST DISTINCT DE L'AUTEUR, dès le départ (décision 4 du
+  /// brief). Un secrétariat qui dépose pour un étudiant, une thèse à deux
+  /// auteurs : le jour où ça arrive, la colonne est là. Elle ne coûte rien
+  /// aujourd'hui et ne se rattrape pas après cinq cents dépôts.
+  depositorId String @map("depositor_id")
+  authorName  String @map("author_name")
+
+  /// Le directeur qui doit valider — un COMPTE, pas un nom. C'est
+  /// `Author.userId` (P6-1) qui rend ce lien possible.
+  directorId String? @map("director_id")
+
+  title String
+  year  Int?
+
+  /// ⚠ TYPE et VERSION dès le départ, même si un seul type sert au début.
+  /// « Cinq cents documents déposés sans savoir lesquels sont diffusables,
+  /// c'est un fonds qu'on ne peut pas ouvrir. »
+  documentType    String @map("document_type")
+  documentVersion String @default("version_soutenue") @map("document_version")
+
+  /// ── LE FICHIER DÉPOSÉ ────────────────────────────────────────────────────
+  ///
+  /// ⚠ IL EST CHIFFRÉ DÈS LE DÉPÔT, PAS AU CATALOGAGE. Décision du 12 septembre
+  /// 2026, et le motif est le pire cas : un dépôt REFUSÉ que personne ne
+  /// cataloguera jamais laisserait son fichier en clair indéfiniment. Les
+  /// documents les moins protégés seraient exactement ceux que personne ne
+  /// surveille — et une thèse sous embargo attend parfois des semaines une
+  /// décision qui ne vient pas.
+  ///
+  /// ⚠ ET LE RATTACHEMENT À LA NOTICE NE RE-CHIFFRE NI NE RECOPIE RIEN.
+  /// Vérifié avant d'écrire : `objectKey` et `encObjectKey` ne sont JAMAIS
+  /// découpés dans `apps/api` — aucun `split`, `slice`, `startsWith` ni `match`.
+  /// Le `recordId` dans le préfixe d'une clé est un groupement LISIBLE dans le
+  /// seau, pas une donnée. Les clés d'un dépôt sont donc préfixées par son
+  /// identifiant à lui, et le catalogage ne fait que COPIER ces valeurs de
+  /// colonnes dans `digital_copies`. Le blob et la CEK enveloppée ne sont pas
+  /// touchés — la CEK est enveloppée par la KEK SERVEUR, qui ne dépend d'aucune
+  /// notice.
+  fileKey    String? @map("file_key")
+  fileName   String? @map("file_name")
+  fileSize   Int?    @map("file_size")
+  /// ⚠ TEXTE et non l'enum `DigitalFormat`, par cohérence avec `status` et
+  /// pour une raison mécanique : un type enum doit être RECRÉÉ dans chaque
+  /// schéma tenant, et le rattrapage de colonnes de `sync-schema` EXCLUT
+  /// justement les colonnes enum. Une école existante ne recevrait donc pas
+  /// cette colonne par le chemin normal. La valeur est validée en code contre
+  /// le même vocabulaire (`PDF` | `EPUB`), et convertie à la création de la
+  /// `DigitalCopy`, qui porte l'enum, elle.
+  fileFormat String? @map("file_format")
+
+  /// Résultat de l'ingestion chiffrée — mêmes colonnes que `DigitalCopy`, qui
+  /// les recevra telles quelles au catalogage.
+  encObjectKey    String?   @map("enc_object_key")
+  encWrappedCek   String?   @map("enc_wrapped_cek")
+  encSegSize      Int?      @map("enc_seg_size")
+  encAlgo         String?   @map("enc_algo")
+  encStatus       String?   @map("enc_status")
+  encError        String?   @map("enc_error")
+  xrefValidatedAt DateTime? @map("xref_validated_at")
+  encryptedAt     DateTime? @map("encrypted_at")
+
+  /// La notice, si elle existe. Voir l'en-tête : c'est un RÉSULTAT, pas un état.
+  recordId String? @map("record_id")
+
+  /// Motif du refus, JAMAIS effacé (décision 6).
+  refusalReason String? @map("refusal_reason")
+
+  submittedAt DateTime? @map("submitted_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedById String?   @map("decided_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([depositorId])
+  @@index([directorId, status])
+  @@map("deposits")
+}
+
+/// ⚠ `userId` LIE UNE FICHE D'AUTORITÉ À UN COMPTE (P6-1, 12 septembre 2026).
+///
+/// Sans lui, « les mémoires et thèses que J'AI dirigés » n'est pas calculable :
+/// la seule jointure disponible serait le NOM, c'est-à-dire précisément ce que
+/// le fichier d'autorités existe pour éviter — et les noms divergent EXPRÈS
+/// dans ce produit (une bibliothécaire corrige un nom d'épouse, une
+/// orthographe).
+///
+/// ⚠ FACULTATIF DES DEUX CÔTÉS, et c'est une décision, pas un oubli. Un auteur
+/// n'a pas forcément de compte — la plupart des auteurs d'un fonds n'en auront
+/// jamais — et un compte n'est pas forcément un auteur. `@unique` borne la
+/// relation à un pour un : un compte ne se rattache qu'à une seule fiche.
+///
+/// Il porte la phase P6 entière, pas un écran : sans lui, le circuit de dépôt
+/// ne peut ni notifier le bon directeur, ni le reconnaître à la validation.
 model Author {
   id             String              @id @default(uuid())
   displayName    String              @map("display_name")
@@ -664,6 +829,9 @@ model Author {
   bio            String?
   birthYear      Int?                @map("birth_year")
   deathYear      Int?                @map("death_year")
+  /// Compte de cette personne, si elle en a un. Voir l'en-tête du modèle.
+  userId         String?             @unique @map("user_id")
+  user           User?               @relation(fields: [userId], references: [id])
   contributions  RecordContributor[]
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
@@ -841,6 +1009,21 @@ model Checkout {
   checkoutDate DateTime  @default(now()) @map("checkout_date")
   dueDate      DateTime  @map("due_date")
   returnDate   DateTime? @map("return_date")
+  /// COMMENT le prêt s'est terminé : `rendu` | `perte`. NULL tant qu'il est
+  /// OUVERT — et seulement là, la migration ayant rempli `rendu` sur tout
+  /// l'historique clos (le retour était le seul chemin de clôture).
+  ///
+  /// ⚠ TEXTE ET NON ENUM, comme `deposits.status` et `deposits.file_format` :
+  /// un type enum doit être RECRÉÉ dans chaque schéma tenant, et le rattrapage
+  /// de colonnes de `sync-schema` EXCLUT justement les colonnes enum. Une école
+  /// existante ne recevrait donc jamais celle-ci par le chemin normal.
+  ///
+  /// ⚠ POURQUOI ELLE EXISTE. Le seul chemin qui clôturait un prêt était le
+  /// RETOUR. Pour un document perdu, la bibliothécaire devait donc déclarer un
+  /// retour qui n'avait pas eu lieu — et ce chemin remet l'exemplaire en
+  /// `AVAILABLE`, ou pire le met `ON_HOLD` et prévient le lecteur suivant que
+  /// son document l'attend au guichet. Pour un livre que personne n'a.
+  closedAs     String?   @map("closed_as")
   renewals     Int       @default(0)
   fineAmount   Int       @default(0) @map("fine_amount")
   item         Item      @relation(fields: [itemId], references: [id])
@@ -890,7 +1073,18 @@ model InventorySession {
   name      String
   scope     String          @default("ALL") // ALL | LOCATION
   location  String? // localisation ciblée si scope = LOCATION
-  status    String          @default("OPEN") // OPEN | CLOSED
+  /// `OPEN` | `CLOSED` | `APPLIED`.
+  ///
+  /// ⚠ `APPLIED` EXISTE POUR QUE « ROUVRIR » PUISSE REFUSER. Une session dont
+  /// on a marqué les manquants a CHANGÉ LE CATALOGUE — des exemplaires sont
+  /// passés en `MISSING`. La rouvrir et rescanner produirait un second
+  /// marquage sur un fonds déjà modifié. Tant que rien n'est appliqué, une
+  /// clôture prématurée n'est qu'une erreur de clic, et refaire des jours de
+  /// scan pour ça serait absurde.
+  ///
+  /// TEXTE et non enum : c'est la convention des tables tenant, et le
+  /// rattrapage `sync-schema` EXCLUT les colonnes enum.
+  status    String          @default("OPEN")
   createdBy String?         @map("created_by") // email de l'agent (trace)
   createdAt DateTime        @default(now()) @map("created_at")
   closedAt  DateTime?       @map("closed_at")

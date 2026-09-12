@@ -55,8 +55,16 @@ describe('functionsForLegacyRole — mappage des rôles système', () => {
     expect(functionsForLegacyRole('ADMIN')).toEqual(TOUTES_LES_FONCTIONS);
   });
 
-  it('STUDENT n’a aucune fonction (accès via access-control uniquement)', () => {
-    expect(functionsForLegacyRole('STUDENT')).toEqual([]);
+  it('⚠ STUDENT ne porte QUE `depot.deposer` — son accès au fonds reste par access-control', () => {
+    // ⚠ IL N'AVAIT AUCUNE FONCTION JUSQU'AU 12 SEPTEMBRE 2026, et ce test le
+    // figeait. Le premier élargissement accordé depuis le découpage des
+    // permissions l'a fait tomber — son office exact.
+    //
+    // Ce qui n'a PAS changé, et qui est le fond : l'accès d'un étudiant au
+    // fonds ne passe toujours par AUCUNE fonction. Il est décidé par
+    // access-control (sa classe, son abonnement). `depot.deposer` n'ouvre que
+    // trois routes, toutes sur SON propre dépôt.
+    expect(functionsForLegacyRole('STUDENT')).toEqual(['depot.deposer']);
   });
 
   it('rôle inconnu → aucune fonction (fail-closed)', () => {
