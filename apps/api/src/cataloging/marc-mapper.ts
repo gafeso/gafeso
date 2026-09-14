@@ -212,6 +212,38 @@ function extractMarc21(fields: MarcFields): ExtractedBiblio {
   };
 }
 
+/**
+ * ⚠ NORMALISATION UNICODE — NFC, à l'entrée de l'entonnoir.
+ *
+ * *Posée le 14 septembre 2026, après le même défaut trouvé par une autre porte.*
+ *
+ * Le 13, la traversée du client SRU contre la Library of Congress a montré
+ * qu'elle émet ses diacritiques en forme DÉCOMPOSÉE : « Ouédraogo » y est
+ * `O u e ◌́ d r a o g o`, dix-huit caractères là où la saisie en fait seize.
+ * Les deux s'affichent au pixel près, et le fichier d'autorités déduplique par
+ * nom EXACT — une fiche saisie et une fiche importée devenaient deux personnes.
+ *
+ * ⚠ CE N'EST PAS UN DÉFAUT VOISIN, C'EST LE MÊME PAR UNE AUTRE PORTE. Un
+ * fichier ISO 2709 exporté de la LoC porte les mêmes formes décomposées, et
+ * `importMarc` en fait des fiches d'autorité. Et c'est le PREMIER geste d'une
+ * bibliothèque qui adopte Gafeso : arriver avec son lot de notices.
+ *
+ * ⚠ ICI ET PAS AILLEURS, parce que c'est l'ENTONNOIR : `extractBiblio` est le
+ * seul point par lequel des champs MARC deviennent des champs de notice, quel
+ * que soit le chemin — import ISO 2709, import UNIMARC XML, SRU. Normaliser
+ * dans les extracteurs demanderait d'y penser à chaque champ ajouté ; une règle
+ * de PLACE ne se contourne pas par distraction, une règle de vigilance si.
+ *
+ * L'opération est idempotente : le chemin SRU, déjà normalisé à sa propre
+ * frontière, traverse sans changer.
+ */
+function normaliserChamps(fields: MarcFields): MarcFields {
+  return fields.map((champ) =>
+    champ.map((valeur) => (typeof valeur === 'string' ? valeur.normalize('NFC') : valeur)),
+  ) as MarcFields;
+}
+
 export function extractBiblio(fields: MarcFields, format: MarcFormatName): ExtractedBiblio {
-  return format === 'MARC21' ? extractMarc21(fields) : extractUnimarc(fields);
+  const normalises = normaliserChamps(fields);
+  return format === 'MARC21' ? extractMarc21(normalises) : extractUnimarc(normalises);
 }

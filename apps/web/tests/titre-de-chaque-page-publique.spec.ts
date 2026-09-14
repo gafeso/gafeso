@@ -171,6 +171,29 @@ describe('Le titre ne devine jamais l’école', () => {
     });
   });
 
+  it('⚠ une API qui SE FIGE ne fige pas les pages', async () => {
+    // ⚠ CE CAS EXISTE À CAUSE DE CE QUE CE MODULE A CHANGÉ. `/tenancy/home`
+    // n'était appelé que par l'accueil ; depuis que le gabarit racine en tire le
+    // titre, TOUTES les pages l'appellent. `fetch` de Node n'a pas de délai par
+    // défaut : une API qui se fige — et non qui refuse — ne répond jamais, et une
+    // page qui l'attend ne rend rien. J'avais étendu à tout le produit un mode de
+    // panne qui n'existait que sur l'accueil.
+    vi.useFakeTimers();
+    try {
+      vi.doMock('@/lib/server-api', () => ({
+        fetchTenantHome: () => new Promise(() => {}), // ne répond JAMAIS
+      }));
+      const { metadonneesRacine } = await import('@/lib/titre-onglet');
+      const promesse = metadonneesRacine();
+      await vi.advanceTimersByTimeAsync(3_500);
+      // ⚠ Elle REND, et elle rend la même chose qu'un échec : on ne sait pas quelle
+      // est l'école, et c'est vrai qu'elle refuse ou qu'elle se taise.
+      expect((await promesse).title).toBe('Gafeso');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('⚠ quand elle NE résout PAS : aucun nom d’école n’est inventé', async () => {
     // `null` couvre l'hôte inconnu ET l'API injoignable. Dans les deux cas on
     // ignore de quelle bibliothèque il s'agit — et un titre qui en nomme une

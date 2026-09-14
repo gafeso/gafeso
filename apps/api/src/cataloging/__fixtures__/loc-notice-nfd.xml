@@ -1,0 +1,105 @@
+<!--
+  NOTICE RÉELLE DE LA LIBRARY OF CONGRESS — récupérée le 14 septembre 2026 par
+  son point SRU public :
+
+    http://lx2.loc.gov:210/lcdb?version=1.1&operation=searchRetrieve
+      &query=bath.title="l'etranger a la mer"&recordSchema=marcxml&maximumRecords=1
+
+  ⚠ ELLE EST ICI POUR SES DIACRITIQUES, ET ILS NE SONT PAS DE MOI. Le champ 245
+  porte « L'E&#x301;tranger a&#x300; la mer » : des références de caractères
+  COMBINANTS, c'est-à-dire de la forme DÉCOMPOSÉE, telle que la LoC l'émet.
+
+  C'est la condition posée pour ce lot : un jeu d'essai qui porte du NFD RÉEL,
+  et non une chaîne composée à la main. Nos doublures ont menti une fois parce
+  qu'elles étaient toutes écrites en NFC.
+
+  Données bibliographiques de la Library of Congress, domaine public.
+-->
+<record xmlns="http://www.loc.gov/MARC21/slim">
+  <leader>00865cam a22002891  4500</leader>
+  <controlfield tag="001">6161937</controlfield>
+  <controlfield tag="005">20250607232235.8</controlfield>
+  <controlfield tag="008">760303s1969    fr            000 1 fre  </controlfield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">6161937</subfield>
+  </datafield>
+  <datafield tag="906" ind1=" " ind2=" ">
+    <subfield code="a">7</subfield>
+    <subfield code="b">cbc</subfield>
+    <subfield code="c">oclcrpl</subfield>
+    <subfield code="d">u</subfield>
+    <subfield code="e">ncip</subfield>
+    <subfield code="f">19</subfield>
+    <subfield code="g">y-gencatlg</subfield>
+  </datafield>
+  <datafield tag="955" ind1=" " ind2=" ">
+    <subfield code="a">LCAP batch update 2025-06-02-04:00: LCAPM-644</subfield>
+  </datafield>
+  <datafield tag="010" ind1=" " ind2=" ">
+    <subfield code="a">   70525078 </subfield>
+  </datafield>
+  <datafield tag="015" ind1=" " ind2=" ">
+    <subfield code="a">F***</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="9">(DLC)   70525078</subfield>
+  </datafield>
+  <datafield tag="035" ind1=" " ind2=" ">
+    <subfield code="a">(OCoLC)2027448</subfield>
+  </datafield>
+  <datafield tag="040" ind1=" " ind2=" ">
+    <subfield code="a">DLC</subfield>
+    <subfield code="c">OU</subfield>
+    <subfield code="d">OCoLC</subfield>
+    <subfield code="d">DLC</subfield>
+  </datafield>
+  <datafield tag="042" ind1=" " ind2=" ">
+    <subfield code="a">premarc</subfield>
+  </datafield>
+  <datafield tag="050" ind1="0" ind2="0">
+    <subfield code="a">PQ2666.A9724</subfield>
+    <subfield code="b">E8</subfield>
+  </datafield>
+  <datafield tag="100" ind1="1" ind2=" ">
+    <subfield code="a">Faust, Jean Jacques,</subfield>
+    <subfield code="d">1927-</subfield>
+  </datafield>
+  <datafield tag="245" ind1="1" ind2="3">
+    <subfield code="a">L'E&#x301;tranger a&#x300; la mer,</subfield>
+    <subfield code="b">roman.</subfield>
+  </datafield>
+  <datafield tag="260" ind1=" " ind2=" ">
+    <subfield code="a">Paris,</subfield>
+    <subfield code="b">R. Laffont,</subfield>
+    <subfield code="c">1969.</subfield>
+  </datafield>
+  <datafield tag="300" ind1=" " ind2=" ">
+    <subfield code="a">272 p.</subfield>
+    <subfield code="c">19 cm.</subfield>
+  </datafield>
+  <datafield tag="336" ind1=" " ind2=" ">
+    <subfield code="a">text</subfield>
+    <subfield code="b">txt</subfield>
+    <subfield code="2">rdacontent</subfield>
+  </datafield>
+  <datafield tag="337" ind1=" " ind2=" ">
+    <subfield code="a">unmediated</subfield>
+    <subfield code="b">n</subfield>
+    <subfield code="2">rdamedia</subfield>
+  </datafield>
+  <datafield tag="338" ind1=" " ind2=" ">
+    <subfield code="a">volume</subfield>
+    <subfield code="b">nc</subfield>
+    <subfield code="2">rdacarrier</subfield>
+  </datafield>
+  <datafield tag="985" ind1=" " ind2=" ">
+    <subfield code="e">OCLC REPLACEMENT cdsdistr</subfield>
+  </datafield>
+  <datafield tag="991" ind1=" " ind2=" ">
+    <subfield code="b">c-GenColl</subfield>
+    <subfield code="h">PQ2666.A9724</subfield>
+    <subfield code="i">E8</subfield>
+    <subfield code="t">Copy 1</subfield>
+    <subfield code="w">OCLCREP</subfield>
+  </datafield>
+</record>
