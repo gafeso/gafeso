@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FONCTIONS, ROLES_SYSTEME } from './functions';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -152,6 +153,216 @@ function signalables(routes: Route[]): Route[] {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE SECOND ARGUMENT — celui qui voyage dans le CORPS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠ TROISIÈME OCCURRENCE, ET C'ÉTAIT MA BORNE DÉCLARÉE. La partie ci-dessus
+// regarde UN producteur par consommateur : le paramètre de CHEMIN. Or une
+// action peut prendre DEUX identifiants — `POST /depots/:id/reattribuer` prend
+// le dépôt (chemin) ET le nouveau directeur (corps).
+//
+// Le dépôt était servi par `GET /depots/soumis` sous `catalogue.gerer` ; le
+// directeur, par `GET /depots/directeurs` sous `depot.deposer`, que le
+// bibliothécaire n'a pas. La route était donc atteignable à moitié — et la
+// moitié manquante ne se voyait qu'à l'usage.
+//
+// ⚠ CE QUI SE CALCULE ET CE QUI NE SE CALCULE PAS, et c'est la même frontière
+// qu'en haut : personne ne peut DEVINER quelle route produit un `directorId`.
+// Ce qui se calcule, une fois la réponse DÉCLARÉE, c'est que le producteur
+// existe et qu'il soit ATTEIGNABLE sous les fonctions du consommateur. C'est
+// précisément la moitié qui a échoué.
+//
+// La déclaration coûte une ligne par route. C'est le bon coût : la 20ᵉ route
+// qui prendra un identifiant dans son corps sera un CHOIX ÉCRIT.
+
+/** D'où vient chaque identifiant transporté par un corps de requête. */
+/**
+ * ⚠ TROIS NATURES, JAMAIS CONFONDUES — même exigence qu'en haut.
+ *
+ * · `atteignable` — le titulaire peut appeler le producteur. C'est le cas
+ *   normal, et le seul que le garde VÉRIFIE mécaniquement.
+ * · `optionnel-garde` — le champ est OPTIONNEL, et le droit de s'en servir est
+ *   lui-même gardé. Celui qui ne peut pas atteindre la liste ne peut pas non
+ *   plus poser la valeur : rien ne lui manque.
+ * · `defaut-connu` — un défaut suivi. Un test refuse qu'il en dorme un sans
+ *   être nommé dans le rapport.
+ *
+ * Si les trois s'écrivaient pareil, cette liste deviendrait l'endroit où l'on
+ * enterre les trouvailles.
+ */
+type NatureArgument = 'atteignable' | 'optionnel-garde' | 'defaut-connu';
+
+const ARGUMENTS_DU_CORPS: Record<
+  string,
+  { champ: string; producteur: string; nature?: NatureArgument; motif?: string }[]
+> = {
+  'depots/depots.controller.ts :: Post :id/reattribuer': [
+    {
+      champ: 'directorId',
+      // ⚠ LA TROISIÈME OCCURRENCE, CORRIGÉE : la liste des dépôts soumis porte
+      // désormais ELLE-MÊME ses directeurs désignables. `GET /depots/directeurs`
+      // reste sous `depot.deposer` pour l'étudiant — élargir cette fonction au
+      // bibliothécaire lui aurait donné le droit de DÉPOSER, un droit
+      // d'écriture pour un problème de lecture.
+      producteur: 'depots/depots.controller.ts :: Get soumis',
+    },
+  ],
+  'depots/depots.controller.ts :: Patch :id/directeur': [
+    { champ: 'directorId', producteur: 'depots/depots.controller.ts :: Get directeurs' },
+  ],
+  'depots/depots.controller.ts :: Post': [
+    { champ: 'directorId', producteur: 'depots/depots.controller.ts :: Get directeurs' },
+  ],
+  'depots/depots.controller.ts :: Post :id/notice': [
+    {
+      champ: 'recordId',
+      producteur: 'cataloging/cataloging.controller.ts :: Get records',
+      motif: 'le bibliothécaire choisit dans le catalogue la notice à rattacher',
+    },
+  ],
+  'access-control/access-control.controller.ts :: Patch :id': [
+    { champ: 'parentId', producteur: 'access-control/access-control.controller.ts :: Get' },
+  ],
+  'access-control/access-control.controller.ts :: Post': [
+    { champ: 'sourceId', producteur: 'access-control/access-control.controller.ts :: Get' },
+  ],
+  'access-control/access-control.controller.ts :: Post :id/records': [
+    { champ: 'recordId', producteur: 'cataloging/cataloging.controller.ts :: Get records' },
+  ],
+  'access-control/access-control.controller.ts :: Post :id/titles': [
+    { champ: 'titleId', producteur: 'cataloging/cataloging.controller.ts :: Get records' },
+  ],
+  'accounts/accounts.controller.ts :: Patch :id': [
+    { champ: 'roleId', producteur: 'accounts/accounts.controller.ts :: Get assignable-roles' },
+  ],
+  'accounts/accounts.controller.ts :: Patch :id/role': [
+    { champ: 'roleId', producteur: 'accounts/accounts.controller.ts :: Get assignable-roles' },
+  ],
+  'accounts/accounts.controller.ts :: Post :id/activate': [
+    {
+      champ: 'roleId',
+      producteur: 'accounts/accounts.controller.ts :: Get assignable-roles',
+      // ⚠ MESURÉ SUR ROLES_SYSTEME : le Gestionnaire porte `comptes.activer`
+      // et PAS `comptes.gerer` — il ne peut donc pas lire la liste des rôles.
+      // Ce n'est pas un défaut : c'est l'ANTI-ESCALADE voulue. `roleId` est
+      // OPTIONNEL, et poser un rôle exige `comptes.gerer` en plus. Le
+      // Gestionnaire active sans poser de rôle ; rien ne lui manque.
+      //
+      // C'est la borne de la vérification mécanique : un argument optionnel
+      // dont l'usage est lui-même gardé n'a pas besoin d'un producteur
+      // atteignable.
+      nature: 'optionnel-garde',
+      motif:
+        'roleId est optionnel ; poser un rôle exige comptes.gerer EN PLUS de ' +
+        'comptes.activer (anti-escalade). Qui ne voit pas la liste ne peut pas ' +
+        'poser la valeur.',
+    },
+  ],
+  'authors/authors-admin.controller.ts :: Patch :id/compte': [
+    {
+      champ: 'userId',
+      producteur: 'patrons/patrons.controller.ts :: Get comptes-a-lier',
+      motif: 'la liste des comptes rattachables, faite pour ce geste',
+    },
+  ],
+  'authors/authors-admin.controller.ts :: Post :id/merge': [
+    { champ: 'intoId', producteur: 'authors/authors-admin.controller.ts :: Get' },
+  ],
+  'circulation/circulation.controller.ts :: Post holds': [
+    { champ: 'recordId', producteur: 'cataloging/cataloging.controller.ts :: Get records' },
+  ],
+  'enrollment/enrollment.controller.ts :: Patch classes/:id': [
+    {
+      champ: 'userId',
+      producteur: 'enrollment/enrollment.controller.ts :: Get enrollments',
+      motif: 'le responsable d’une classe se choisit parmi les inscrits de l’école',
+    },
+  ],
+  'patrons/patrons.controller.ts :: Patch :id': [
+    { champ: 'userId', producteur: 'patrons/patrons.controller.ts :: Get comptes-a-lier' },
+  ],
+  'patrons/patrons.controller.ts :: Post': [
+    { champ: 'userId', producteur: 'patrons/patrons.controller.ts :: Get comptes-a-lier' },
+  ],
+  'offline-licensing/offline-licensing.controller.ts :: Post licenses': [
+    {
+      champ: 'docId',
+      producteur: 'offline-licensing/offline-licensing.controller.ts :: Get my-documents',
+      motif: 'l’application mobile choisit parmi les documents auxquels le lecteur a droit',
+    },
+    {
+      champ: 'deviceId',
+      producteur: 'offline-licensing/offline-licensing.controller.ts :: Get my-documents',
+      nature: 'atteignable',
+      motif:
+        '⚠ L’APPAREIL EST ENRÔLÉ PAR L’APPLICATION ELLE-MÊME (POST /devices) : ' +
+        'elle détient son identifiant par construction, il ne se liste pas. Le ' +
+        'producteur déclaré est donc formel — c’est la borne de ce garde, qui ' +
+        'ne sait pas dire « détenu par construction ».',
+    },
+  ],
+  'reader/reader.controller.ts :: Post holds': [
+    { champ: 'recordId', producteur: 'opac/opac.controller.ts :: Get search' },
+  ],
+};
+
+/** Du nom de constante (`CATALOGUE_GERER`) au code (`catalogue.gerer`). */
+function codeDe(nom: string): string {
+  return (FONCTIONS as Record<string, string>)[nom] ?? nom;
+}
+
+/** Les classes de DTO et leurs champs se terminant par `Id`. */
+function dtosAvecIdentifiant(): Map<string, string[]> {
+  const sortie = new Map<string, string[]>();
+  const parcourir = (dossier: string) => {
+    for (const entree of readdirSync(dossier)) {
+      const chemin = join(dossier, entree);
+      if (statSync(chemin).isDirectory()) parcourir(chemin);
+      else if (entree.endsWith('.ts') && chemin.includes('/dto/')) {
+        const source = readFileSync(chemin, 'utf-8');
+        for (const m of source.matchAll(/export class (\w+)[^{]*\{([\s\S]*?)\n\}/g)) {
+          const champs = [...m[2].matchAll(/^ {2}(\w+)[?!]?\s*:/gm)]
+            .map((c) => c[1])
+            .filter((c) => /Id$/.test(c));
+          if (champs.length) sortie.set(m[1], champs);
+        }
+      }
+    }
+  };
+  parcourir(RACINE);
+  return sortie;
+}
+
+/** Les routes dont le CORPS transporte au moins un identifiant. */
+function consommateursParLeCorps(): { cle: string; champs: string[]; fonctions: string[] }[] {
+  const dtos = dtosAvecIdentifiant();
+  const sortie: { cle: string; champs: string[]; fonctions: string[] }[] = [];
+
+  for (const fichier of controleurs(RACINE)) {
+    const relatif = fichier.replace(RACINE + '/', '');
+    const source = readFileSync(fichier, 'utf-8');
+    const routes = routesDe(relatif, source);
+    // ⚠ ON REMONTE DEPUIS LE `@Body`, jamais l'inverse. Un bloc « du décorateur
+    // jusqu'à l'accolade » se coupe mal : la liste des paramètres vient APRÈS
+    // le nom de la méthode, et ma première version manquait donc le cas connu.
+    // C'est le témoin de population qui l'a dit, pas ma relecture.
+    const positions = [...source.matchAll(/^ {2}@(?:Get|Post|Patch|Put|Delete)\(/gm)].map(
+      (m) => m.index ?? 0,
+    );
+    for (const m of source.matchAll(/@Body\(\)\s*\w+\s*:\s*(\w+)/g)) {
+      const champs = dtos.get(m[1]);
+      if (!champs) continue;
+      const precedents = positions.filter((p) => p < (m.index ?? 0));
+      if (!precedents.length) continue;
+      const rang = positions.indexOf(precedents[precedents.length - 1]);
+      const route = routes[rang];
+      if (route) sortie.push({ cle: route.cle, champs, fonctions: route.fonctions });
+    }
+  }
+  return sortie;
+}
+
 /** Deux contrôleurs fabriqués, dont la réponse est connue PAR CONSTRUCTION. */
 const TEMOIN_CONFORME = `
 @Controller('temoins')
@@ -279,5 +490,142 @@ describe('⚠ Le producteur de l’argument est atteignable sous la fonction du 
     // côté, pas une normalité. Elle doit rester visible dans le rapport.
     const defauts = Object.entries(SIGNALEES).filter(([, v]) => v.nature === 'defaut-connu');
     expect(defauts.map(([c]) => c)).toEqual([]);
+  });
+});
+
+describe('⚠ LE SECOND ARGUMENT — d’où vient CHACUN, pas seulement le premier', () => {
+  const consommateurs = consommateursParLeCorps();
+  const toutes = new Map(toutesLesRoutes().map((r) => [r.cle, r]));
+
+  it('le relevé voit le cas connu, et il en voit plusieurs (témoins)', () => {
+    // ⚠ TÉMOIN DE POPULATION, et il a servi : ma première extraction découpait
+    // « du décorateur jusqu'à l'accolade », ce qui coupe AVANT la liste des
+    // paramètres — le `@Body` n'y était jamais. Elle rendait zéro route, et
+    // seul ce témoin l'a dit.
+    expect(consommateurs.length, 'le relevé ne voit aucune route à identifiant de corps').toBeGreaterThan(10);
+    const reattribuer = consommateurs.find((c) => c.cle.endsWith('Post :id/reattribuer'));
+    expect(reattribuer, 'le cas connu manque au relevé').toBeTruthy();
+    expect(reattribuer!.champs).toContain('directorId');
+  });
+
+  it('⚠ chaque identifiant de corps DÉCLARE d’où il vient', () => {
+    const nouvelles = consommateurs
+      .filter((c) => !(c.cle in ARGUMENTS_DU_CORPS))
+      .map((c) => `${c.cle} ← ${c.champs.join(', ')}`);
+    expect(
+      [...new Set(nouvelles)],
+      'Cette route prend un identifiant dans son CORPS, et rien ne dit d’où il ' +
+        'vient. ' +
+        '⚠ « L’appelant le connaît » n’est pas une réponse : personne ne connaît ' +
+        'un UUID. ' +
+        'Déclarez la route qui le produit dans `ARGUMENTS_DU_CORPS`. Le garde ' +
+        'vérifiera alors qu’elle existe ET qu’elle est atteignable sous vos ' +
+        'fonctions — c’est cette seconde moitié qui a manqué à ' +
+        '`POST /depots/:id/reattribuer`, trois fois en deux jours.',
+    ).toEqual([]);
+  });
+
+  it('⚠ le producteur déclaré EXISTE — une déclaration ne vaut pas un chemin', () => {
+    const fantomes: string[] = [];
+    for (const [consommateur, args] of Object.entries(ARGUMENTS_DU_CORPS)) {
+      for (const a of args) {
+        if (!toutes.has(a.producteur)) fantomes.push(`${consommateur} → ${a.producteur}`);
+      }
+    }
+    expect(fantomes, 'producteur déclaré introuvable dans l’inventaire des routes').toEqual([]);
+  });
+
+  it('⚠ ET LE PRODUCTEUR EST ATTEIGNABLE SOUS LES FONCTIONS DU CONSOMMATEUR', () => {
+    // ⚠ C'EST LA MOITIÉ QUI SE CALCULE, ET C'EST CELLE QUI A ÉCHOUÉ. Personne
+    // ne peut DEVINER quelle route produit un `directorId` — mais une fois la
+    // réponse déclarée, l'inclusion des fonctions se vérifie toute seule.
+    //
+    // `reattribuer` (catalogue.gerer) pointait vers `GET /depots/directeurs`
+    // (depot.deposer) : le bibliothécaire pouvait agir sans jamais voir la
+    // liste. Ce test l'aurait dit.
+    const hors: string[] = [];
+    for (const [cle, args] of Object.entries(ARGUMENTS_DU_CORPS)) {
+      const consommateur = toutes.get(cle);
+      if (!consommateur) continue; // couvert par le test des déclarations périmées
+      const besoin = new Set(consommateur.fonctions);
+      for (const a of args) {
+        // ⚠ SEULE LA NATURE `atteignable` PROMET L'ATTEIGNABILITÉ. Un argument
+        // optionnel dont l'usage est gardé ne la promet pas, et l'exiger ferait
+        // crier le garde sur une anti-escalade délibérée — un garde qui crie à
+        // tort se contourne.
+        if ((a.nature ?? 'atteignable') !== 'atteignable') continue;
+        const producteur = toutes.get(a.producteur);
+        if (!producteur) continue;
+
+        // ⚠ LE BON CRITÈRE N'EST PAS L'INCLUSION DES NOMS DE FONCTIONS, c'est
+        // « tout rôle qui peut AGIR peut-il VOIR ? ». Deux fonctions
+        // différentes ne sont pas un défaut si elles vivent toujours ensemble :
+        // `collections.gerer` et `catalogue.gerer` sont distinctes, et aucun
+        // rôle système ne porte la première sans la seconde.
+        //
+        // La première version comparait les noms et criait sur quatre couples
+        // parfaitement sains. Un garde qui crie à tort se contourne.
+        const porte = (r: (typeof ROLES_SYSTEME)[number], fs: string[]) =>
+          fs.every((f) => r.functions.includes(codeDe(f)));
+        const aveugles = ROLES_SYSTEME.filter(
+          (r) => porte(r, consommateur.fonctions) && !porte(r, producteur.fonctions),
+        );
+        if (aveugles.length) {
+          hors.push(
+            `${cle} [${consommateur.fonctions.join(',') || '—'}] ← ${a.champ} par ` +
+              `${a.producteur} [${producteur.fonctions.join(',') || '—'}] — ` +
+              `agissent sans voir : ${aveugles.map((r) => r.name).join(', ')}`,
+          );
+        }
+      }
+    }
+    expect(
+      hors,
+      'Le titulaire de cette route ne peut PAS atteindre la liste qui lui donne ' +
+        'son argument : il peut agir sans jamais voir sur quoi. ' +
+        '⚠ Élargir la fonction du producteur n’est presque jamais la réponse — ' +
+        'c’est accorder un droit pour en réparer un autre. Faites porter ' +
+        'l’information par une route que le titulaire atteint DÉJÀ.',
+    ).toEqual([]);
+  });
+
+  it('⚠ aucune déclaration PÉRIMÉE — une route disparue sort de la liste', () => {
+    const cles = new Set(consommateurs.map((c) => c.cle));
+    const perimees = Object.keys(ARGUMENTS_DU_CORPS).filter((c) => !cles.has(c));
+    expect(
+      perimees,
+      'Ces routes sont déclarées et ne prennent plus d’identifiant dans leur ' +
+        'corps. Retirez la ligne — une dette qui ne se rappelle pas d’elle-même ' +
+        'n’est pas une dette, c’est un oubli en attente.',
+    ).toEqual([]);
+  });
+});
+
+describe('⚠ Les natures du second argument, et leur discipline', () => {
+  it('aucun `defaut-connu` ne dort sans être nommé', () => {
+    const defauts = Object.entries(ARGUMENTS_DU_CORPS).flatMap(([cle, args]) =>
+      args.filter((a) => a.nature === 'defaut-connu').map((a) => `${cle} ← ${a.champ}`),
+    );
+    expect(defauts).toEqual([]);
+  });
+
+  it('⚠ toute nature autre qu’`atteignable` porte un MOTIF', () => {
+    // Sans motif, « optionnel-garde » devient la case où l'on range ce qu'on
+    // n'a pas voulu regarder.
+    const muettes = Object.entries(ARGUMENTS_DU_CORPS).flatMap(([cle, args]) =>
+      args
+        .filter((a) => (a.nature ?? 'atteignable') !== 'atteignable' && !a.motif)
+        .map((a) => `${cle} ← ${a.champ}`),
+    );
+    expect(muettes, 'une exception sans motif est un oubli déguisé').toEqual([]);
+  });
+
+  it('⚠ TÉMOIN : l’exception `optionnel-garde` existe, et elle est unique', () => {
+    // Un compte exact : si une seconde apparaît, quelqu'un doit revenir
+    // vérifier qu'elle est aussi délibérée que la première.
+    const optionnels = Object.entries(ARGUMENTS_DU_CORPS).flatMap(([cle, args]) =>
+      args.filter((a) => a.nature === 'optionnel-garde').map((a) => `${cle} ← ${a.champ}`),
+    );
+    expect(optionnels).toEqual(['accounts/accounts.controller.ts :: Post :id/activate ← roleId']);
   });
 });

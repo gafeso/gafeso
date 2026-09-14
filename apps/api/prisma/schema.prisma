@@ -795,6 +795,21 @@ model Deposit {
   /// Motif du refus, JAMAIS effacé (décision 6).
   refusalReason String? @map("refusal_reason")
 
+  /// ⚠ LE DIRECTEUR DÉJÀ PRÉVENU D'UNE SOUMISSION — un état d'ENVOI, pas un lien.
+  ///
+  /// La règle : on ne prévient QUE si `notifiedDirectorId !== directorId`. Une
+  /// resoumission après retrait n'est pas une information nouvelle pour lui — le
+  /// dépôt est toujours dans sa liste — sauf si le directeur a CHANGÉ entre les
+  /// deux, seul cas où le nouveau n'a jamais rien reçu.
+  ///
+  /// ⚠ Pas de relation déclarée vers `User` : une clé étrangère ferait dépendre
+  /// l'historique des envois de la survie du compte, et supprimer un enseignant
+  /// rejouerait des courriels déjà partis.
+  ///
+  /// ⚠ Renseigné SEULEMENT si l'envoi a abouti : marquer « prévenu » sur un
+  /// échec le rendrait muet pour toujours.
+  notifiedDirectorId String? @map("notified_director_id")
+
   submittedAt DateTime? @map("submitted_at")
   decidedAt   DateTime? @map("decided_at")
   decidedById String?   @map("decided_by_id")
@@ -1163,4 +1178,164 @@ model Patron {
   holds            Hold[]
 
   @@map("patrons")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOISSONNAGE OAI-PMH (P7-1) — Gafeso apprend à RECEVOIR
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// L'entrepôt OAI de P4-3 EXPOSE ; ces trois tables gouvernent l'ENTRÉE. Elles
+// sont tenant-scopées : une école déclare SES sources.
+//
+// ⚠ SIX ARBITRAGES DU BRIEF Y SONT INSCRITS, pas seulement commentés :
+//  · ce qui arrive par moissonnage reste marqué comme tel (HarvestedRecord) ;
+//  · le moissonnage ne modifie jamais une notice locale — il SIGNALE
+//    (`status = 'collision'`) ;
+//  · aucune suppression automatique (`status = 'supprimee_a_la_source'`) ;
+//  · `BiblioRecord.id` reste la clé interne — I1, ce lien le POINTE.
+
+/// UNE SOURCE DÉCLARÉE — l'entrepôt distant qu'on vient chercher.
+model HarvestSource {
+  id   String @id @default(uuid())
+  /// Un nom lisible : une URL n'est pas un nom dans une liste.
+  name String
+
+  /// ⚠ CES TROIS CHAMPS SONT LE CONTRAT DU CLIENT PUR (`SourceOai` dans
+  /// `moissonnage/client-oai.ts`), PAS UN VOCABULAIRE NEUF. Les renommer ici
+  /// créerait deux vocabulaires pour une même chose — et deux vocabulaires
+  /// qui s'accordent aujourd'hui s'accordent par coïncidence.
+  baseUrl        String @map("base_url")
+  /// `oai_dc`, `marcxml`, `etdms`…
+  metadataPrefix String @map("metadata_prefix")
+
+  /// L'ensemble à moissonner. ⚠ `""` VEUT DIRE « TOUT L'ENTREPÔT », et la
+  /// colonne est NON NULLE À DESSEIN.
+  ///
+  /// En PostgreSQL, un index unique composite NE DÉDUPLIQUE PAS les lignes où
+  /// l'une des colonnes est NULL : deux sources visant le même entrepôt sans
+  /// ensemble auraient donc passé la contrainte ci-dessous sans qu'elle dise
+  /// rien. Une contrainte qui ne contraint pas est un faux silencieux, et
+  /// celui-ci ne se voit qu'au premier doublon moissonné.
+  ///
+  /// Le service convertit `""` en `undefined` au bord, pour que le client pur
+  /// garde son `set?: string` — l'absence est honnête à l'API, la chaîne vide
+  /// est ce que la contrainte sait comparer.
+  setSpec String @default("") @map("set_spec")
+
+  /// `manuelle` | `quotidienne` | `hebdomadaire`. TEXTE et non enum :
+  /// `sync-schema` EXCLUT les colonnes enum du rattrapage, une école existante
+  /// ne la recevrait jamais.
+  periodicity String  @default("manuelle")
+  active      Boolean @default(true)
+
+  /// ⚠ LE CURSEUR INCRÉMENTAL, EN TEXTE — PAS EN DateTime. OAI-PMH admet deux
+  /// granularités (`2026-09-12` et `2026-09-12T18:04:00Z`) ; l'entrepôt impose
+  /// la sienne, et il faut lui REDONNER ce qu'il comprend. Le normaliser en
+  /// DateTime lui renverrait une granularité qu'il n'a jamais employée, sur le
+  /// paramètre même qui décide de ce qu'on reçoit. C'est I3 sous une autre
+  /// forme : ce qui arrive dans un format y reste.
+  ///
+  /// ⚠ Il n'avance QU'À LA FIN d'une exécution aboutie — voir `HarvestRun`.
+  lastDatestamp String? @map("last_datestamp")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  runs      HarvestRun[]
+  moissonnees HarvestedRecord[]
+
+  /// ⚠ PAS `baseUrl` SEULE : viser le même entrepôt avec deux ensembles
+  /// différents est l'usage normal — une faculté, puis une autre.
+  @@unique([baseUrl, metadataPrefix, setSpec])
+  @@map("harvest_sources")
+}
+
+/// UNE EXÉCUTION — un compte rendu par passage, et il dit les trois états.
+model HarvestRun {
+  id       String        @id @default(uuid())
+  sourceId String        @map("source_id")
+  source   HarvestSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime?                 @map("finished_at")
+
+  /// `en_cours` | `moisson` | `vide` | `injoignable` | `erreur_protocole` —
+  /// les quatre issues du client pur, plus l'état courant.
+  ///
+  /// ⚠ UNE SOURCE INJOIGNABLE N'EST PAS UNE SOURCE VIDE. Les confondre ferait
+  /// lire « zéro notice » là où il faut lire « je n'ai pas pu savoir », et
+  /// c'est ce que le brief demande explicitement.
+  outcome String  @default("en_cours")
+  /// Le motif, quand ce n'est ni `moisson` ni `vide`.
+  reason  String?
+
+  received  Int @default(0)
+  created   Int @default(0)
+  ignored   Int @default(0)
+  collided  Int @default(0)
+  /// Signalées PAR LA SOURCE, jamais appliquées — décision 6.
+  deletions Int @default(0)
+  pages     Int @default(0)
+
+  /// ⚠ LE JETON DE REPRISE EST PÉRISSABLE. Un `resumptionToken` expire, souvent
+  /// en minutes. Le garder pour « reprendre demain » serait une promesse qu'on
+  /// ne peut pas tenir : on garde donc AUSSI sa date limite, et au-delà on
+  /// repart du `lastDatestamp` de la source. Sans `resumptionExpires`, la
+  /// reprise échouerait d'une manière qui ressemble à une source cassée.
+  resumptionToken   String?   @map("resumption_token")
+  resumptionExpires DateTime? @map("resumption_expires")
+
+  /// Le dernier `datestamp` vu pendant CETTE exécution.
+  ///
+  /// ⚠ IL NE REMONTE DANS LA SOURCE QU'À L'ABOUTISSEMENT. Faire avancer le
+  /// curseur en cours de route ferait sauter les notices d'une page jamais
+  /// reçue — et la perte serait définitive, puisqu'on ne redemanderait plus
+  /// jamais cette fenêtre.
+  lastDatestamp String? @map("last_datestamp")
+
+  @@index([sourceId, startedAt])
+  @@map("harvest_runs")
+}
+
+/// L'IDENTITÉ D'UNE NOTICE MOISSONNÉE — ce qui rend le moissonnage REJOUABLE.
+model HarvestedRecord {
+  id       String @id @default(uuid())
+  sourceId String @map("source_id")
+  /// ⚠ LA RELATION VERS LA SOURCE EST DÉCLARÉE, celle vers la NOTICE ne l'est
+  /// pas — et la différence n'est pas un oubli. La clé étrangère
+  /// `source_id → harvest_sources(id)` existe en base depuis la migration, avec
+  /// CASCADE : la mémoire d'un moissonnage n'a aucun sens sans sa source. La
+  /// déclarer ici ne change donc rien au schéma, elle rend seulement la
+  /// jointure disponible au client — ce que la fédération (P7-3) demande pour
+  /// nommer l'école d'origine sans une seconde requête par notice.
+  source   HarvestSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  /// L'identifiant OAI de la source. ⚠ C'est SA clé, jamais la nôtre — et
+  /// c'est elle qui empêche un second moissonnage de tout dupliquer.
+  oaiIdentifier String @map("oai_identifier")
+  datestamp     String
+
+  /// La notice locale, si elle a été créée ; NULL quand on a refusé d'écrire.
+  /// ⚠ `BiblioRecord.id` NE CHANGE JAMAIS (I1) : ce lien le POINTE, il ne le
+  /// remplace pas. Pas de relation déclarée — une clé étrangère ferait
+  /// dépendre la mémoire du moissonnage de la survie de la notice.
+  recordId String? @map("record_id")
+
+  /// `importee` | `collision` | `ignoree` | `supprimee_a_la_source`
+  ///
+  /// ⚠ `supprimee_a_la_source` EST LA DÉCISION 6 RENDUE VISIBLE : la notice
+  /// locale n'est PAS effacée, on note seulement que la source ne la donne
+  /// plus. Un moissonneur qui supprime sur absence transforme une panne de la
+  /// source en perte de données.
+  ///
+  /// ⚠ `collision` EST LA DÉCISION 2 : on signale, on ne tranche pas. Rien
+  /// n'est écrasé, et la collision se lit — c'est l'écran de P7-4.
+  status String
+
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @updatedAt      @map("last_seen_at")
+
+  @@unique([sourceId, oaiIdentifier])
+  @@index([status])
+  @@map("harvested_records")
 }

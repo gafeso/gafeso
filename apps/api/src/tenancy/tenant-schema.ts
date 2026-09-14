@@ -44,6 +44,12 @@ export const TENANT_TABLES = [
   // Dépôt (P6-2) — table TENANT : elle porte l'identité d'un étudiant et son
   // fichier. Statut en TEXTE : aucune entrée TENANT_ENUMS nécessaire.
   'deposits',
+  // Moissonnage OAI-PMH (P7-1) — sources avant runs (dépendance FK).
+  // `harvested_records` ne déclare AUCUNE relation : voir le schéma.
+  // Vocabulaires en TEXTE : aucune entrée TENANT_ENUMS nécessaire.
+  'harvest_sources',
+  'harvest_runs',
+  'harvested_records',
 ] as const;
 
 /** Types enum à recréer dans chaque schéma tenant (mêmes libellés que le schéma Prisma). */
@@ -157,6 +163,33 @@ const TENANT_FOREIGN_KEYS: ForeignKey[] = [
     table: 'offline_licenses',
     column: 'record_id',
     refTable: 'biblio_records',
+    refColumn: 'id',
+    onDelete: 'CASCADE',
+  },
+  // ── Moissonnage OAI-PMH (P7-1) ──
+  //
+  // ⚠ SANS CES DEUX ENTRÉES, UNE ÉCOLE NEUVE DIVERGERAIT DES EXISTANTES. La
+  // migration crée les tables AVEC leurs clés étrangères sur chaque schéma ;
+  // le provisioning, lui, clone par `LIKE ... INCLUDING ALL`, qui ne copie
+  // JAMAIS une clé étrangère — elles sont rajoutées ici, à la main. Deux
+  // chemins, une seule vérité : celui qui oublie cette liste produit des
+  // tables sans contrainte, et rien ne le dit.
+  //
+  // CASCADE : une exécution et l'identité d'une notice moissonnée n'ont aucun
+  // sens sans leur source. Supprimer une source, c'est renoncer à ce qu'elle
+  // a apporté comme MÉMOIRE DE MOISSONNAGE — jamais aux notices elles-mêmes,
+  // qui ne sont pas liées (voir `harvested_records.record_id`, sans relation).
+  {
+    table: 'harvest_runs',
+    column: 'source_id',
+    refTable: 'harvest_sources',
+    refColumn: 'id',
+    onDelete: 'CASCADE',
+  },
+  {
+    table: 'harvested_records',
+    column: 'source_id',
+    refTable: 'harvest_sources',
     refColumn: 'id',
     onDelete: 'CASCADE',
   },

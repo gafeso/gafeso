@@ -102,7 +102,7 @@ describe('l’administrateur voit TOUT', () => {
     // fonction que le Bibliothécaire détenait sans qu'aucune porte n'existe
     // (backlog n° 8). Ce chiffre s'écrit en dur pour qu'une entrée ajoutée ou
     // perdue par accident fasse tomber le test.
-    expect(toutes.length).toBe(21);
+    expect(toutes.length).toBe(23);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 
@@ -127,6 +127,9 @@ describe('l’administrateur voit TOUT', () => {
 
     expect(parCatalogue?.entrees.map((e) => e.libelle)).toEqual([
       'Import de notices',
+      // ⚠ Le moissonnage est un outil qui OPÈRE sur le catalogue, au même titre
+      // que l'import : même fonction, même onglet, aucune porte nouvelle.
+      'Moissonnage',
       'Récolement',
     ]);
     expect(parLecteurs?.entrees.map((e) => e.libelle)).toEqual(['Import des étudiants']);

@@ -44,10 +44,19 @@ const LIGNE = {
   digitalCopy: { fileFormat: 'PDF', objectKey: 'secret/ne-doit-pas-sortir.pdf' },
 };
 
-function service() {
+function service(provenance: unknown = null) {
   const findUnique = vi.fn(async () => structuredClone(LIGNE));
   const db = { biblioRecord: { findUnique } } as never;
-  return { db, service: new OpacService({} as never, {} as never, {} as never, {} as never) };
+  return {
+    db,
+    service: new OpacService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { provenance: async () => provenance } as never,
+    ),
+  };
 }
 
 /** L'ordre EXACT servi à un visiteur anonyme, relevé sur l'API en service. */
@@ -56,7 +65,7 @@ const ORDRE_ANONYME = [
   'titleComplement', 'author', 'isbn', 'publishYear', 'language', 'publisher',
   'publicationCity', 'defenseUniversity', 'defensePlace', 'embargoUntil', 'summary', 'coverUrl',
   'category', 'createdAt', 'updatedAt', 'contributors', 'keywords',
-  'items', 'availability', 'digitalCopy', 'membersOnly',
+  'items', 'availability', 'digitalCopy', 'membersOnly', 'provenance',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
@@ -65,7 +74,15 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
   // inconnue n'est pas affecté, et I7 tient. La date est SERVIE parce qu'une
   // notice dont le fichier refuse sans dire pourquoi serait le faux silencieux
   // qu'on corrige partout ailleurs : le lecteur conclurait à une panne.
-  it('⚠ visiteur ANONYME : 27 clés, dans CET ordre', async () => {
+  // ⚠ PUIS DE 27 À 28 le même jour : `provenance` (P7-3). Ajout DÉLIBÉRÉ et
+  // additif lui aussi, et placé EN DERNIER pour qu'un filet qui compare des
+  // octets lise un ajout et non une permutation.
+  //
+  // Elle est servie au visiteur ANONYME comme au membre : la décision 1 du
+  // brief P7 dit que ce qui arrive par moissonnage reste marqué comme tel, et
+  // cela ne dépend pas de qui regarde. C'est même l'anonyme qu'on renvoie vers
+  // l'école d'origine, puisque le fichier n'est pas ici.
+  it('⚠ visiteur ANONYME : 28 clés, dans CET ordre', async () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);
@@ -216,5 +233,42 @@ describe('contrat public — une colonne ne s’y glisse plus toute seule', () =
     // Ce qu'on ne lit pas ne peut pas fuir : le select ne demande que le format.
     const select = selectNoticePublique() as unknown as Record<string, { select?: unknown }>;
     expect(select.digitalCopy.select).toEqual({ fileFormat: true });
+  });
+});
+
+describe('⚠ P7-3 : la notice DIT d’où elle vient, et dans les DEUX branches', () => {
+  const PROVENANCE = {
+    source: { id: 's1', name: 'Dépôt de l’Université d’Exemple' },
+    oaiIdentifier: 'oai:autre-ecole:xyz',
+    lien: 'https://depot.exemple.bf/handle/1',
+  };
+
+  /**
+   * ⚠ CES DEUX TESTS ONT ÉTÉ AJOUTÉS APRÈS UN CONTRÔLE NÉGATIF QUI NE TOMBAIT
+   * PAS. Remplacer la provenance par `null` en dur ne cassait RIEN : le contrat
+   * vérifie les CLÉS, jamais les valeurs, et aucun autre test ne regardait
+   * celle-ci. Quatrième lecture — on ne regarde pas assez large. Le remède est
+   * d'ajouter une assertion, pas de corriger un test.
+   */
+  it('un MEMBRE reçoit la provenance complète', async () => {
+    const { db, service: s } = service(PROVENANCE);
+    const r = await s.recordDetail(db, 'rec-1', true);
+    expect(r.provenance).toEqual(PROVENANCE);
+  });
+
+  it('⚠ un visiteur ANONYME la reçoit AUSSI — c’est lui qu’on renvoie vers l’origine', async () => {
+    // La décision 1 du brief ne dépend pas de qui regarde, et le fichier n'est
+    // pas ici : masquer la provenance à l'anonyme lui retirerait le seul chemin
+    // vers le document.
+    const { db, service: s } = service(PROVENANCE);
+    const r = await s.recordDetail(db, 'rec-1', false);
+    expect(r.provenance).toEqual(PROVENANCE);
+  });
+
+  it('une notice catalloguée localement rend `null`', async () => {
+    // Témoin d'absence : sans lui, une provenance inventée pour tout le monde
+    // serait indiscernable d'une provenance juste.
+    const { db, service: s } = service(null);
+    expect((await s.recordDetail(db, 'rec-1', true)).provenance).toBeNull();
   });
 });

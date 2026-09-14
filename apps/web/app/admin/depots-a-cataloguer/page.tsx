@@ -25,14 +25,6 @@ import { Alert, Badge, Button, Card, Input } from '@/components/ui';
 
 const T = LIBELLES.aCataloguer;
 
-const TYPES: Record<string, string> = {
-  memoire: 'Mémoire',
-  these: 'Thèse',
-  licence: 'Mémoire de licence',
-  master: 'Mémoire de master',
-  these_unique: 'Thèse unique',
-};
-
 interface Depot {
   id: string;
   title: string;
@@ -171,7 +163,7 @@ export default function DepotsACataloguerPage() {
                 <p className="font-medium text-ink">{d.title}</p>
                 <p className="mt-0.5 text-sm text-muted">
                   {d.authorName}
-                  {d.year ? ` · ${d.year}` : ''} · {TYPES[d.documentType] ?? d.documentType}
+                  {d.year ? ` · ${d.year}` : ''} · {LIBELLES.typesDeDepot[d.documentType] ?? d.documentType}
                 </p>
               </div>
               {d.decidedAt && <Badge>{T.valideLe(dateFr(d.decidedAt))}</Badge>}

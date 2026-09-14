@@ -137,12 +137,48 @@ describe.runIf(RUN)('offline-licensing e2e (tenant_zinda réel, sans mock)', () 
     const tenant = await pub.tenant.findUnique({ where: { slug: 'zinda' } });
     fx.tenantId = tenant!.id;
 
-    // Étudiant réel (L1_DROIT, ACTIVE) — jeton signé avec le vrai JWT_SECRET.
+    // ═══════════════════════════════════════════════════════════════════════
+    // ⚠ EXCEPTION ÉCRITE À L'INTERDIT « JAMAIS DE SESSION FABRIQUÉE »
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // `CLAUDE.md` interdit de signer un JWT avec un secret lu dans
+    // l'environnement — « même en développement, même pour une vérification
+    // ponctuelle ». Cette ligne date du 29 juillet 2026, la règle du
+    // 7 septembre : ce n'est pas une désobéissance, c'est une pratique qui a
+    // SURVÉCU à la règle qui l'interdit, et que personne n'a vue en reprenant
+    // le fichier.
+    //
+    // Jean a tranché le 13 septembre 2026 : une exception NOMMÉE, jamais un
+    // raisonnement par analogie — « la règle ne vise que les navigateurs »
+    // s'étendrait au cas suivant, une exception nommée ne s'étend pas.
+    //
+    // ⚠ SES TROIS CONDITIONS, ET ELLES SONT VÉRIFIABLES ICI :
+    //
+    // 1. LE JETON NE QUITTE JAMAIS CE PROCESSUS. Il vit dans une variable
+    //    locale, part dans un en-tête HTTP vers le harnais, et meurt avec la
+    //    suite. Aucun fichier, aucune variable d'environnement, aucun profil de
+    //    navigateur — c'est le mode de panne qui a motivé l'interdit : un jeton
+    //    retrouvé deux jours plus tard dans un profil que personne ne nettoie.
+    //
+    // 2. IL EXPIRE EN MINUTES. Cinq, ci-dessous — la suite dure trois
+    //    secondes. Il était à UNE HEURE, ce qui n'avait aucune raison d'être.
+    //
+    // 3. POURQUOI ON NE PEUT PAS FAIRE AUTREMENT, ET QUAND ÇA TOMBERA. Le
+    //    chemin normal — inscription, activation, lien de définition de mot de
+    //    passe — n'est pas automatisable sans lire un courriel, et cet e2e doit
+    //    parler à l'API en HTTP RÉEL pour éprouver le middleware `X-Tenant` et
+    //    le contrôle d'accès. Le jour où un chemin d'obtention programmatique
+    //    existera (un jeton de service à durée courte, ou un mode de test
+    //    déclaré), CETTE EXCEPTION TOMBE — elle n'est pas un droit acquis.
+    //
+    // ⚠ Et ce qu'elle ne couvre pas : rien d'autre. Un balayage du dépôt le
+    // 13 septembre 2026 n'a trouvé qu'ICI un `jwt.sign` sur un secret
+    // d'environnement. Une seconde occurrence serait à discuter, pas à copier.
     const student = await zdb.user.findFirst({ where: { email: 'awa@exemple.bf' } });
     studentToken = jwt.sign(
       { sub: student!.id, email: student!.email, role: 'STUDENT', tenant: 'zinda' },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1h' },
+      { expiresIn: '5m' },
     );
 
     s3 = new S3Client({

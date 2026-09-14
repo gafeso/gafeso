@@ -8,6 +8,7 @@ import { getToken, getUser, SessionUser } from '@/lib/session';
 import { roleLabel } from '@/lib/roles';
 import { Alert, Button, Card, Input } from '@/components/ui';
 import { Header } from '@/components/header';
+import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 import { TwoFactorSetup } from '@/components/two-factor-setup';
 
 interface TwoFactorStatus {
@@ -139,8 +140,16 @@ export default function ProfilePage() {
 
   return (
     <>
+      {/*
+        ⚠ LIEN D'ÉVITEMENT AJOUTÉ LE 13 SEPTEMBRE 2026. Cet écran porte son
+        propre en-tête — donc sa propre navigation — et n'en avait aucun :
+        un usager au clavier traversait tout le menu à chaque visite.
+        Le garde nommé « lien-evitement-partout » ne le voyait pas, sa liste
+        de fichiers étant écrite à la main.
+      */}
+      <LienDEvitement />
       <Header />
-      <main className="mx-auto max-w-2xl px-6 py-8">
+      <main id={ID_CONTENU} className="mx-auto max-w-2xl px-6 py-8">
         <h1 className="font-serif text-3xl font-bold">Mon compte</h1>
         <p className="mt-1 text-sm text-muted">
           Vos informations, votre mot de passe et la sécurité de votre compte.

@@ -292,10 +292,59 @@ describe('Invariants de PAGE, sur les écrans qui portent leur propre en-tête',
    * muté. Le remède n'est ni de corriger le test ni d'élargir les assertions :
    * c'est de rendre le jeu d'essai RÉEL.
    */
-  const PERSONNELLES = [...ADMIN, 'depot.deposer', 'encadrements.voir'];
+  // ⚠ `depot.valider` AJOUTÉE le 13 septembre : sans elle, `/depots-a-valider`
+  // rendait sa branche de REFUS et les invariants mesuraient une page vide.
+  const PERSONNELLES = [...ADMIN, 'depot.deposer', 'encadrements.voir', 'depot.valider'];
   const REPONSES_PERSONNELLES = {
     ...REPONSES,
-    '/depots/mes-depots': [],
+    /**
+   * ⚠ AJOUTÉES LE 13 SEPTEMBRE 2026, ET C'EST LA MÊME FAUTE QUE L'APRÈS-MIDI.
+   *
+   * Les trois écrans de dépôt étaient dans la table des adresses, donc balayés
+   * par les invariants — et SANS DONNÉES. Ils rendaient leur état de chargement :
+   * un titre, une phrase, zéro carte, zéro bouton. « Tout élément interactif a
+   * un nom » passait en ne mesurant AUCUN élément.
+   *
+   * Trouvé cette fois en posant la question — « sur quelle branche le test
+   * s'exécute-t-il ? » — et non par un contrôle négatif. C'est la leçon du
+   * jeu d'essai qui n'atteint pas le code mesuré, prise par le bon bout.
+   */
+  '/depots/soumis': [
+    {
+      id: 'ds1',
+      title: 'Contentieux foncier et médiation coutumière',
+      authorName: 'Traoré, Awa',
+      documentType: 'these',
+      submittedAt: '2026-06-10T00:00:00.000Z',
+      directorId: 'u-zongo',
+      directeur: 'Pauline Zongo',
+      joursDepuisSoumission: 94,
+    },
+  ],
+  '/depots/a-cataloguer': [
+    {
+      id: 'dc1',
+      title: 'Le régime foncier coutumier en zone périurbaine',
+      authorName: 'Ouédraogo, Salif',
+      documentType: 'memoire',
+      year: 2026,
+      fileName: 'memoire.pdf',
+      decidedAt: '2026-09-12T00:00:00.000Z',
+    },
+  ],
+  '/depots/a-valider': [
+    {
+      id: 'dv1',
+      status: 'soumis',
+      title: 'Théâtre populaire et transmission orale',
+      authorName: 'Sirima, Salif',
+      documentType: 'memoire',
+      year: 2025,
+      fileName: 'memoire.pdf',
+      submittedAt: '2026-09-01T00:00:00.000Z',
+    },
+  ],
+  '/depots/mes-depots': [],
     '/encadrements/miens': {
       ficheLiee: true,
       nomDeLaFiche: 'Zongo, Pauline',
@@ -343,5 +392,37 @@ describe('Invariants de PAGE, sur les écrans qui portent leur propre en-tête',
     const focalisables = [...document.querySelectorAll('a[href], button, input, select, textarea')]
       .filter((e) => Number(e.getAttribute('tabindex') ?? 0) >= 0);
     expect(nomAccessible(focalisables[0])).toBe(LIBELLES.accessibilite.allerAuContenu);
+  });
+
+  /**
+   * ⚠ AJOUTÉS LE 13 SEPTEMBRE 2026. Ces deux invariants étaient dans le bloc de
+   * la COQUE, et n'ont jamais rien mesuré sur les écrans personnels.
+   *
+   * Or aucun des deux n'est une propriété de la coque : un bouton sans nom
+   * accessible est un défaut partout, et une barre de navigation anonyme aussi
+   * — l'en-tête que ces écrans portent EUX-MÊMES en contient.
+   *
+   * Trouvé en posant la question « sur quelle branche le test s'exécute-t-il ? »
+   * puis, comme la réponse ne suffisait pas, par un contrôle négatif qui N'A PAS
+   * tombé : un bouton rendu sans nom sur `/depots-a-valider` laissait la suite
+   * verte. Le diagnostic n'était pas « l'écran ne rend rien » mais « aucun test
+   * ne regarde ici ».
+   */
+  it.each(ADRESSES_HORS_COQUE)('%s — tout élément interactif a un nom', async (adresse) => {
+    monterSeul(adresse);
+    await repos();
+    const anonymes = [...document.querySelectorAll('a[href], button')]
+      .filter((e) => nomAccessible(e) === '')
+      .map((e) => `${e.tagName.toLowerCase()} « ${e.outerHTML.slice(0, 60)} »`);
+    expect(anonymes).toEqual([]);
+  });
+
+  it.each(ADRESSES_HORS_COQUE)('%s — chaque barre de navigation porte un nom distinct', async (adresse) => {
+    monterSeul(adresse);
+    await repos();
+    const barres = [...document.querySelectorAll('nav')];
+    const noms = barres.map((b) => b.getAttribute('aria-label') ?? '');
+    expect(noms.filter((n) => n === '')).toEqual([]);
+    expect(new Set(noms).size).toBe(noms.length);
   });
 });

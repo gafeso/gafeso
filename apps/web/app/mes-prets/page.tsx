@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
 import { Header } from '@/components/header';
+import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 interface CurrentLoan {
   checkoutId: string;
@@ -123,8 +124,16 @@ export default function MyLoansPage() {
 
   return (
     <>
+      {/*
+        ⚠ LIEN D'ÉVITEMENT AJOUTÉ LE 13 SEPTEMBRE 2026. Cet écran porte son
+        propre en-tête — donc sa propre navigation — et n'en avait aucun :
+        un usager au clavier traversait tout le menu à chaque visite.
+        Le garde nommé « lien-evitement-partout » ne le voyait pas, sa liste
+        de fichiers étant écrite à la main.
+      */}
+      <LienDEvitement />
       <Header />
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="font-serif text-3xl font-bold">Mes prêts</h1>
         <p className="mt-1 text-sm text-muted">
           Vos emprunts en cours et votre historique.

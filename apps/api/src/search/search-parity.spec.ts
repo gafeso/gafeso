@@ -132,6 +132,24 @@ async function waitReady(engine: SearchEngine, expected: number): Promise<boolea
   return false;
 }
 
+/**
+ * ⚠ CE QUE CE FICHIER A TU PENDANT DES SEMAINES, et qui a été trouvé le
+ * 13 septembre 2026 en balayant les gestes antérieurs à nos règles.
+ *
+ * Ses six cas commençaient par `if (!ready) return`. Elasticsearch vit dans un
+ * PROFIL Docker dédié (`--profile elasticsearch`), donc il n'est presque jamais
+ * démarré : ses six cas sortaient en SILENCE, et la suite annonçait douze
+ * réussites. **La parité entre les deux moteurs n'avait jamais été mesurée du
+ * côté Elasticsearch** — alors que prouver leur accord est la seule raison
+ * d'être de ce fichier.
+ *
+ * Depuis, l'attente est une ASSERTION : un test qui ne peut pas mesurer est
+ * ROUGE. Poser `SEARCH_PARITY=1` sans démarrer les deux moteurs échoue
+ * désormais, et c'est l'information qu'on veut — pas six lignes vertes.
+ *
+ *   docker compose --env-file .env -f docker/docker-compose.yml \
+ *     --profile elasticsearch up -d elasticsearch
+ */
 describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
   'Parité moteur : $name',
   ({ make }) => {
@@ -159,7 +177,15 @@ describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
     const ids = (hits: RecordSearchDoc[]) => hits.map((h) => h.id).sort();
 
     it('recherche par titre (dans=titre) : ISBN et résumé EXCLUS', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       // « droit » restreint au titre → r1 et r3 (titre), jamais r2 (droit dans le résumé).
       const res = await engine.search(SLUG, {
         q: 'droit',
@@ -171,13 +197,29 @@ describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
     });
 
     it('recherche par auteur (mode global)', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       const res = await engine.search(SLUG, { q: 'Sankara', page: 1, hitsPerPage: 20 });
       expect(res.hits.map((h) => h.id)).toContain('r3');
     });
 
     it('ISBN exclu du mode Titre, trouvable en mode global', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       const inTitle = await engine.search(SLUG, {
         q: 'ZZUNIQUEISBN999',
         page: 1,
@@ -190,14 +232,30 @@ describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
     });
 
     it('facettes avec compteurs corrects', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       const res = await engine.search(SLUG, { q: '', page: 1, hitsPerPage: 0, facets: ['category'] });
       expect(res.facetDistribution.category).toEqual({ droit: 2, medecine: 1 });
       expect(res.totalHits).toBe(3);
     });
 
     it('accents : « ouedraogo » trouve « Ouédraogo », « aicha » trouve « Aïcha »', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       const r1 = await engine.search(SLUG, { q: 'ouedraogo', page: 1, hitsPerPage: 20 });
       expect(r1.hits.map((h) => h.id)).toContain('r2');
       const r2 = await engine.search(SLUG, { q: 'aicha', page: 1, hitsPerPage: 20 });
@@ -205,7 +263,15 @@ describe.runIf(process.env.SEARCH_PARITY === '1').each(ENGINES)(
     });
 
     it('tolérance aux fautes : « constitutionel » (titre) trouve la notice', async () => {
-      if (!ready) return;
+      // ⚠ UNE ASSERTION, PAS UN `return`. La forme `if (!ready) return` rend
+      // VERT un test qui n'a rien exercé : si l'indexation ne se stabilise pas,
+      // les six cas de cette parité sortaient en silence et la suite annonçait
+      // six réussites. C'est la leçon du 11 septembre 2026, écrite pour le
+      // plafond Meilisearch — et ce fichier, repris le 12, la portait encore.
+      //
+      // Un test qui ne PEUT pas mesurer doit être ROUGE : l'infrastructure
+      // absente est une information, pas une dispense.
+      expect(ready, 'indexation non stabilisée : ce test ne mesure rien').toBe(true);
       // On vérifie la PRÉSENCE, pas le classement (Meili et ES ne classent pas
       // identiquement une correction de faute — voir docs/search-engines.md).
       const res = await engine.search(SLUG, {

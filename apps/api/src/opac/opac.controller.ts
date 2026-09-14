@@ -1,8 +1,20 @@
-import { BadRequestException, Controller, Get, Header, Headers, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Header,
+  Headers,
+  NotFoundException,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
+import { analyserIdentifiant } from './identifiant-perenne';
+import { ProvenanceService } from '../moissonnage/provenance.service';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
@@ -34,6 +46,7 @@ export class OpacController {
     private readonly accessControl: AccessControlService,
     private readonly authz: AuthzService,
     private readonly authors: AuthorsService,
+    private readonly provenance: ProvenanceService,
   ) {}
 
   private requireTenant(tenant: ResolvedTenant | null): ResolvedTenant {
@@ -172,6 +185,105 @@ export class OpacController {
   ) {
     const resolved = this.requireTenant(tenant);
     return this.authors.getAuthor(this.prisma.forTenant(resolved.slug), id);
+  }
+
+  /**
+   * LA PROVENANCE D'UNE PAGE DE RÉSULTATS, EN UNE REQUÊTE — P7-3.
+   *
+   * ⚠ EN LOT, ET C'EST LA RAISON DE SA FORME. Un écran de résultats porte vingt
+   * notices ; une requête par notice ferait vingt appels pour afficher une
+   * page. L'écran envoie les identifiants qu'il vient de recevoir, et reçoit
+   * seulement ceux qui viennent d'ailleurs.
+   *
+   * ⚠ LES NOTICES LOCALES SONT ABSENTES DU RÉSULTAT, et leur absence EST la
+   * réponse. Rendre « provenance: null » pour chacune ferait porter à l'écran
+   * une liste de « rien à dire » aussi longue que ses résultats.
+   *
+   * ⚠ PUBLIQUE, comme les notices qu'elle décrit : dire qu'une notice vient
+   * d'une autre école n'apprend rien de plus que la notice elle-même, et c'est
+   * au visiteur anonyme qu'elle sert le plus — c'est lui qu'on renvoie vers
+   * l'origine, puisque le fichier n'est pas ici.
+   */
+  @Get('provenances')
+  @ApiOperation({
+    summary: 'D’où viennent ces notices — celles qui ont été moissonnées',
+    description:
+      'Décision 1 du brief P7 : ce qui arrive par moissonnage reste marqué ' +
+      'comme tel. Chaque entrée porte l’école d’origine, l’identifiant de la ' +
+      'notice CHEZ ELLE, et le lien public quand la source en publie un. ' +
+      '⚠ `lien: null` quand elle n’en publie pas — on ne fabrique pas une ' +
+      'adresse : un lien mort affiché est pire qu’un lien absent.',
+  })
+  async provenances(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query('ids') ids?: string,
+  ) {
+    const resolved = this.requireTenant(tenant);
+    const liste = (ids ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      // ⚠ BORNE DÉCLARÉE : une page de résultats en porte vingt, cent est déjà
+      // large. Sans borne, un `ids=` de dix mille entrées ferait une requête
+      // `IN` que personne n'a voulue — sur une route publique et sans session.
+      .slice(0, 100);
+    return this.provenance.provenances(this.prisma.forTenant(resolved.slug), liste);
+  }
+
+  /**
+   * RÉSOUT UN IDENTIFIANT PÉRENNE VERS SA NOTICE — P7-2.
+   *
+   * ⚠ ELLE EST DÉCLARÉE AVANT `records/:id` PARCE QUE NEST APPARIE DANS
+   * L'ORDRE. Placée après, `resoudre/:identifiant` serait mangée par… rien,
+   * en réalité — les deux chemins ont deux segments et ne se recouvrent pas.
+   * Mais l'ordre reste celui qu'on lit, et une route littérale avant une route
+   * à paramètre est la seule disposition qui ne demande pas de vérifier.
+   *
+   * ⚠ TROIS REFUS DISTINCTS, et ils ne se disent pas pareil :
+   *  · la forme est mauvaise → on dit laquelle est attendue ;
+   *  · l'identifiant désigne une AUTRE école → « introuvable ici », jamais
+   *    « existe ailleurs » : ce serait dire à un inconnu ce que porte le
+   *    catalogue d'un tiers ;
+   *  · la notice n'existe pas → 404, et c'est `recordDetail` qui le rend.
+   */
+  @Get('resoudre/:identifiant')
+  @ApiOperation({
+    summary: 'Résoudre un identifiant pérenne (`oai:<école>:<uuid>`) vers sa notice',
+    description:
+      'L’identifiant ne porte AUCUN domaine : il survit à un déménagement de ' +
+      'serveur, là où l’URL qui mène ici, elle, est une localisation — donc ' +
+      'périssable par nature. C’est la distinction qui empêche un catalogue de ' +
+      'perdre la moitié de ses liens après une migration. ' +
+      '⚠ Elle rend la NOTICE, jamais le fichier : l’accès au document reste ' +
+      '`/opac/records/:id/read`, qui passe par le contrôle d’accès et par ' +
+      'l’embargo. Une URL résolvable dans les métadonnées n’ouvre donc rien.',
+  })
+  async resoudre(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Param('identifiant') identifiant: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('cookie') cookie?: string,
+  ) {
+    const resolved = this.requireTenant(tenant);
+    const analyse = analyserIdentifiant(identifiant);
+    if (!analyse) {
+      throw new NotFoundException(
+        `Identifiant « ${identifiant} » illisible : attendu la forme oai:<école>:<identifiant>.`,
+      );
+    }
+    if (analyse.slug !== resolved.slug) {
+      // ⚠ « INTROUVABLE ICI », ET SURTOUT PAS « IL EXISTE AILLEURS ». Le second
+      // dirait à n'importe qui ce que porte le catalogue d'un autre
+      // établissement — sur une route publique, sans session.
+      throw new NotFoundException(
+        `Aucune notice sous cet identifiant dans ce catalogue.`,
+      );
+    }
+    return this.opac.recordDetail(
+      this.prisma.forTenant(resolved.slug),
+      analyse.id,
+      this.isMember(resolved.slug, authorization, cookie),
+    );
   }
 
   @Get('records/:id')

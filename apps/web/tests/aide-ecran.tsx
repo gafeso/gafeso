@@ -58,6 +58,9 @@ import PageMonDepot from '@/app/mon-depot/page';
 import PageMesEncadrements from '@/app/mes-encadrements/page';
 import PageDepotsAValider from '@/app/depots-a-valider/page';
 import PageDepotsACataloguer from '@/app/admin/depots-a-cataloguer/page';
+import PageDepotsSoumis from '@/app/admin/depots-soumis/page';
+import PageMoissonnage from '@/app/admin/moissonnage/page';
+import PageMoissonnageDetail from '@/app/admin/moissonnage/[id]/page';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
 import { ouvrirSession } from './aide-session';
 import { poserAdresse } from './aide-navigation';
@@ -134,7 +137,20 @@ export const ECRANS = {
     fichier: 'app/mes-encadrements/page.tsx',
     horsCoque: true,
   },
-  // Dans la coque, lui : c'est un écran du PERSONNEL.
+  // Dans la coque : écrans du PERSONNEL.
+  '/admin/moissonnage': {
+    composant: PageMoissonnage,
+    fichier: 'app/admin/moissonnage/page.tsx',
+  },
+  '/admin/moissonnage/[id]': {
+    composant: PageMoissonnageDetail,
+    fichier: 'app/admin/moissonnage/[id]/page.tsx',
+    params: { id: 's1' },
+  },
+  '/admin/depots-soumis': {
+    composant: PageDepotsSoumis,
+    fichier: 'app/admin/depots-soumis/page.tsx',
+  },
   '/admin/depots-a-cataloguer': {
     composant: PageDepotsACataloguer,
     fichier: 'app/admin/depots-a-cataloguer/page.tsx',

@@ -90,6 +90,21 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
   // Domaines : cet écran ajoute une PORTE à une fonction que ses détenteurs ont
   // déjà, il n'en donne à personne de nouvelle. C'est le dernier maillon du
   // circuit de dépôt — sans lui, un dépôt validé n'entre jamais au catalogue.
+  // Aucun élargissement : `catalogue.gerer` ouvre déjà Notices, Auteurs,
+  // Domaines et « Dépôts à cataloguer ». Une porte de plus sur une fonction que
+  // ses détenteurs ont déjà.
+  // Aucun élargissement : `outils.catalogue` ouvre déjà l'import de notices et
+  // le récolement. Une porte de plus sur une fonction déjà détenue.
+  '/admin/moissonnage': {
+    actuelle: ['outils.catalogue'],
+    cible: 'outils.catalogue',
+    nature: 'inchangee',
+  },
+  '/admin/depots-soumis': {
+    actuelle: ['catalogue.gerer'],
+    cible: 'catalogue.gerer',
+    nature: 'inchangee',
+  },
   '/admin/depots-a-cataloguer': {
     actuelle: ['catalogue.gerer'],
     cible: 'catalogue.gerer',

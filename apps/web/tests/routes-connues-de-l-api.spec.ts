@@ -77,14 +77,14 @@ const EXCEPTIONS: Exception[] = [
  * `PATCH /depots/:id/directeur` par la désignation du directeur — le compte a
  * fait son travail dès son premier lot, et deux fois le jour même.
  */
-const NOMBRE_D_APPELS = 131;
+const NOMBRE_D_APPELS = 138;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
  * l'écart de six qui existait au premier jet a désigné deux angles morts de
  * l'extracteur, pas six appels légitimes.
  */
-const NOMBRE_D_ECRITURES = 76;
+const NOMBRE_D_ECRITURES = 81;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {

@@ -150,7 +150,7 @@ describe('AdminService — provisioning', () => {
     ({ service, prisma, tx } = makeService());
   });
 
-  it('crée le tenant puis exécute la DDL du schéma (schéma + 23 tables + 20 FK)', async () => {
+  it('crée le tenant puis exécute la DDL du schéma (schéma + 26 tables + 22 FK)', async () => {
     const result = await service.provisionTenant({
       name: 'Lycée Zinda',
       slug: 'zinda',
@@ -164,7 +164,7 @@ describe('AdminService — provisioning', () => {
     expect(createArg.data.settings).toEqual({ create: {} });
     expect(createArg.data.domains.create.domain).toBe('zinda.gafeso.bf');
 
-    // 1 SCHEMA + 6 TYPE + 23 TABLE + 6 reciblages enum + 20 FK = 56 instructions DDL
+    // 1 SCHEMA + 6 TYPE + 26 TABLE + 6 reciblages enum + 22 FK = 61 instructions DDL
     //
     // ⚠ PASSÉ DE 55 À 56 LE 12 SEPTEMBRE 2026 : `deposits` (P6-2) entre dans
     // TENANT_TABLES. Ce compte n'est pas décoratif — il a fait tomber la suite
@@ -173,7 +173,14 @@ describe('AdminService — provisioning', () => {
     //
     // ⚠ `deposits` N'AJOUTE AUCUNE CLÉ ÉTRANGÈRE (20 inchangé) : les tables
     // tenant n'en portent pas, `LIKE ... INCLUDING ALL` ne les copiant jamais.
-    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(56);
+    //
+    // ⚠ PUIS DE 56 À 61, le même jour : les trois tables du moissonnage
+    // (P7-1) et leurs DEUX clés étrangères. Le compte a de nouveau fait son
+    // office — il a obligé à constater que `LIKE ... INCLUDING ALL` NE COPIE
+    // PAS les clés étrangères, donc qu'une école neuve aurait reçu des tables
+    // sans contrainte là où les écoles existantes en ont, sans que rien ne le
+    // dise. Les deux entrées manquaient dans `TENANT_FOREIGN_KEYS`.
+    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(61);
     const first = tx.$executeRawUnsafe.mock.calls[0][0];
     expect(first).toBe('CREATE SCHEMA "tenant_zinda"');
 

@@ -313,6 +313,9 @@ describe('⚠ L’ANCIENNETÉ : « il y a 94 jours », jamais une date à soustr
   function db(depots: Record<string, unknown>[]) {
     return {
       deposit: { findMany: vi.fn(async () => depots) },
+      // ⚠ `user.findMany` sert DEUX appels : les noms des directeurs désignés,
+      // et les candidats désignables. La doublure rend la même ligne aux deux —
+      // ce qui suffit ici, où l'on mesure l'ancienneté et le tri.
       user: { findMany: vi.fn(async () => [{ id: 'dir', firstName: 'Awa', lastName: 'Traoré' }]) },
     } as never;
   }
@@ -327,7 +330,7 @@ describe('⚠ L’ANCIENNETÉ : « il y a 94 jours », jamais une date à soustr
     const base = db([
       { id: 'd1', title: 'T', submittedAt: new Date('2026-06-10T08:00:00Z'), directorId: 'dir' },
     ]);
-    const [ligne] = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
+    const { depots: [ligne] } = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
     expect(ligne.joursDepuisSoumission).toBe(94);
     // Et le NOM du directeur, pas son identifiant : une liste d'UUID ne se lit pas.
     expect(ligne.directeur).toBe('Awa Traoré');
@@ -337,7 +340,7 @@ describe('⚠ L’ANCIENNETÉ : « il y a 94 jours », jamais une date à soustr
     // Cas réel depuis que le retrait efface `submittedAt` : un dépôt resoumis
     // sans date ne doit pas se présenter comme le plus récent de la liste.
     const base = db([{ id: 'd2', title: 'T', submittedAt: null, directorId: null }]);
-    const [ligne] = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
+    const { depots: [ligne] } = await svc().soumis(base, new Date('2026-09-12T08:00:00Z'));
     expect(ligne.joursDepuisSoumission).toBeNull();
     expect(ligne.directeur).toBeNull();
   });
@@ -349,5 +352,84 @@ describe('⚠ L’ANCIENNETÉ : « il y a 94 jours », jamais une date à soustr
       .findMany.mock.calls[0][0];
     expect(appel.where).toEqual({ status: 'soumis' });
     expect(appel.orderBy[0]).toEqual({ submittedAt: 'asc' });
+  });
+});
+
+describe('⚠ LA LISTE PORTE ELLE-MÊME SES DIRECTEURS DÉSIGNABLES', () => {
+  /**
+   * ⚠ TROISIÈME OCCURRENCE EN DEUX JOURS DE « une route sans chemin vers son
+   * argument », et celle-ci était dans MA correction de la deuxième.
+   *
+   * `POST :id/reattribuer` prend DEUX arguments : le dépôt, et le nouveau
+   * directeur. `GET /depots/soumis` donnait le premier — le second vivait
+   * derrière `GET /depots/directeurs`, sous `depot.deposer`, que le
+   * bibliothécaire n'a pas.
+   *
+   * ⚠ ÉLARGIR `depot.deposer` AURAIT ÉTÉ LA MAUVAISE RÉPONSE : cette fonction
+   * donne le droit de DÉPOSER. On aurait accordé un droit d'ÉCRITURE pour
+   * résoudre un problème de LECTURE, à quelqu'un dont ce n'est pas le métier.
+   */
+  function base(candidats: Record<string, unknown>[]) {
+    const user = {
+      findMany: vi.fn(async ({ where }: { where?: unknown }) =>
+        // ⚠ La doublure DISTINGUE les deux appels : celui qui cherche les noms
+        // des directeurs désignés passe un `where` sur `id`, celui des
+        // candidats passe le `OR` du module `directeurs`. Sans cette
+        // distinction, le test passerait quelle que soit la requête émise.
+        where && 'id' in (where as object) ? [] : candidats,
+      ),
+    };
+    return { db: { deposit: { findMany: vi.fn(async () => []) }, user } as never, user };
+  }
+
+  const CANDIDAT = {
+    id: 'u1',
+    firstName: 'Awa',
+    lastName: 'Traoré',
+    status: 'ACTIVE',
+    role: UserRole.ADMIN,
+    roleId: null,
+    customRole: null,
+  };
+
+  const svc = () =>
+    new DepotsService(
+      { sendDepositSubmitted: vi.fn() } as never,
+      { putObject: vi.fn() } as never,
+      { ingestPdf: vi.fn() } as never,
+    );
+
+  it('la réponse porte les directeurs, à côté des dépôts', async () => {
+    const { db } = base([CANDIDAT]);
+    const r = await svc().soumis(db, new Date());
+    expect(r.depots).toEqual([]);
+    // ⚠ Le NOM et l'identifiant, rien d'autre : ce n'est pas un annuaire.
+    expect(r.directeurs).toEqual([{ id: 'u1', nom: 'Awa Traoré' }]);
+  });
+
+  it('⚠ et elle emploie le MÊME filtre que `GET /depots/directeurs`', async () => {
+    // Deux listes de directeurs qui divergeraient finiraient par proposer ici
+    // quelqu'un que la réattribution refuse ensuite — « un bouton qui mène à un
+    // mur », le défaut qu'on vient de payer trois fois.
+    const { db, user } = base([CANDIDAT]);
+    const parDeuxChemins = await Promise.all([
+      svc().soumis(db, new Date()),
+      svc().directeursDesignables(db),
+    ]);
+    expect(parDeuxChemins[0].directeurs).toEqual(parDeuxChemins[1]);
+    // Le `where` des deux appels de candidats est le même objet de critères.
+    const appels = user.findMany.mock.calls
+      .map((c) => c[0]?.where as Record<string, unknown> | undefined)
+      .filter((w): w is Record<string, unknown> => !!w && !('id' in w));
+    expect(appels.length).toBe(2);
+    expect(appels[0]).toEqual(appels[1]);
+  });
+
+  it('⚠ un compte qui ne peut PAS diriger n’est pas proposé', async () => {
+    // Témoin d'absence : sans lui, une liste qui rend tout le monde serait
+    // indiscernable d'une liste juste — et plus rassurante, puisqu'elle ne
+    // serait jamais vide.
+    const { db } = base([{ ...CANDIDAT, status: 'SUSPENDED' }]);
+    expect((await svc().soumis(db, new Date())).directeurs).toEqual([]);
   });
 });

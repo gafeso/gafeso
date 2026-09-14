@@ -26,7 +26,15 @@ import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 const T = LIBELLES.mesEncadrements;
 
-/** Le vocabulaire fermé de `recordType`, dans les mots du lecteur. */
+/**
+ * Le vocabulaire fermé de `recordType`, dans les mots du lecteur.
+ *
+ * ⚠ IL NE SE CONFOND PAS AVEC `LIBELLES.typesDeDepot`, et cet écran est le seul
+ * à porter la différence. `Deposit.documentType` porte cinq valeurs — le
+ * vocabulaire académique du dépôt. `BiblioRecord.recordType` en porte d'autres,
+ * dont `ouvrage`, parce qu'il décrit TOUT le catalogue. Les fondre ferait
+ * apparaître « Ouvrage » dans un menu de dépôt de thèse.
+ */
 const TYPES: Record<string, string> = {
   memoire: 'Mémoire',
   these: 'Thèse',

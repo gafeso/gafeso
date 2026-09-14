@@ -217,8 +217,8 @@ describe('Dépôts à valider · ce que les textes DOIVENT dire', () => {
   it('⚠ la validation dit que la notice reste À CRÉER', () => {
     // Sa propriété, pas sa valeur. « Dépôt validé. » serait exact et ferait
     // croire le document mis au catalogue — l'API ne crée aucune notice ici.
-    expect(LIBELLES.depotsAValider.validerSuite).toMatch(/notice/i);
-    expect(LIBELLES.depotsAValider.validerSuite).toMatch(/reste à créer|pas fait automatiquement/i);
+    expect(T.validerSuite).toMatch(/notice/i);
+    expect(T.validerSuite).toMatch(/reste à créer|pas fait automatiquement/i);
   });
 
   it('⚠ l’échec de courriel DIT la sortie, pas seulement la panne', () => {
@@ -232,18 +232,18 @@ describe('Dépôts à valider · ce que les textes DOIVENT dire', () => {
   it('⚠ le refus dit que RIEN n’est supprimé, et que le motif sera LU', () => {
     // « Refus envoyé. » laisserait croire qu'on vient de faire disparaître un
     // travail, ou que le motif reste entre le directeur et la bibliothèque.
-    expect(LIBELLES.depotsAValider.refuseSuite).toMatch(/conservés?/i);
-    expect(LIBELLES.depotsAValider.refuseSuite).toMatch(/motif/i);
+    expect(T.refuseSuite).toMatch(/conservés?/i);
+    expect(T.refuseSuite).toMatch(/motif/i);
     // ⚠ Il ne dit PLUS « l'étudiant voit votre motif » : c'est le sort du
     // courriel, désormais rendu par l'API, qui décide de ce qu'il sait.
-    expect(LIBELLES.depotsAValider.refuseSuite).not.toMatch(/l’étudiant voit/i);
+    expect(T.refuseSuite).not.toMatch(/l’étudiant voit/i);
   });
 
   it('⚠ l’aide du motif prévient qu’il sera lu, AVANT qu’on l’écrive', () => {
     // C'est la seule occasion : une fois envoyé, il est à l'écran de quelqu'un
     // d'autre et rien ne permet de le reprendre.
-    expect(LIBELLES.depotsAValider.motifAide).toMatch(/lu par l’étudiant|étudiant/i);
-    expect(LIBELLES.depotsAValider.motifAide).toMatch(/corriger/i);
+    expect(T.motifAide).toMatch(/lu par l’étudiant|étudiant/i);
+    expect(T.motifAide).toMatch(/corriger/i);
   });
 });
 

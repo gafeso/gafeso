@@ -33,6 +33,7 @@ function fauxMoteur(parAppel: { totalHits: number; facettes?: Record<string, Rec
       {} as never,
       {} as never,
       { forTenant: () => ({ biblioRecord: { count: async () => 0 } }) } as never,
+      { provenance: async () => null } as never,
     ),
   };
 }

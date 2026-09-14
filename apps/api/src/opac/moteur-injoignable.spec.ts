@@ -68,6 +68,7 @@ function opac(search: SearchService, notices = 352) {
     {} as never,
     {} as never,
     { forTenant: () => ({ biblioRecord: { count: async () => notices } }) } as never,
+    { provenance: async () => null } as never,
   );
 }
 

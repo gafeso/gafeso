@@ -90,6 +90,10 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // validé par son directeur n'entre JAMAIS au catalogue : il reste dans
       // une table que rien n'expose. `catalogue.gerer` ouvre déjà les trois
       // entrées ci-dessus — aucun droit nouveau n'est accordé ici.
+      // ⚠ AVANT « à cataloguer » dans l'ordre du travail : ce qui ATTEND une
+      // décision précède ce qui attend une notice. Même fonction, aucune porte
+      // nouvelle — `catalogue.gerer` ouvre déjà les quatre entrées ci-dessus.
+      { href: '/admin/depots-soumis', libelle: 'Dépôts en attente', fonctions: ['catalogue.gerer'] },
       { href: '/admin/depots-a-cataloguer', libelle: 'Dépôts à cataloguer', fonctions: ['catalogue.gerer'] },
     ],
   },
@@ -129,6 +133,16 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       {
         href: '/admin/outils/import-notices',
         libelle: 'Import de notices',
+        fonctions: ['outils.catalogue'],
+        groupe: 'Catalogue',
+      },
+      // ⚠ Sous OUTILS, pas sous Catalogue : `outils.catalogue` garde les outils
+      // qui OPÈRENT sur le catalogue — import de notices, récolement — et c'est
+      // la fonction que l'API exige ici. La ranger sous Catalogue lui donnerait
+      // une place que sa garde ne suit pas.
+      {
+        href: '/admin/moissonnage',
+        libelle: 'Moissonnage',
         fonctions: ['outils.catalogue'],
         groupe: 'Catalogue',
       },

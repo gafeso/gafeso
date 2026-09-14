@@ -72,6 +72,7 @@ function service(total = FONDS) {
     {} as never,
     {} as never,
     fausseBase(total) as never,
+    { provenance: async () => null } as never,
   );
 }
 

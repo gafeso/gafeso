@@ -43,6 +43,7 @@ import {
   estUnTypeDeNotice,
 } from './description-profiles';
 import { profilPourTypeDeNotice } from './profil-de-notice';
+import type { NoticeExtraite } from '../moissonnage/mapper-oai-dc';
 import { foldCategoryName, normalizeCategoryName } from '../categories/category-name';
 import { AuthorsService } from '../authors/authors.service';
 import { MarcExportRecord } from './marc-export';
@@ -288,6 +289,74 @@ export class CatalogingService {
    * bibliographiques selon le format, crée les notices et les indexe.
    * Les notices sans titre exploitable sont ignorées (comptées en skipped).
    */
+  /**
+   * INGESTION DE NOTICES MOISSONNÉES (P7-1) — le pendant Dublin Core d'`importMarc`.
+   *
+   * ⚠ ELLE VIT ICI, PAS DANS `moissonnage`, ET C'EST DÉLIBÉRÉ. Écrire une
+   * notice, c'est rattacher ses contributeurs à leurs fiches d'autorité,
+   * normaliser ses mots-clés, poser son profil et l'indexer. Refaire cela
+   * ailleurs produirait une DEUXIÈME doctrine d'écriture de notice, qui
+   * divergerait de celle-ci au premier changement — et l'accord qu'on
+   * observerait entre les deux serait une coïncidence.
+   *
+   * ⚠ ELLE N'APPLIQUE PAS LES RÈGLES DE SAISIE, comme `importMarc` : ni
+   * « au moins un auteur principal », ni le minimum de mots-clés, ni
+   * l'université de soutenance. Ce sont des exigences de CATALOGAGE ; les
+   * imposer à un entrepôt distant ferait rejeter la moitié d'un fonds pour
+   * n'avoir pas rempli des cases que nous avons inventées.
+   *
+   * ⚠ ET LE DUBLIN CORE BRUT EST CONSERVÉ dans `marcData` (I3) : ce qui arrive
+   * dans un format y reste, y compris ce que le mapper n'a pas su traduire.
+   * `marcFormat` vaut `DUBLIN_CORE`, valeur qui existait dans l'enum depuis P3-1
+   * et que rien n'écrivait — elle a enfin son écrivain.
+   *
+   * Rend l'identifiant de la notice créée pour chaque entrée, dans l'ordre.
+   * L'indexation est faite UNE fois, à la fin.
+   */
+  async importerNoticesMoissonnees(
+    db: TenantDb,
+    slug: string,
+    entrees: { extrait: NoticeExtraite; brut: unknown }[],
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    const docs: RecordSearchDoc[] = [];
+
+    for (const { extrait, brut } of entrees) {
+      const linked = await this.withAuthorIds(db, extrait.contributors);
+      const keywords = normalizeKeywords(extrait.keywords);
+
+      const record = await db.biblioRecord.create({
+        data: {
+          title: extrait.title,
+          titleComplement: extrait.titleComplement,
+          author: extrait.author,
+          isbn: extrait.isbn,
+          publishYear: extrait.publishYear,
+          language: extrait.language,
+          publisher: extrait.publisher,
+          summary: extrait.summary,
+          recordType: extrait.recordType,
+          profile: profilPourTypeDeNotice(extrait.recordType),
+          marcFormat: 'DUBLIN_CORE',
+          marcData: { dc: brut } as Prisma.InputJsonValue,
+          ...(linked.length
+            ? { contributors: { create: linked.map((c, position) => ({ ...c, position })) } }
+            : {}),
+          ...(keywords.length ? { keywords: keywordLinks(keywords) } : {}),
+        },
+        include: {
+          contributors: { orderBy: { position: 'asc' } },
+          keywords: { include: { keyword: true } },
+        },
+      });
+      ids.push(record.id);
+      docs.push(this.toSearchDoc(record));
+    }
+
+    await this.safeIndex(slug, docs);
+    return ids;
+  }
+
   async importMarc(
     db: TenantDb,
     slug: string,

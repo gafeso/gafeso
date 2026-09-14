@@ -31,7 +31,7 @@ function fauxPrisma(fonds: Record<string, { notices: number; lecteurs: number; n
 }
 
 function service(prisma: unknown) {
-  return new OpacService({} as never, {} as never, {} as never, prisma as never);
+  return new OpacService({} as never, {} as never, {} as never, prisma as never, { provenance: async () => null } as never);
 }
 
 const AMANI = { notices: 1240, lecteurs: 312, numeriques: 87, licences: 45 };
@@ -61,7 +61,7 @@ describe('chiffres publics — cas 1 : un établissement avec du fonds', () => {
     const prisma = fauxPrisma({ amani: AMANI });
     const db = prisma.forTenant('amani');
     const s = new OpacService({} as never, {} as never, {} as never,
-      { forTenant: () => db } as never);
+      { forTenant: () => db } as never, { provenance: async () => null } as never);
     await s.chiffresDuFonds('amani');
     const where = (db.user.count as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
     // Exclusion, jamais inclusion : un enseignant ou un chercheur est un
@@ -135,6 +135,7 @@ describe('chiffres publics — la route est publique et dit sa fraîcheur', () =
       {} as never,
       {} as never,
       {} as never,
+      { provenances: async () => ({}) } as never,
     );
   }
 
@@ -218,7 +219,7 @@ function fauxCatalogue(notices: unknown[]) {
 }
 
 function serviceCatalogue(prisma: unknown) {
-  return new OpacService({} as never, {} as never, {} as never, prisma as never);
+  return new OpacService({} as never, {} as never, {} as never, prisma as never, { provenance: async () => null } as never);
 }
 
 const notice = (n: number, extra: Record<string, unknown> = {}) => ({
@@ -352,7 +353,7 @@ describe('recherche — plusieurs types de document (recordType=a,b)', () => {
     };
     return {
       search,
-      service: new OpacService(search as never, {} as never, {} as never, {} as never),
+      service: new OpacService(search as never, {} as never, {} as never, {} as never, { provenance: async () => null } as never),
     };
   }
   const filtres = (search: { search: ReturnType<typeof vi.fn> }) =>

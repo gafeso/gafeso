@@ -73,6 +73,15 @@ export const AUDIT_ACTIONS = {
    * c'est précisément ce qu'on relit six mois plus tard.
    */
   DEPOSIT_REASSIGN: 'deposit.reassign',
+
+  /**
+   * ⚠ DÉCLARER UNE SOURCE DE MOISSONNAGE EST TRACÉ — c'est décider que le
+   * serveur appellera une adresse EXTÉRIEURE de façon récurrente, pas saisir
+   * une notice. Même famille qu'un changement de réglage.
+   */
+  HARVEST_SOURCE_CREATE: 'harvest.source.create',
+  HARVEST_SOURCE_DELETE: 'harvest.source.delete',
+  HARVEST_RUN: 'harvest.run',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

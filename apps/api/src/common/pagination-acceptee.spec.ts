@@ -13,6 +13,7 @@ import { ParcourirDto } from '../opac/dto/parcourir.dto';
 import { OpacSearchDto } from '../opac/dto/opac-search.dto';
 import { ReaderLoansQueryDto } from '../reader/dto/reader-loans-query.dto';
 import { MesEncadrementsDto } from '../encadrements/dto/mes-encadrements.dto';
+import { PaginationMoissonnageDto } from '../moissonnage/dto/source.dto';
 
 /**
  * UNE RÉPONSE QUI ANNONCE UN PARCOURS DOIT L'ACCEPTER.
@@ -66,6 +67,11 @@ const PARCOURS_ANNONCES: { service: string; dto: new () => object; parametre: st
   { service: 'opac/opac.service.ts', dto: OpacSearchDto, parametre: 'page' },
   { service: 'reader/reader.service.ts', dto: ReaderLoansQueryDto, parametre: 'historyPage' },
   { service: 'encadrements/encadrements.service.ts', dto: MesEncadrementsDto, parametre: 'page' },
+  // ⚠ DEUX PARCOURS DE PLUS (P7-1) : les comptes rendus d'une source et ses
+  // collisions. Le compte a fait son office — il a obligé à vérifier que le
+  // DTO accepte bien `page`, c'est-à-dire que ces routes n'annoncent pas un
+  // parcours qu'elles refuseraient, comme `/authors` l'a fait.
+  { service: 'moissonnage/moissonnage.service.ts', dto: PaginationMoissonnageDto, parametre: 'page' },
 ];
 
 /**
@@ -146,7 +152,12 @@ describe("L'instrument : le relevé des parcours annoncés", () => {
     // annonce un parcours. Le témoin a fait son office — il a fallu revenir ici
     // et DÉCLARER la route, c'est-à-dire vérifier qu'elle accepte bien `page`.
     // C'est exactement ce que ce fichier existe pour obliger.
-    expect(trouves.length).toBe(12);
+    //
+    // ⚠ PUIS 13 : `moissonnage/moissonnage.service.ts` (P7-1) annonce DEUX
+    // parcours — les comptes rendus d'une source et ses collisions — servis par
+    // un seul DTO, donc un seul fichier au relevé. Même office : il a fallu
+    // revenir vérifier que ce DTO accepte `page`.
+    expect(trouves.length).toBe(13);
   });
 
   it('⚠ il ne compte PAS un `totalPages` cité dans un commentaire', () => {

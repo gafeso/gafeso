@@ -308,6 +308,10 @@ export const LIBELLES = {
       'La validation des dépôts n’est pas ouverte à votre compte (fonction « depot.valider »).',
     aCataloguer:
       'Le catalogage des dépôts n’est pas ouvert à votre compte (fonction « catalogue.gerer »).',
+    depotsSoumis:
+      'La vue des dépôts en attente n’est pas ouverte à votre compte (fonction « catalogue.gerer »).',
+    moissonnage:
+      'Le moissonnage n’est pas ouvert à votre compte (fonction « outils.catalogue »).',
   },
 
   /**
@@ -479,6 +483,109 @@ export const LIBELLES = {
    * normal, puis rattacher ici — sinon le bouton « rattacher » se lit comme
    * « créer », et son absence d'effet se lit comme une panne.
    */
+  /**
+   * « Dépôts en attente » — la vue du personnel sur ce qui n'a pas été décidé.
+   * 12 septembre 2026, `GET /depots/soumis`.
+   *
+   * ⚠ CE QU'ELLE RÉPOND : quel dépôt attend, DEPUIS QUAND, et chez qui. Un
+   * dépôt soumis ne sort de cet état que par son directeur désigné ; si celui-ci
+   * ne peut plus agir, personne ne le voyait. C'est la vue qui rend le blocage
+   * visible — avant même de pouvoir le résoudre.
+   *
+   * ⚠ ELLE NE PERMET NI DE VALIDER NI DE REFUSER, et c'est une propriété de
+   * l'API, pas un oubli : décider reste au directeur désigné. L'écran n'offre
+   * donc aucun geste de décision — un bouton qui refuserait serait pire que son
+   * absence.
+   */
+  /**
+   * LE VOCABULAIRE DES TYPES DE DOCUMENT DÉPOSÉ — une seule source.
+   *
+   * ⚠ POURQUOI IL EST SORTI DU CODE LE 13 SEPTEMBRE 2026. Il était recopié dans
+   * CINQ écrans neufs, et les cinq copies avaient déjà DIVERGÉ en moins d'une
+   * journée. Un vocabulaire dupliqué se désynchronise à la vitesse où on ajoute
+   * des écrans, et rien ne le signale : chaque copie est correcte isolément.
+   *
+   * ⚠ ET IL NE SE CONFOND PAS AVEC `recordType`. `Deposit.documentType` porte
+   * cinq valeurs — le vocabulaire académique du dépôt. `BiblioRecord.recordType`
+   * en porte d'autres, dont `ouvrage`, et sert à décrire TOUT le catalogue.
+   * « Mes encadrements » affiche le second et garde donc sa propre table : les
+   * fondre ferait apparaître « Ouvrage » dans un menu de dépôt de thèse.
+   */
+  typesDeDepot: {
+    memoire: 'Mémoire',
+    these: 'Thèse',
+    licence: 'Mémoire de licence',
+    master: 'Mémoire de master',
+    these_unique: 'Thèse unique',
+  } as Record<string, string>,
+
+  depotsSoumis: {
+    titre: 'Dépôts en attente',
+    introduction:
+      'Les mémoires et les thèses soumis à un directeur et qui attendent sa décision, du plus ancien au plus récent.',
+    chargement: 'Chargement des dépôts…',
+    aucun: 'Aucun dépôt n’attend de décision.',
+    /** ⚠ L'ANCIENNETÉ se lit ; une date demande un calcul que personne ne fait. */
+    depuis: (jours: number) =>
+      jours === 0
+        ? 'Soumis aujourd’hui'
+        : jours === 1
+          ? 'Soumis il y a 1 jour'
+          : `Soumis il y a ${jours} jours`,
+    /**
+     * ⚠ `joursDepuisSoumission` peut être NULL — l'API le dit et le défend :
+     * zéro voudrait dire « aujourd'hui », ce qui est exactement faux pour un
+     * dépôt dont on ignore l'âge. On ne calcule donc rien, on dit qu'on ne sait
+     * pas.
+     */
+    ancienneteInconnue: 'Date de soumission inconnue',
+    directeur: (nom: string) => `Directeur : ${nom}`,
+    /** Un dépôt soumis SANS directeur : l'API l'autorise, l'écran le montre. */
+    sansDirecteur: 'Aucun directeur désigné',
+
+    /**
+     * LA RÉATTRIBUTION — livrée le 13 septembre 2026, après deux jours de porte
+     * sans clé.
+     *
+     * ⚠ POURQUOI ELLE EXISTE. « Soumis » est le seul état dont la sortie dépend
+     * de QUELQU'UN D'AUTRE : valider et refuser sont réservés au directeur
+     * désigné, et le directeur ne se change plus hors brouillon. Un directeur
+     * qui perd la fonction — rôle changé, compte désactivé, départ — bloquait le
+     * dépôt définitivement.
+     *
+     * ⚠ ET LA LISTE DES DIRECTEURS VIENT DE `GET /depots/soumis` ELLE-MÊME. Le
+     * menu dédié exige `depot.deposer`, que le bibliothécaire n'a pas : la
+     * lecture voyage donc avec ce qu'elle sert, et aucune fonction n'a été
+     * élargie.
+     */
+    reattribuer: 'Confier à un autre directeur',
+    choisirNouveau: 'Nouveau directeur',
+    aucunChoix: 'Choisissez…',
+    /** ⚠ Le dépôt reste SOUMIS : seul son directeur change. */
+    reattribuerAide:
+      'Le dépôt reste soumis : seul son directeur change, et le nouveau le voit apparaître dans sa liste.',
+    /**
+     * ⚠ NOMME L'ANCIEN ET LE NOUVEAU. « Réattribué » sans dire de qui à qui ne
+     * raconte rien — et c'est l'API qui rend l'ancien, parce que l'écran ne
+     * l'a plus une fois la liste relue.
+     */
+    reattribue: (ancien: string | null, nouveau: string) =>
+      ancien
+        ? `Dépôt confié à ${nouveau} — il était attribué à ${ancien}.`
+        : `Dépôt confié à ${nouveau} — aucun directeur n’était désigné.`,
+    /** ⚠ L'échec de l'envoi n'efface pas la réattribution. */
+    reattribueNonPrevenu:
+      'Dépôt confié, MAIS le nouveau directeur n’a PAS pu être prévenu par courriel. Il le verra dans sa liste, et vous pouvez le lui signaler.',
+    echecReattribution: 'Le dépôt n’a pas pu être confié à un autre directeur.',
+    /**
+     * ⚠ LE CAS OÙ LE GESTE EST IMPOSSIBLE. Aucune personne ne portant
+     * `depot.valider`, il n'y a personne à qui confier — et un menu vide se
+     * lirait comme une panne. On le DIT, et on nomme ce qui manque.
+     */
+    aucunDirecteurDisponible:
+      'Aucun directeur n’est déclaré dans votre établissement : il n’y a personne à qui confier ces dépôts. Créez un rôle portant « depot.valider » dans Rôles & fonctions.',
+  },
+
   aCataloguer: {
     titre: 'Dépôts à cataloguer',
     introduction:
@@ -556,6 +663,144 @@ export const LIBELLES = {
     aRetirerAvant: (date: string) => `À retirer avant le ${date}`,
     /** ⚠ Dit ce qui arrive si on ne vient pas — sinon la date n'est qu'un chiffre. */
     apresEcheance: 'Passé ce délai, le document repart à la personne suivante.',
+  },
+
+  /**
+   * LE MOISSONNAGE — P7, écran `/admin/moissonnage`. 13 septembre 2026.
+   *
+   * ⚠ LA DISTINCTION QUI PORTE TOUT L'ÉCRAN : « injoignable » n'est PAS
+   * « vide ». L'API l'écrit dans son propre schéma — « les confondre ferait lire
+   * ‘zéro notice’ là où il faut lire ‘je n'ai pas pu savoir’ » — et c'est la
+   * famille que ce dépôt connaît le mieux : une non-réponse écrite comme un
+   * fait.
+   *
+   * Le coût n'est pas théorique. Un entrepôt momentanément injoignable affiché
+   * « 0 notice » pousse à supprimer la source, ou à conclure que le partenaire
+   * n'a rien publié — deux gestes qu'on ne reprend pas facilement.
+   */
+  moissonnage: {
+    titre: 'Moissonnage',
+    introduction:
+      'Les entrepôts extérieurs dont votre établissement récupère les notices, et le compte rendu de la dernière récolte.',
+    chargement: 'Chargement des entrepôts…',
+    aucun: 'Aucun entrepôt déclaré.',
+    /**
+     * ⚠ CINQ ISSUES, ET DEUX NE SE CONFONDENT JAMAIS. `vide` dit « la source a
+     * répondu, elle n'a rien » ; `injoignable` dit « je n'ai pas pu savoir ».
+     */
+    issues: {
+      en_cours: 'Récolte en cours…',
+      moisson: 'Récolte effectuée',
+      vide: 'La source a répondu : aucune notice',
+      injoignable: 'Source injoignable — rien n’a pu être lu',
+      erreur_protocole: 'Réponse illisible — le protocole n’a pas été respecté',
+    } as Record<string, string>,
+    /** ⚠ Le motif, quand il existe : « injoignable » sans raison n'aide personne. */
+    motif: (raison: string) => `Motif : ${raison}`,
+    jamaisMoissonnee: 'Jamais moissonnée',
+    /**
+     * ⚠ LE COMPTE RENDU NE SE LIT QUE POUR UNE RÉCOLTE RÉELLE. Afficher
+     * « 0 reçue, 0 créée » sous une source injoignable rendrait le chiffre
+     * exact et la lecture fausse.
+     */
+    bilan: (recues: number, creees: number, ignorees: number) =>
+      `${recues} reçue(s) · ${creees} créée(s) · ${ignorees} ignorée(s)`,
+    collisions: (n: number) =>
+      n === 1 ? '1 notice signalée, non tranchée' : `${n} notices signalées, non tranchées`,
+    /** ⚠ Le moissonnage SIGNALE, il ne tranche pas — décision 2 du brief. */
+    collisionsAide:
+      'Rien n’a été écrasé : ces notices attendent un arbitrage humain.',
+    suppressionsSignalees: (n: number) =>
+      n === 1
+        ? '1 suppression signalée par la source, non appliquée'
+        : `${n} suppressions signalées par la source, non appliquées`,
+    moissonnerMaintenant: 'Moissonner maintenant',
+    moissonEnCours: 'Récolte en cours…',
+    /** Déclaration d'un entrepôt. */
+    declarer: 'Déclarer un entrepôt',
+    champNom: 'Nom de l’entrepôt',
+    champNomAide: 'Un nom lisible : une adresse n’est pas un nom dans une liste.',
+    champAdresse: 'Adresse du point d’accès OAI-PMH',
+    /**
+     * ⚠ DIT LA RÈGLE AVANT LE REFUS. Le serveur appellera cette adresse : les
+     * adresses internes sont refusées. Laisser l'API le découvrir enverrait
+     * quelqu'un chercher ce qu'il a mal fait alors que la règle n'était écrite
+     * nulle part.
+     */
+    champAdresseAide:
+      'Le serveur appellera cette adresse : elle doit être publique. Les adresses internes (localhost, 10.x, 192.168.x, .local) sont refusées.',
+    champFormat: 'Format des métadonnées',
+    champFormatAide: 'Par exemple oai_dc, marcxml ou etdms — celui que l’entrepôt annonce.',
+    champEnsemble: 'Ensemble (setSpec, facultatif)',
+    champPeriodicite: 'Périodicité',
+    creer: 'Déclarer',
+    annuler: 'Annuler',
+    creee: (nom: string) => `Entrepôt « ${nom} » déclaré.`,
+    echec: 'Les entrepôts n’ont pas pu être chargés.',
+    echecCreation: 'L’entrepôt n’a pas pu être déclaré.',
+    echecMoisson: 'La récolte n’a pas pu être lancée.',
+    inactive: 'Inactive',
+
+    modifier: 'Modifier',
+    enregistrer: 'Enregistrer',
+    modifiee: 'Entrepôt modifié.',
+    echecModification: 'L’entrepôt n’a pas pu être modifié.',
+
+    retirer: 'Retirer cet entrepôt',
+    /**
+     * ⚠ LA CONFIRMATION DIT CE QUI PART **ET CE QUI RESTE**. L'API l'écrit
+     * elle-même : « supprimée » sans le dire laisserait croire que les notices
+     * sont parties avec. Or ce sont des notices du catalogue comme les autres —
+     * personne ne prendrait le risque de retirer une source s'il croyait
+     * emporter des centaines de notices.
+     */
+    retirerConfirmation: (nom: string) =>
+      `Retirer l’entrepôt « ${nom} » ? La mémoire du moissonnage part — les comptes rendus et ` +
+      `les identités des notices récoltées. Les NOTICES, elles, restent au catalogue : ce sont ` +
+      `des notices comme les autres. Ce geste ne s’annule pas.`,
+    retirerConfirmer: 'Retirer l’entrepôt',
+    /** ⚠ Le compte vient de l'API, jamais deviné — et il est la preuve du dire. */
+    retiree: (nom: string, notices: number) =>
+      notices === 0
+        ? `Entrepôt « ${nom} » retiré. Aucune notice n’en provenait.`
+        : notices === 1
+          ? `Entrepôt « ${nom} » retiré. 1 notice reste au catalogue.`
+          : `Entrepôt « ${nom} » retiré. ${notices} notices restent au catalogue.`,
+    echecRetrait: 'L’entrepôt n’a pas pu être retiré.',
+
+    /**
+     * LE DÉTAIL D'UNE SOURCE — comptes rendus et collisions.
+     *
+     * ⚠ AUCUNE ROUTE NE RÉSOUT UNE COLLISION. L'API le dit : « c'est un humain
+     * qui décidera ». L'écran MONTRE donc, il n'offre aucun geste d'arbitrage —
+     * un bouton qui ne peut pas aboutir est pire que son absence.
+     */
+    detail: {
+      retour: 'Tous les entrepôts',
+      comptesRendus: 'Comptes rendus',
+      aucunCompteRendu: 'Cette source n’a jamais été moissonnée.',
+      collisionsTitre: 'Notices signalées',
+      aucuneCollision: 'Aucune notice signalée sur cette source.',
+      /** ⚠ Dit l'ÉTAT, et que rien n'a été écrasé — la ligne seule alarmerait. */
+      collisionsIntro:
+        'La source redonne ces notices avec une date différente de celle que nous avons. Rien n’a été écrasé : c’est à vous de décider si la version distante doit remplacer la vôtre.',
+      /** L'identifiant de la SOURCE — le seul que l'on ait sur ces lignes. */
+      identifiantSource: 'Identifiant à la source',
+      dateSource: 'Date annoncée par la source',
+      vueLe: (date: string) => `Signalée le ${date}`,
+      ouvrirLaNotice: 'Ouvrir notre notice',
+      /**
+       * ⚠ `recordId` peut manquer — une notice ignorée faute de titre puis
+       * redonnée devient une collision sans notice locale. On le DIT plutôt que
+       * d'offrir un lien mort.
+       */
+      sansNoticeLocale: 'Aucune notice locale ne lui correspond.',
+      chargement: 'Chargement…',
+      echec: 'Le détail n’a pas pu être chargé.',
+      pageSur: (page: number, total: number) => `Page ${page} sur ${total}`,
+      pagePrecedente: 'Page précédente',
+      pageSuivante: 'Page suivante',
+    },
   },
 
   /** Collections de documents. */

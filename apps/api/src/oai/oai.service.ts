@@ -11,6 +11,11 @@ import {
   versMarcxchange,
 } from '../cataloging/unimarc-xml';
 import { oaiDatestamp, oaiEnvelope, oaiError, tag, xmlEscape } from './oai-xml';
+import {
+  analyserIdentifiant,
+  construireIdentifiant,
+  localisationOai,
+} from '../opac/identifiant-perenne';
 import { versMarcxchangeDepuisNatif } from './reexposition-fidele';
 import {
   ETDMS_NAMESPACE,
@@ -268,7 +273,7 @@ export class OaiService {
           `${MARCXCHANGE_PREFIX}.`,
       );
     }
-    const body = `  <GetRecord>\n${this.recordXml(record, tenant, params.metadataPrefix, true)}\n  </GetRecord>`;
+    const body = `  <GetRecord>\n${this.recordXml(record, tenant, params.metadataPrefix, true, baseUrl)}\n  </GetRecord>`;
     return oaiEnvelope(now, baseUrl, { verb: 'GetRecord', identifier: params.identifier, metadataPrefix: params.metadataPrefix }, body);
   }
 
@@ -298,7 +303,7 @@ export class OaiService {
     })) as OaiRecord[];
 
     const items = rows
-      .map((r) => (withMetadata ? this.recordXml(r, tenant, state.prefix, false) : `    ${this.headerXml(r, tenant)}`))
+      .map((r) => (withMetadata ? this.recordXml(r, tenant, state.prefix, false, baseUrl) : `    ${this.headerXml(r, tenant)}`))
       .join('\n');
 
     const nextOffset = state.offset + rows.length;
@@ -318,17 +323,23 @@ export class OaiService {
   // ── Métadonnées ───────────────────────────────────────────────────────────
   private headerXml(r: OaiRecord, tenant: OaiTenant): string {
     const set = r.category ? `<setSpec>${xmlEscape(r.category)}</setSpec>` : '';
-    return `<header>\n      <identifier>oai:${tenant.slug}:${r.id}</identifier>\n      <datestamp>${oaiDatestamp(r.updatedAt)}</datestamp>\n      ${set}\n    </header>`;
+    return `<header>\n      <identifier>${construireIdentifiant(tenant.slug, r.id)}</identifier>\n      <datestamp>${oaiDatestamp(r.updatedAt)}</datestamp>\n      ${set}\n    </header>`;
   }
 
-  private recordXml(r: OaiRecord, tenant: OaiTenant, prefix: string, indentedForGetRecord: boolean): string {
+  private recordXml(
+    r: OaiRecord,
+    tenant: OaiTenant,
+    prefix: string,
+    indentedForGetRecord: boolean,
+    baseUrl: string,
+  ): string {
     const pad = indentedForGetRecord ? '  ' : '  ';
     const meta =
       prefix === MARCXCHANGE_PREFIX
         ? this.marcxchangeMetadata(r)
         : prefix === ETDMS_PREFIX
-          ? versEtdms(r, `oai:${tenant.slug}:${r.id}`, '        ')
-          : this.oaiDcMetadata(r, tenant);
+          ? versEtdms(r, construireIdentifiant(tenant.slug, r.id), '        ', localisationOai(baseUrl, tenant.slug, r.id))
+          : this.oaiDcMetadata(r, tenant, baseUrl);
     return `${pad}  <record>\n    ${this.headerXml(r, tenant)}\n      <metadata>\n${meta}\n      </metadata>\n${pad}  </record>`;
   }
 
@@ -374,7 +385,7 @@ export class OaiService {
   }
 
   /** Dublin Core simple (oai_dc) — obligatoire du standard. */
-  private oaiDcMetadata(r: OaiRecord, tenant: OaiTenant): string {
+  private oaiDcMetadata(r: OaiRecord, tenant: OaiTenant, baseUrl: string): string {
     const lines: string[] = [];
     lines.push(tag('dc:title', r.titleComplement ? `${r.title} : ${r.titleComplement}` : r.title));
     for (const c of r.contributors) {
@@ -394,7 +405,21 @@ export class OaiService {
     lines.push(tag('dc:type', r.recordType));
     lines.push(tag('dc:language', r.language));
     if (r.isbn) lines.push(tag('dc:identifier', `ISBN:${r.isbn}`));
-    lines.push(tag('dc:identifier', `oai:${tenant.slug}:${r.id}`));
+    // ⚠ DEUX `dc:identifier`, ET LA DISTINCTION EST LE CŒUR DE P7-2.
+    //
+    // Le premier est l'IDENTIFIANT : il ne porte aucun domaine, donc il
+    // survit à un déménagement de serveur. Le second est une LOCALISATION :
+    // il dit où trouver la notice AUJOURD'HUI, et il changera. Les confondre
+    // — publier l'URL comme identifiant — est ce qui fait mourir la moitié des
+    // liens d'un catalogue après une migration.
+    //
+    // ⚠ La localisation est bâtie sur l'origine de l'ENTREPÔT, celle que le
+    // moissonneur vient d'employer : c'est la seule qu'on sait joignable pour
+    // lui. Deviner le domaine public de l'établissement produirait un lien
+    // mort publié à l'extérieur — et un lien mort publié ne se reprend pas.
+    const identifiant = construireIdentifiant(tenant.slug, r.id);
+    lines.push(tag('dc:identifier', identifiant));
+    lines.push(tag('dc:identifier', localisationOai(baseUrl, tenant.slug, r.id)));
     const inner = lines.filter(Boolean).map((l) => `        ${l}`).join('\n');
     return (
       '        <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" ' +
@@ -427,12 +452,18 @@ export class OaiService {
     }
   }
 
+  /**
+   * ⚠ UNE SEULE SOURCE POUR LA FORME DE L'IDENTIFIANT (P7-2). L'analyse vivait
+   * ici, la construction était écrite à la main à TROIS endroits : quatre
+   * copies d'une même règle, qui s'accordaient jusqu'au jour où l'une aurait
+   * changé. Elles passent toutes par `opac/identifiant-perenne`.
+   */
   private parseIdentifier(identifier: string, slug: string): string {
-    const parts = identifier.split(':');
-    if (parts.length !== 3 || parts[0] !== 'oai' || parts[1] !== slug) {
+    const analyse = analyserIdentifiant(identifier);
+    if (!analyse || analyse.slug !== slug) {
       throw new OaiProtocolError('idDoesNotExist', `Identifiant « ${identifier} » invalide pour cet entrepôt.`);
     }
-    return parts[2];
+    return analyse.id;
   }
 
   private buildWhere(state: HarvestState): Prisma.BiblioRecordWhereInput {

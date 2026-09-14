@@ -73,7 +73,18 @@ export function exposableEnEtdms(notice: { profile: string }): boolean {
  * pas du profil, elle décrit. Séparer les deux permet au test de vérifier le
  * REFUS là où il est pris — dans le service — au lieu de le dissoudre ici.
  */
-export function versEtdms(r: NoticeEtdms, identifiantOai: string, indent: string): string {
+export function versEtdms(
+  r: NoticeEtdms,
+  identifiantOai: string,
+  indent: string,
+  /**
+   * ⚠ LA LOCALISATION COURANTE, distincte de l'identifiant (P7-2). ETD-MS
+   * admet plusieurs `<identifier>` ; publier les deux dit à la fois QUOI (pour
+   * toujours) et OÙ (aujourd'hui). `null` quand on ne sait pas : on n'écrit
+   * pas une adresse devinée dans une exposition que des tiers archivent.
+   */
+  localisation?: string | null,
+): string {
   const profil = lireChampsDeProfil(r.profileData);
   const lignes: string[] = [];
 
@@ -97,6 +108,7 @@ export function versEtdms(r: NoticeEtdms, identifiantOai: string, indent: string
   lignes.push(tag('date', r.publishYear != null ? String(r.publishYear) : null));
   lignes.push(tag('type', r.recordType));
   lignes.push(tag('identifier', identifiantOai));
+  if (localisation) lignes.push(tag('identifier', localisation));
   lignes.push(tag('language', r.language));
 
   // ── <degree> : le bloc qui n'a AUCUN équivalent en Dublin Core.

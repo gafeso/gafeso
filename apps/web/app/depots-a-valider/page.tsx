@@ -23,15 +23,6 @@ import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 const T = LIBELLES.depotsAValider;
 
-/** Le vocabulaire fermé de `documentType`, dans les mots du lecteur. */
-const TYPES: Record<string, string> = {
-  memoire: 'Mémoire',
-  these: 'Thèse',
-  licence: 'Mémoire de licence',
-  master: 'Mémoire de master',
-  these_unique: 'Thèse unique',
-};
-
 /** Ce qui est RÉELLEMENT arrivé au courriel du déposant — rendu par l'API. */
 type MailOutcome = { sent: true } | { sent: false; reason: string };
 
@@ -175,7 +166,7 @@ export default function DepotsAValiderPage() {
                   <p className="font-medium text-ink">{d.title}</p>
                   <p className="mt-0.5 text-sm text-muted">
                     {d.authorName}
-                    {d.year ? ` · ${d.year}` : ''} · {TYPES[d.documentType] ?? d.documentType}
+                    {d.year ? ` · ${d.year}` : ''} · {LIBELLES.typesDeDepot[d.documentType] ?? d.documentType}
                   </p>
                 </div>
                 {d.submittedAt && <Badge>{T.soumisLe(dateFr(d.submittedAt))}</Badge>}

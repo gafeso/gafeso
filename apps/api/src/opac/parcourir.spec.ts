@@ -37,9 +37,13 @@ function fauxCatalogue(notices: { id: string; avecFichier: boolean }[]) {
   return {
     count,
     findMany,
-    service: new OpacService({} as never, {} as never, {} as never, {
-      forTenant: () => ({ biblioRecord: { count, findMany } }),
-    } as never),
+    service: new OpacService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { forTenant: () => ({ biblioRecord: { count, findMany } }) } as never,
+      { provenance: async () => null } as never,
+    ),
   };
 }
 
@@ -147,6 +151,7 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
         {} as never,
         {} as never,
         { forTenant: () => ({ biblioRecord: { count } }) } as never,
+      { provenance: async () => null } as never,
       ),
     };
   }

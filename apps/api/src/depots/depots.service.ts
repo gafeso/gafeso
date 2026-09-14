@@ -219,6 +219,23 @@ export class DepotsService {
       data: { status: 'soumis', submittedAt: new Date() },
     });
 
+    // ⚠ ON NE PRÉVIENT QU'À LA PREMIÈRE SOUMISSION — mesuré par la session
+    // frontend : trois tentatives d'envoi vers le même directeur en deux
+    // minutes (soumission, retrait, resoumission). Muet en développement ; en
+    // production, un étudiant qui hésite inonde son directeur, et un directeur
+    // inondé cesse de lire — donc il ne lira pas non plus le jour où ça compte.
+    //
+    // Une resoumission après retrait n'est pas une information nouvelle : le
+    // dépôt est toujours dans sa liste. SAUF si le directeur a changé entre les
+    // deux, et la comparaison le dit sans condition supplémentaire.
+    if (soumis.notifiedDirectorId === soumis.directorId) {
+      // ⚠ ON OMET `notification`, on ne rend PAS `{ sent: false }`. « Déjà
+      // prévenu » n'est pas « pas pu être prévenu » : un échec appelle un
+      // recours, un silence délibéré n'appelle rien. Les confondre ferait dire
+      // à l'écran qu'un envoi a échoué alors que tout va bien.
+      return { depot: soumis };
+    }
+
     return { depot: soumis, notification: await this.notifierDirecteur(db, soumis) };
   }
 
@@ -471,13 +488,40 @@ export class DepotsService {
    * l'identifiant que cette liste lui donne. Éprouvé plutôt que supposé.
    */
   async soumis(db: TenantDb, maintenant: Date = new Date()) {
-    const depots = await db.deposit.findMany({
+    // ⚠ LES DIRECTEURS DÉSIGNABLES PARTENT AVEC LA LISTE, ET C'EST LE POINT DU
+    // LOT. `POST :id/reattribuer` prend DEUX arguments : le dépôt, et le
+    // nouveau directeur. Cette route donnait le premier ; le second vivait
+    // derrière `GET /depots/directeurs`, sous `depot.deposer` — que le
+    // bibliothécaire n'a pas.
+    //
+    // ⚠ ÉLARGIR `depot.deposer` AURAIT ÉTÉ LA MAUVAISE RÉPONSE : elle donne le
+    // droit de DÉPOSER, qui n'a aucun sens pour un bibliothécaire. On aurait
+    // accordé un droit d'écriture pour résoudre un problème de LECTURE.
+    //
+    // Une requête de plus ici, aucune fonction à élargir, et l'information
+    // arrive au moment où elle sert — dans l'écran qui va s'en servir.
+    const [depots, directeurs] = await Promise.all([
+      this.depotsSoumis(db),
+      this.directeursDesignables(db),
+    ]);
+    return { depots: await this.decorerSoumis(db, depots, maintenant), directeurs };
+  }
+
+  private depotsSoumis(db: TenantDb) {
+    return db.deposit.findMany({
       where: { status: 'soumis' },
       // Le plus ancien d'abord : c'est celui qui attend depuis trois mois qu'on
       // veut voir en haut, pas le dernier arrivé.
       orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
     });
+  }
 
+  /** Met chaque ligne en forme : le NOM du directeur, et l'ancienneté. */
+  private async decorerSoumis(
+    db: TenantDb,
+    depots: { id: string; title: string; authorName: string; documentType: string; submittedAt: Date | null; directorId: string | null }[],
+    maintenant: Date,
+  ) {
     const directeurs = await db.user.findMany({
       where: { id: { in: [...new Set(depots.map((d) => d.directorId).filter(Boolean))] as string[] } },
       select: { id: true, firstName: true, lastName: true },
@@ -759,7 +803,17 @@ export class DepotsService {
         `Directeur non prévenu du dépôt ${depot.id} : ${resultat.reason}` +
           `${resultat.detail ? ` — ${resultat.detail}` : ''}`,
       );
+      // ⚠ ON N'INSCRIT RIEN SUR UN ÉCHEC. Marquer « prévenu » rendrait ce
+      // directeur muet pour toujours : la prochaine soumission le croirait
+      // informé. Une école sans SMTP retentera donc à chaque soumission — des
+      // TENTATIVES, pas des courriels.
+      return resultat;
     }
+
+    await db.deposit.update({
+      where: { id: depot.id },
+      data: { notifiedDirectorId: depot.directorId },
+    });
     return resultat;
   }
 }

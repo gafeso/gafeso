@@ -282,6 +282,11 @@ export class DepotsController {
       'réattribution existe pour résoudre. ' +
       'Chaque ligne porte `joursDepuisSoumission` — « il y a 94 jours » se lit, ' +
       '« 2026-06-10 » demande un calcul. ' +
+      '⚠ LA RÉPONSE PORTE AUSSI `directeurs`, les personnes désignables. La ' +
+      'réattribution prend DEUX arguments, et le second vivait derrière ' +
+      '`GET /depots/directeurs`, sous `depot.deposer` — que le bibliothécaire ' +
+      'n’a pas. Élargir cette fonction lui aurait donné le droit de DÉPOSER : ' +
+      'un droit d’écriture pour résoudre un problème de lecture. ' +
       '⚠ Elle ne permet NI de valider NI de refuser : décider reste au ' +
       'directeur désigné, et la propriété tient par construction.',
   })

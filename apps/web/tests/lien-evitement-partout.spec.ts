@@ -44,12 +44,37 @@ function sansCommentaires(src: string): string {
     .replace(/^\s*\/\/.*$/gm, ' '); //                   // … en début de ligne
 }
 
-/** Les entrées qui posent une barre de navigation, et doivent donc l'offrir. */
+/**
+ * Les entrées qui posent une barre de navigation, et doivent donc l'offrir.
+ *
+ * ⚠ DÉRIVÉE, PLUS ÉCRITE À LA MAIN — 13 septembre 2026, et ça a coûté deux
+ * défauts. La liste nommait trois fichiers ; le garde s'appelle « partout ».
+ * Entre-temps `/mes-prets` et `/profil` ont reçu leur propre `<Header />`, donc
+ * leur propre navigation, et AUCUN lien d'évitement : un usager au clavier
+ * traversait tout le menu à chaque visite, sur les deux écrans personnels les
+ * plus fréquentés d'un lecteur.
+ *
+ * Une liste de fichiers tenue à la main est une déclaration en prose sur un
+ * artefact qu'on ne compile pas : elle SERA fausse. Le critère mécanique est
+ * ici évident — qui rend `<Header />` porte une navigation.
+ */
+function fichiersRendant(motif: string): string[] {
+  const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+  return execFileSync('grep', ['-rl', motif, 'app', 'components', '--include=*.tsx'], {
+    cwd: process.cwd(),
+    encoding: 'utf-8',
+  })
+    .split('\n')
+    .filter(Boolean)
+    .sort();
+}
+
 const AVEC_NAVIGATION = [
-  'components/admin-shell.tsx', // toute la coque professionnelle
-  'app/opac/layout.tsx', // le catalogue public et la fiche d'une notice
-  'app/page.tsx', // l'accueil public
-];
+  ...fichiersRendant('<Header'),
+  // La coque publique du catalogue : elle pose sa navigation sans `<Header />`.
+  'app/opac/layout.tsx',
+  'app/page.tsx',
+].filter((f, i, t) => t.indexOf(f) === i);
 
 /** Les fichiers qui rendent un `<main>` atteint par ce lien. */
 const PORTEURS_DE_CIBLE = [
@@ -59,6 +84,22 @@ const PORTEURS_DE_CIBLE = [
   'app/opac/auteurs/page.tsx',
   'app/opac/[id]/fiche-notice.tsx',
 ];
+
+describe('⚠ la population est DÉRIVÉE, pas déclarée', () => {
+  it('elle voit les écrans que la liste écrite à la main ratait', () => {
+    // ⚠ TÉMOIN NOMMÉ sur ce que l'instrument POURRAIT manquer. Ces deux écrans
+    // ont reçu leur propre en-tête après l'écriture du garde, et sont restés
+    // sans lien d'évitement parce que personne n'a pensé à allonger la liste.
+    expect(AVEC_NAVIGATION).toContain('app/mes-prets/page.tsx');
+    expect(AVEC_NAVIGATION).toContain('app/profil/page.tsx');
+  });
+
+  it('et elle en voit un nombre plausible', () => {
+    // Un compte, pas une présence : le jour où un écran porte un en-tête sans
+    // lien d'évitement, c'est CE test qui convoque — avant même l'assertion.
+    expect(AVEC_NAVIGATION.length).toBeGreaterThanOrEqual(8);
+  });
+});
 
 describe('Lien d’évitement', () => {
   it.each(AVEC_NAVIGATION)('%s rend <LienDEvitement />', (fichier) => {

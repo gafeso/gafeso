@@ -236,3 +236,124 @@ describe('⚠ LE MOISSONNAGE INCRÉMENTAL', () => {
     expect(r.notices).toHaveLength(1);
   });
 });
+
+/**
+ * ⚠ UN MOISSONNAGE INTERROMPU NE JETTE PLUS CE QU'IL A RAMASSÉ.
+ *
+ * *Ajouté le 12 septembre 2026, en écrivant le moteur.* La première version du
+ * client rendait `injoignable` et perdait tout : huit mille notices reçues, une
+ * coupure à la page 41, et rien — alors que le protocole donne exactement de
+ * quoi ne pas recommencer. La recette du brief le demande en toutes lettres.
+ *
+ * ⚠ Et c'est aussi ce qui donne un ÉCRIVAIN à `harvest_runs.resumption_token` :
+ * sans ces sorties, la colonne existerait et personne ne la remplirait.
+ */
+
+/** Un entrepôt dont la Nᵉ page échoue. */
+function entrepotQuiTombe(pages: string[], aLaPage: number) {
+  let n = 0;
+  const fetchImpl = vi.fn(async () => {
+    n += 1;
+    if (n >= aLaPage) throw new Error('connexion perdue');
+    return { ok: true, text: async () => pages[n - 1] } as unknown as Response;
+  });
+  return fetchImpl as unknown as typeof fetch;
+}
+
+const jeton = (valeur: string, expire?: string) =>
+  `<resumptionToken${expire ? ` expirationDate="${expire}"` : ''}>${valeur}</resumptionToken>`;
+
+describe('⚠ Interruption : ce qui est ramassé part avec le jeton de reprise', () => {
+  it('rend `injoignable` ET le partiel — les notices reçues et de quoi continuer', async () => {
+    const pages = [
+      enveloppe(`<ListRecords>${notice('oai:a')}${jeton('JETON-2', '2026-09-12T11:00:00Z')}</ListRecords>`),
+    ];
+    const issue = await new ClientOai(entrepotQuiTombe(pages, 2)).moissonner(SOURCE);
+
+    expect(issue.etat).toBe('injoignable');
+    if (issue.etat !== 'injoignable') return;
+    expect(issue.partiel?.notices).toHaveLength(1);
+    expect(issue.partiel?.reprise).toEqual({
+      jeton: 'JETON-2',
+      // ⚠ La péremption est LUE, pas supposée : un jeton gardé sans sa limite
+      // est une promesse de reprise qu'on ne peut pas tenir.
+      expire: '2026-09-12T11:00:00Z',
+    });
+  });
+
+  it('⚠ `partiel` vaut `null` quand la panne tombe sur la PREMIÈRE requête', async () => {
+    // « Rien » et « un peu » ne se valent pas : l'un n'a rien à écrire, l'autre
+    // a des notices et un jeton. Les confondre ferait écrire un compte rendu
+    // qui annonce zéro reçue là où il y en avait quarante.
+    const issue = await new ClientOai(entrepotQuiTombe([], 1)).moissonner(SOURCE);
+    expect(issue.etat).toBe('injoignable');
+    if (issue.etat !== 'injoignable') return;
+    expect(issue.partiel).toBeNull();
+  });
+
+  it('un entrepôt qui va au bout ne laisse AUCUNE reprise', async () => {
+    // Témoin d'absence : sans lui, un client qui rendrait toujours un jeton
+    // serait indiscernable d'un client juste — et le moteur reprendrait sans
+    // fin un parcours déjà terminé.
+    const { fetchImpl } = entrepot(enveloppe(`<ListRecords>${notice('oai:a')}</ListRecords>`));
+    const issue = await new ClientOai(fetchImpl).moissonner(SOURCE);
+    expect(issue.etat).toBe('moisson');
+    if (issue.etat !== 'moisson') return;
+    expect(issue.reprise).toBeNull();
+  });
+
+  it('⚠ un jeton qui BOUCLE annule la reprise, mais garde les notices', async () => {
+    // C'est le seul cas où l'on jette le jeton : reprendre avec lui rejouerait
+    // exactement la panne.
+    const page = enveloppe(`<ListRecords>${notice('oai:a')}${jeton('MEME')}</ListRecords>`);
+    const { fetchImpl } = entrepot(page, page);
+    const issue = await new ClientOai(fetchImpl).moissonner(SOURCE);
+
+    expect(issue.etat).toBe('erreur_protocole');
+    if (issue.etat !== 'erreur_protocole') return;
+    expect(issue.code).toBe('resumptionToken_repete');
+    expect(issue.partiel?.notices.length).toBeGreaterThan(0);
+    expect(issue.partiel?.reprise).toBeNull();
+  });
+
+  it('⚠ la borne de pages ne PERD plus ce qu’elle a ramassé', async () => {
+    const page = (i: number) =>
+      enveloppe(`<ListRecords>${notice(`oai:${i}`)}${jeton(`J${i}`)}</ListRecords>`);
+    const pages = Array.from({ length: 5 }, (_, i) => page(i));
+    let n = 0;
+    const fetchImpl = vi.fn(async () => {
+      const corps = pages[n % pages.length];
+      n += 1;
+      return { ok: true, text: async () => corps } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const issue = await new ClientOai(fetchImpl, 3).moissonner(SOURCE);
+    expect(issue.etat).toBe('erreur_protocole');
+    if (issue.etat !== 'erreur_protocole') return;
+    expect(issue.code).toBe('trop_de_pages');
+    expect(issue.partiel?.notices).toHaveLength(3);
+    expect(issue.partiel?.reprise?.jeton).toBeTruthy();
+  });
+});
+
+describe('⚠ REPRENDRE : le jeton part SEUL, dès la première requête', () => {
+  it('aucun `metadataPrefix` ni `from` ne l’accompagne', async () => {
+    // Le protocole l'exige, et beaucoup d'entrepôts répondent `badArgument`
+    // sinon — le moissonnage s'arrête alors à la reprise sans qu'on comprenne.
+    const { fetchImpl, appels } = entrepot(
+      enveloppe(`<ListRecords>${notice('oai:z')}</ListRecords>`),
+    );
+    await new ClientOai(fetchImpl).moissonner({
+      ...SOURCE,
+      from: '2026-01-01',
+      set: 'theses',
+      reprise: 'JETON-REPRIS',
+    });
+
+    const url = new URL(appels[0]);
+    expect(url.searchParams.get('resumptionToken')).toBe('JETON-REPRIS');
+    expect(url.searchParams.get('metadataPrefix')).toBeNull();
+    expect(url.searchParams.get('from')).toBeNull();
+    expect(url.searchParams.get('set')).toBeNull();
+  });
+});

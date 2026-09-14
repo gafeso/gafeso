@@ -17,6 +17,7 @@ import { EncadrementsModule } from './encadrements/encadrements.module';
 import { AdminModule } from './admin/admin.module';
 import { SearchModule } from './search/search.module';
 import { CatalogingModule } from './cataloging/cataloging.module';
+import { MoissonnageModule } from './moissonnage/moissonnage.module';
 import { OpacModule } from './opac/opac.module';
 import { PatronsModule } from './patrons/patrons.module';
 import { CirculationModule } from './circulation/circulation.module';
@@ -62,6 +63,7 @@ import { ClientCacheKeyMiddleware } from './common/client-cache-key.middleware';
     AdminModule,
     SearchModule,
     CatalogingModule,
+    MoissonnageModule,
     OpacModule,
     PatronsModule,
     CirculationModule,

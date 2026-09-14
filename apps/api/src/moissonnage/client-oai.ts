@@ -72,11 +72,51 @@ export interface SuppressionSignalee {
  * format non supporté — et la traiter comme une panne réseau ferait retenter
  * indéfiniment une requête qui ne marchera jamais.
  */
+/**
+ * DE QUOI REPRENDRE UN MOISSONNAGE LÀ OÙ IL S'EST ARRÊTÉ.
+ *
+ * ⚠ ET SA PÉREMPTION EN FAIT PARTIE. Un `resumptionToken` expire — souvent en
+ * minutes, et OAI-PMH le dit lui-même par l'attribut `expirationDate`. Garder
+ * le jeton sans sa limite serait promettre une reprise qu'on ne peut pas
+ * tenir : l'échec, plus tard, ressemblerait à une source cassée.
+ *
+ * `expire` vaut `null` quand l'entrepôt ne l'annonce pas — et c'est le troisième
+ * état, pas « il n'expire jamais ».
+ */
+export interface Reprise {
+  jeton: string;
+  expire: string | null;
+}
+
+/**
+ * CE QUI A ÉTÉ RAMASSÉ, même quand le parcours ne va pas au bout.
+ *
+ * ⚠ POURQUOI CE TYPE EXISTE : la première version JETAIT tout ce qu'elle avait
+ * moissonné dès qu'une page échouait. Huit mille notices reçues, une coupure
+ * réseau à la page 41, et rien — alors que le protocole donne exactement de
+ * quoi ne pas recommencer. La recette du brief le demande en toutes lettres :
+ * « moissonnage interrompu → reprend où il s'est arrêté ».
+ */
+export interface Ramassage {
+  notices: NoticeMoissonnee[];
+  suppressions: SuppressionSignalee[];
+  pages: number;
+  dernierDatestamp: string | null;
+  /** De quoi continuer, ou `null` quand l'entrepôt n'a plus rien à donner. */
+  reprise: Reprise | null;
+}
+
 export type IssueMoissonnage =
-  | { etat: 'moisson'; notices: NoticeMoissonnee[]; suppressions: SuppressionSignalee[]; pages: number; dernierDatestamp: string | null }
+  | ({ etat: 'moisson' } & Ramassage)
   | { etat: 'vide'; confirme: true }
-  | { etat: 'injoignable'; motif: string }
-  | { etat: 'erreur_protocole'; code: string; motif: string };
+  /**
+   * ⚠ `partiel` PORTE CE QUI A ÉTÉ RAMASSÉ AVANT LA PANNE, et vaut `null` quand
+   * la panne est survenue sur la PREMIÈRE requête. Les deux cas ne se
+   * confondent pas : l'un a des notices à écrire et un jeton à garder, l'autre
+   * n'a rien du tout.
+   */
+  | { etat: 'injoignable'; motif: string; partiel: Ramassage | null }
+  | { etat: 'erreur_protocole'; code: string; motif: string; partiel: Ramassage | null };
 
 export interface SourceOai {
   /** L'URL de base de l'entrepôt distant. */
@@ -87,6 +127,15 @@ export interface SourceOai {
   set?: string;
   /** Moissonnage INCRÉMENTAL : ne demander que ce qui a changé depuis. */
   from?: string;
+  /**
+   * REPRENDRE un parcours interrompu au lieu d'en recommencer un.
+   *
+   * ⚠ Quand il est présent, il est envoyé SEUL — `metadataPrefix`, `set` et
+   * `from` sont alors interdits par le protocole, et c'est déjà ce que fait
+   * `construireUrl`. L'appelant décide s'il est encore valide : le client ne
+   * connaît pas l'heure.
+   */
+  reprise?: string;
 }
 
 /** Bornes du parcours, déclarées plutôt que subies. */
@@ -116,8 +165,25 @@ export class ClientOai {
     const notices: NoticeMoissonnee[] = [];
     const suppressions: SuppressionSignalee[] = [];
     const jetonsVus = new Set<string>();
-    let jeton: string | null = null;
+    let jeton: string | null = source.reprise ?? null;
     let pages = 0;
+    // ⚠ LE JETON QUI SERVIRA À REPRENDRE, distinct de `jeton` : celui-ci est
+    // celui qu'on vient d'EMPLOYER, celui-là est celui qu'on n'a pas encore
+    // employé. Les confondre ferait reprendre une page déjà reçue, ou en
+    // sauter une.
+    let reprise: Reprise | null = source.reprise ? { jeton: source.reprise, expire: null } : null;
+
+    /** Ce qui a été ramassé jusqu'ici — rendu même quand le parcours échoue. */
+    const ramassage = (): Ramassage => ({
+      notices,
+      suppressions,
+      pages,
+      dernierDatestamp: plusRecent([...notices, ...suppressions].map((n) => n.datestamp)),
+      reprise,
+    });
+    /** `null` quand rien n'a été ramassé : « rien » et « un peu » ne se valent pas. */
+    const partiel = (): Ramassage | null =>
+      notices.length || suppressions.length ? ramassage() : null;
 
     for (;;) {
       const url = this.construireUrl(source, jeton);
@@ -128,16 +194,24 @@ export class ClientOai {
           headers: { Accept: 'application/xml,text/xml' },
         });
         if (!res.ok) {
-          return { etat: 'injoignable', motif: `Réponse inattendue (HTTP ${res.status}).` };
+          return {
+            etat: 'injoignable',
+            motif: `Réponse inattendue (HTTP ${res.status}).`,
+            partiel: partiel(),
+          };
         }
         xml = await res.text();
       } catch (e) {
-        return { etat: 'injoignable', motif: decrireErreur(e) };
+        return { etat: 'injoignable', motif: decrireErreur(e), partiel: partiel() };
       }
 
       const reponse = parser.parse(xml)?.['OAI-PMH'];
       if (!reponse) {
-        return { etat: 'injoignable', motif: 'Réponse illisible : ce n’est pas du OAI-PMH.' };
+        return {
+          etat: 'injoignable',
+          motif: 'Réponse illisible : ce n’est pas du OAI-PMH.',
+          partiel: partiel(),
+        };
       }
 
       const erreur = premier(reponse.error);
@@ -148,14 +222,18 @@ export class ClientOai {
         // mieux qu'un vide supposé. Le traiter comme une panne ferait retenter
         // sans fin un entrepôt qui va très bien.
         if (code === 'noRecordsMatch') return { etat: 'vide', confirme: true };
-        return { etat: 'erreur_protocole', code, motif: texte(erreur) || code };
+        return { etat: 'erreur_protocole', code, motif: texte(erreur) || code, partiel: partiel() };
       }
 
       const liste = reponse.ListRecords;
       if (!liste) {
         // Pas d'erreur, pas de liste : l'entrepôt a répondu quelque chose
         // d'inattendu. On ne le compte pas comme vide — on ne sait pas.
-        return { etat: 'injoignable', motif: 'Réponse sans ListRecords ni erreur.' };
+        return {
+          etat: 'injoignable',
+          motif: 'Réponse sans ListRecords ni erreur.',
+          partiel: partiel(),
+        };
       }
 
       pages += 1;
@@ -177,26 +255,47 @@ export class ClientOai {
         });
       }
 
-      const suivant = texte(premier(liste.resumptionToken));
-      if (!suivant) break;
+      const brut = premier(liste.resumptionToken);
+      const suivant = texte(brut);
+      if (!suivant) {
+        // L'entrepôt a tout donné : il n'y a plus rien à reprendre.
+        reprise = null;
+        break;
+      }
+      // ⚠ OAI-PMH ANNONCE LUI-MÊME LA PÉREMPTION, quand il la connaît.
+      // L'ignorer nous ferait garder un jeton périmé sans le savoir.
+      const expire =
+        brut && typeof brut === 'object'
+          ? texte((brut as Record<string, unknown>)['@_expirationDate']) || null
+          : null;
       // ⚠ LE JETON RÉPÉTÉ EST LE VRAI MODE DE PANNE : un entrepôt qui rend deux
       // fois le même fait tourner le client à l'infini, et `MAX_PAGES` ne
       // l'arrêterait qu'après cinq cents requêtes inutiles.
       if (jetonsVus.has(suivant)) {
+        // ⚠ CE QUI A ÉTÉ RAMASSÉ RESTE VALIDE, MAIS LA REPRISE EST ANNULÉE.
+        // C'est le seul cas où l'on jette le jeton : il BOUCLE, donc reprendre
+        // avec lui rejouerait exactement la panne. Le parcours suivant repartira
+        // du `from` incrémental, qui, lui, ne peut pas tourner en rond.
         return {
           etat: 'erreur_protocole',
           code: 'resumptionToken_repete',
           motif: 'L’entrepôt rend deux fois le même jeton de reprise : le moissonnage tournerait sans fin.',
+          partiel: partiel() ? { ...ramassage(), reprise: null } : null,
         };
       }
       jetonsVus.add(suivant);
       jeton = suivant;
+      reprise = { jeton: suivant, expire };
 
       if (pages >= this.maxPages) {
+        // ⚠ CE N'EST PLUS UNE PERTE. La borne reste — un parcours sans fin
+        // doit s'arrêter — mais ce qui a été ramassé part avec le jeton qui
+        // permet de continuer, au lieu d'être jeté.
         return {
           etat: 'erreur_protocole',
           code: 'trop_de_pages',
           motif: `Arrêt après ${this.maxPages} pages : l’entrepôt n’a pas fini de rendre ses notices.`,
+          partiel: ramassage(),
         };
       }
     }
@@ -207,16 +306,11 @@ export class ClientOai {
       return { etat: 'vide', confirme: true };
     }
 
-    return {
-      etat: 'moisson',
-      notices,
-      suppressions,
-      pages,
-      // ⚠ LE PLUS RÉCENT, pour le moissonnage incrémental suivant. Calculé sur
-      // les notices ET les suppressions : une suppression fait avancer
-      // l'horloge de la source autant qu'une création.
-      dernierDatestamp: plusRecent([...notices, ...suppressions].map((n) => n.datestamp)),
-    };
+    // ⚠ `dernierDatestamp` est calculé sur les notices ET les suppressions :
+    // une suppression fait avancer l'horloge de la source autant qu'une
+    // création, et l'ignorer ferait redemander à chaque passage tout ce qui a
+    // été supprimé depuis.
+    return { etat: 'moisson', ...ramassage() };
   }
 
   /**

@@ -150,7 +150,12 @@ describe('profil de notice — aucune écriture ne pose le type sans le profil',
     // Sans ce témoin, un équilibrage d'accolades cassé rendrait une liste vide
     // et le garde ci-dessous passerait au vert sans rien regarder.
     expect(charges.length).toBeGreaterThanOrEqual(4);
-    expect(charges.filter((c) => pose(c.corps, 'recordType')).length).toBe(3);
+    // ⚠ PASSÉ DE 3 À 4 le 12 septembre 2026 : `importerNoticesMoissonnees`
+    // (P7-1) est la quatrième charge à poser le type. Le compte a fait son
+    // office — il a obligé à revenir vérifier que cette écriture neuve pose
+    // bien `profile` à côté, ce que le garde ci-dessous confirme. Un
+    // `toBeGreaterThan` l'aurait laissée passer sans que personne la regarde.
+    expect(charges.filter((c) => pose(c.corps, 'recordType')).length).toBe(4);
   });
 
   it('⚠ TOUTE écriture qui pose `recordType` pose aussi `profile`', () => {

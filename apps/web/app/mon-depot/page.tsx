@@ -16,14 +16,17 @@ import { Alert, Badge, Button, Card, Input, Select } from '@/components/ui';
 import { Header } from '@/components/header';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
-/** Les types que l'API accepte — vocabulaire académique, validé côté serveur. */
-const TYPES = [
-  { valeur: 'memoire', libelle: 'Mémoire' },
-  { valeur: 'these', libelle: 'Thèse' },
-  { valeur: 'licence', libelle: 'Mémoire de licence' },
-  { valeur: 'master', libelle: 'Mémoire de master' },
-  { valeur: 'these_unique', libelle: 'Thèse unique' },
-];
+/**
+ * ⚠ DÉRIVÉE de `LIBELLES.typesDeDepot`, plus recopiée — 13 septembre 2026.
+ * Le même vocabulaire vivait dans cinq écrans, et les cinq copies avaient déjà
+ * divergé en moins d'une journée. Ici c'est la FORME qui diffère — un menu
+ * déroulant veut une liste ordonnée —, pas le contenu : on dérive donc l'une de
+ * l'autre au lieu de tenir deux vérités.
+ */
+const TYPES = Object.entries(LIBELLES.typesDeDepot).map(([valeur, libelle]) => ({
+  valeur,
+  libelle,
+}));
 
 interface Depot {
   id: string;

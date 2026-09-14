@@ -8,6 +8,7 @@ import { AccountStatus, ItemStatus, PrismaClient, UserRole } from '@prisma/clien
 import { SearchService } from '../search/search.service';
 import { DigitalCopyService } from '../cataloging/digital-copy.service';
 import { AccessControlService } from '../access-control/access-control.service';
+import { ProvenanceService } from '../moissonnage/provenance.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
 import { normalizeAuthorName } from '../authors/author-name';
 import { OpacSearchDto } from './dto/opac-search.dto';
@@ -137,6 +138,7 @@ export class OpacService {
     private readonly digitalCopy: DigitalCopyService,
     private readonly accessControl: AccessControlService,
     private readonly prisma: PrismaService,
+    private readonly provenances: ProvenanceService,
   ) {}
 
   /**
@@ -560,11 +562,32 @@ export class OpacService {
     // Mots-clés aplatis en tableau de chaînes (comme côté cataloging).
     reponse.keywords = ligne.keywords.map((lien) => lien.keyword.name);
 
+    // ⚠ LA PROVENANCE EST SERVIE AUX DEUX, MEMBRE OU NON — P7-3.
+    //
+    // C'est la décision 1 du brief : « ce qui arrive par moissonnage reste
+    // marqué comme tel ». Une notice venue d'une autre école qui se présente
+    // comme une notice catalloguée est le faux que cette décision interdit, et
+    // il ne dépend pas de qui regarde. La masquer au visiteur anonyme serait
+    // même l'inverse de l'objet : c'est lui qu'on renvoie vers l'origine.
+    //
+    // ⚠ 27ᵉ CLÉ DU CONTRAT, ET C'EST UNE DÉCISION ÉCRITE. Le contrat était gelé
+    // à 26 clés pour protéger des APK déployés (I7) — contre les RETRAITS. Un
+    // AJOUT est sans effet sur eux, et le test de caractérisation existe
+    // précisément pour qu'il ne se fasse pas par distraction : il a fallu venir
+    // ici, et l'écrire.
+    const provenance = await this.provenances.provenance(db, id);
+
     if (!member) {
       reponse.items = [];
       reponse.availability = null;
       reponse.digitalCopy = null;
       reponse.membersOnly = true;
+      // ⚠ EN DERNIER, ET DANS LES DEUX BRANCHES. En dernier parce qu'une clé
+      // neuve s'ajoute à la fin : un filet qui compare des octets lit alors un
+      // ajout, pas une permutation. Dans les deux parce que la provenance ne
+      // dépend pas de qui regarde — et c'est le visiteur anonyme qu'on renvoie
+      // vers l'école d'origine.
+      reponse.provenance = provenance;
       return reponse;
     }
 
@@ -584,6 +607,7 @@ export class OpacService {
       ? { fileFormat: ligne.digitalCopy.fileFormat }
       : null;
     reponse.membersOnly = false;
+    reponse.provenance = provenance;
     return reponse;
   }
 

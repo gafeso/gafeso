@@ -171,11 +171,74 @@ describe('⚠ Et la MESURE : le XML produit ne porte aucune adresse de document'
         'http://purl.org/dc/elements/1.1/', // Dublin Core
         'http://www.ndltd.org', // ETD-MS
         baseUrl, // l'entrepôt lui-même
+        // ⚠ P7-2 : LA LOCALISATION D'UNE NOTICE, ET ELLE SEULE.
+        //
+        // Ce garde annonçait le geste : « rien n'empêche quelqu'un d'ajouter
+        // demain, pour rendre service, un <dc:identifier>https://…</…> ». Il
+        // l'a attrapé le jour où je l'ai fait. La question qu'il pose est la
+        // bonne — cette adresse mène-t-elle à un DOCUMENT ?
+        //
+        // Elle mène à `/opac/resoudre/oai:<école>:<uuid>`, qui rend la NOTICE
+        // publique : le contrat de `contrat-notice-publique.ts` ne porte ni
+        // clé d'objet, ni URL de fichier, et projette `digitalCopy` sur son
+        // seul `fileFormat`. Le fichier reste derrière `/opac/records/:id/read`,
+        // qui passe par `getRecordAccessStatus` — donc par l'embargo.
+        //
+        // ⚠ ON ADMET LE CHEMIN, PAS L'ORIGINE. Admettre l'origine entière
+        // (`new URL(baseUrl).origin`) rouvrirait la porte pour tout ce qui est
+        // servi par le même serveur — à commencer par une URL de document. Le
+        // préfixe est donc le plus étroit qui laisse passer ce qu'on publie.
+        `${new URL(baseUrl).origin}/opac/resoudre/`,
       ];
       const urls = [...xml.matchAll(/https?:\/\/[^\s"'<>]+/g)].map((m) => m[0]);
       const suspectes = urls.filter((u) => !ADMISES.some((a) => u.startsWith(a)));
       expect(suspectes, `${prefix} : adresses inattendues dans la sortie OAI`).toEqual([]);
       expect(xml, prefix).not.toMatch(/\.pdf|\.epub/i);
+    }
+  });
+
+  it('⚠ TÉMOIN : une adresse de DOCUMENT sur la même origine échouerait encore', () => {
+    // La tolérance ajoutée en P7-2 admet un CHEMIN, pas une origine. Sans ce
+    // témoin, élargir demain `/opac/resoudre/` en `origin` passerait inaperçu —
+    // et c'est exactement l'élargissement qui rouvrirait la porte.
+    const origine = new URL(baseUrl).origin;
+    const ADMISES = [`${origine}/opac/resoudre/`];
+    const document = `${origine}/opac/records/abc/read`;
+    expect(ADMISES.some((a) => document.startsWith(a))).toBe(false);
+  });
+
+  it('⚠ LA CONDITION DE P6-4 : l’URL résolvable publiée mène à la NOTICE, pas au fichier', async () => {
+    // « Dès qu'une URL résolvable entre dans les métadonnées, un moissonneur
+    // peut atteindre le fichier » — c'est ce que P6-4 avait noté comme
+    // condition de P7. On la mesure plutôt que de la supposer.
+    const { db } = doublure();
+    const xml = await svc.handle(
+      db,
+      tenant,
+      { verb: 'ListRecords', metadataPrefix: 'oai_dc' },
+      baseUrl,
+      now,
+    );
+    const urls = [...xml.matchAll(/https?:\/\/[^\s"'<>]+/g)].map((m) => m[0]);
+    const publiees = urls.filter((u) => u.startsWith(new URL(baseUrl).origin));
+
+    // ⚠ CE TÉMOIN A ÉTÉ CORRIGÉ APRÈS UN CONTRÔLE NÉGATIF QUI NE TOMBAIT PAS.
+    // Il disait seulement « au moins une URL de notre origine » — et l'URL de
+    // l'ENTREPÔT lui-même (dans `<request>`) le satisfaisait. Retirer la
+    // localisation ne faisait donc rien tomber : le test ne regardait pas assez
+    // large, quatrième lecture d'une mutation qui ne casse rien.
+    expect(
+      publiees.filter((u) => u.includes('/opac/resoudre/')).length,
+      'la LOCALISATION n’est pas publiée : `dc:identifier` n’a plus d’adresse résolvable',
+    ).toBeGreaterThan(0);
+    expect(
+      xml,
+      'l’IDENTIFIANT pérenne n’est pas publié — c’est pourtant ce qui survit au déménagement',
+    ).toMatch(/<dc:identifier>oai:[^<]+<\/dc:identifier>/);
+    for (const u of publiees) {
+      expect(u, 'une adresse publiée mène ailleurs que vers une notice').toMatch(
+        /\/oai$|\/opac\/resoudre\//,
+      );
     }
   });
 });

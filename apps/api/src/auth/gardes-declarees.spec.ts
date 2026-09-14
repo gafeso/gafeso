@@ -60,6 +60,23 @@ const PUBLIC_PAR_CONSTRUCTION: Record<string, string> = {
   // règles de collection) : c'est la différence avec les trois routes de
   // `/cataloging` qui ont fui. Là-bas, aucune couche ne filtrait.
   'opac/opac.controller.ts :: Get records/:id': 'notice publique — access-control appliqué dans OpacService',
+  // ⚠ P7-2 : LA RÉSOLUTION D'UN IDENTIFIANT PÉRENNE EST PUBLIQUE PAR
+  // CONSTRUCTION, et elle doit l'être : un identifiant qu'il faut une session
+  // pour résoudre n'est pas résolvable. C'est l'adresse qu'un moissonneur
+  // extérieur lit dans `dc:identifier`.
+  //
+  // Elle rend exactement ce que rend `records/:id` — `OpacService.recordDetail`,
+  // même contrat, même contrôle d'accès dans le service — après avoir vérifié
+  // que l'identifiant désigne bien CETTE école. Le fichier, lui, reste derrière
+  // `records/:id/read`.
+  // ⚠ P7-3 : LA PROVENANCE EST AUSSI PUBLIQUE QUE LES NOTICES QU'ELLE DÉCRIT.
+  // Dire qu'une notice vient d'une autre école n'apprend rien de plus que la
+  // notice elle-même — et c'est au visiteur anonyme qu'elle sert le plus,
+  // puisque c'est lui qu'on renvoie vers l'origine : le fichier n'est pas ici.
+  // Bornée à 100 identifiants pour qu'un `ids=` de dix mille entrées ne
+  // produise pas une requête que personne n'a voulue.
+  'opac/opac.controller.ts :: Get provenances': 'provenance publique des notices moissonnées — aussi publique que les notices',
+  'opac/opac.controller.ts :: Get resoudre/:identifiant': 'résolution publique d’un identifiant pérenne — même contrat que records/:id',
 
   // Connexion et inscription : on ne peut pas exiger d'être connecté pour se
   // connecter.
@@ -340,8 +357,12 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     // ⚠ 58 → 59 le 12 septembre 2026 : `GET /depots/:id/document`. Le compte a
     // fait son office — il a fallu revenir ici, choisir une catégorie, et
     // constater que celle qui convenait n'existait pas encore.
-    expect(sansFonction.length).toBe(59);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(59);
+    // ⚠ 59 → 60 le même jour : `GET /opac/resoudre/:identifiant` (P7-2). Même
+    // office — il a fallu revenir ici et vérifier que la route publique rend
+    // exactement ce que rend `records/:id`, et rien de plus.
+    // ⚠ 60 → 61 : `GET /opac/provenances` (P7-3). Même office.
+    expect(sansFonction.length).toBe(61);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(61);
   });
 });
 

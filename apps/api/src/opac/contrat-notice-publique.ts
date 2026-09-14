@@ -108,6 +108,20 @@ export const CLES_DU_CONTRAT: string[] = [
   'availability',
   RELATION_PROJETEE,
   'membersOnly',
+  /**
+   * ⚠ P7-3, ET CE N'EST PAS UNE COLONNE. La provenance est CALCULÉE : elle
+   * vient de `harvested_records`, pas de `biblio_records`. Elle n'entre donc ni
+   * dans `COLONNES_SERVIES` ni dans le `select` — mais elle entre dans le
+   * contrat, parce que c'est lui qui décrit la RÉPONSE.
+   *
+   * `null` pour une notice catalloguée localement, un objet pour une notice
+   * moissonnée. C'est la décision 1 du brief P7 rendue lisible : ce qui arrive
+   * par moissonnage reste marqué comme tel.
+   *
+   * ⚠ EN DERNIER : une clé neuve s'ajoute à la fin, pour qu'un filet qui
+   * compare des octets lise un AJOUT et non une permutation.
+   */
+  'provenance',
 ];
 
 /**

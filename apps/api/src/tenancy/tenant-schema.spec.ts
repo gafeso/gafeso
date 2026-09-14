@@ -83,7 +83,12 @@ describe('tenant-schema — génération DDL', () => {
 
   it('ajoute les clés étrangères internes (non copiées par LIKE)', () => {
     const fkStatements = stmts.filter((s) => s.includes('ADD CONSTRAINT'));
-    expect(fkStatements.length).toBe(20);
+    // ⚠ PASSÉ DE 20 À 22 le 12 septembre 2026 : les deux clés du moissonnage
+    // (P7-1). Ce compte a fait son office — la migration créait déjà ces
+    // contraintes sur les schémas EXISTANTS, et sans ces deux entrées une
+    // école NEUVE aurait reçu les mêmes tables sans contrainte. Deux chemins
+    // de création, une seule vérité, et rien n'aurait dit laquelle manquait.
+    expect(fkStatements.length).toBe(22);
     expect(
       fkStatements.some(
         (s) =>

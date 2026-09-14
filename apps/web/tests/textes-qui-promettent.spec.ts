@@ -86,17 +86,75 @@ function valeur(cle: string): unknown {
  * est volontairement court : au-delà, on ne mesure plus un lien mais une
  * coïncidence de fichier.
  */
+/**
+ * Les alias d'un fichier de test : `const T = LIBELLES.<bloc>` — puis `T.cle`.
+ *
+ * ⚠ POURQUOI CETTE FONCTION EXISTE. Le garde ne cherchait que `LIBELLES.<cle>`
+ * littéral. Or la moitié des écrans écrivent `const T = LIBELLES.monDepot`, et
+ * leurs tests suivent : une assertion parfaitement valide sur `T.retirer` lui
+ * était invisible, et il la réclamait quand même.
+ *
+ * Contourné TROIS FOIS le 12 septembre 2026 — en réécrivant l'assertion au
+ * chemin complet — avant d'être corrigé. Un garde qu'on contourne trois fois
+ * par la même manœuvre n'enseigne plus rien : il impose une forme d'écriture
+ * sans que personne se souvienne pourquoi.
+ */
+function aliasDuFichier(src: string): Map<string, string> {
+  const alias = new Map<string, string>();
+  for (const m of src.matchAll(/\bconst\s+(\w+)\s*=\s*LIBELLES\.(\w+)\s*;/g)) {
+    alias.set(m[1], m[2]);
+  }
+  return alias;
+}
+
 function proprieteEprouvee(cle: string): boolean {
+  const [bloc, feuille] = [cle.slice(0, cle.indexOf('.')), cle.slice(cle.indexOf('.') + 1)];
   return sourcesDeTest.some((src) => {
+    // Toutes les écritures qui DÉSIGNENT ce libellé dans ce fichier : le chemin
+    // complet, et chaque alias qui pointe vers son bloc.
+    const formes = [`LIBELLES.${cle}`];
+    for (const [nom, vise] of aliasDuFichier(src)) {
+      if (vise === bloc) formes.push(`${nom}.${feuille}`);
+    }
     const lignes = src.split('\n');
     for (let i = 0; i < lignes.length; i += 1) {
-      if (!lignes[i].includes(`LIBELLES.${cle}`)) continue;
+      if (!formes.some((f) => lignes[i].includes(f))) continue;
       const fenetre = lignes.slice(i, i + 4).join('\n');
       if (fenetre.includes('toMatch')) return true;
     }
     return false;
   });
 }
+
+describe('⚠ le garde voit les ALIAS, pas seulement le chemin complet', () => {
+  /**
+   * ⚠ TÉMOINS SYNTHÉTIQUES : deux entrées dont la réponse est connue PAR
+   * CONSTRUCTION, et qui ne viennent pas du code mesuré. Un témoin tiré de ce
+   * qu'on mesure est circulaire — il confirme ce qu'on croyait déjà.
+   */
+  it('reconnaît `const T = LIBELLES.bloc`', () => {
+    const alias = aliasDuFichier("const T = LIBELLES.monDepot;\nconst U = LIBELLES.perte;");
+    expect(alias.get('T')).toBe('monDepot');
+    expect(alias.get('U')).toBe('perte');
+  });
+
+  it('⚠ ne reconnaît PAS ce qui lui ressemble sans en être', () => {
+    // La confusion PLAUSIBLE, pas un négatif quelconque : une destructuration
+    // et un alias vers autre chose que LIBELLES.
+    const alias = aliasDuFichier(
+      "const { monDepot } = LIBELLES;\nconst T = AUTRECHOSE.monDepot;\nconst V = LIBELLES;",
+    );
+    expect(alias.size).toBe(0);
+  });
+
+  it('⚠ une assertion écrite en ALIAS est vue — tout l’objet du correctif', () => {
+    // Contourné trois fois le 12 septembre 2026 en réécrivant au chemin
+    // complet. `depots-a-valider.spec.tsx` porte `const T = LIBELLES.depotsAValider`
+    // et ses assertions de propriété sont écrites `expect(T.refuseSuite)`.
+    expect(proprieteEprouvee('depotsAValider.refuseSuite')).toBe(true);
+    expect(proprieteEprouvee('depotsAValider.validerSuite')).toBe(true);
+  });
+});
 
 describe('⚠ un texte qui promet est éprouvé sur sa propriété', () => {
   for (const t of TEXTES_QUI_PROMETTENT.filter((x) => x.nature === 'promet')) {
