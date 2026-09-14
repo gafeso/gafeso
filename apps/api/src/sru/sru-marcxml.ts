@@ -16,6 +16,19 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   removeNSPrefix: true,
+  // ⚠ LES RÉFÉRENCES NUMÉRIQUES DE CARACTÈRES SONT DÉCODÉES, et il a fallu
+  // une traversée réelle pour le voir. `fast-xml-parser` décode `&amp;` par
+  // défaut, mais PAS `&#x301;` ni `&#233;` sans `htmlEntities`.
+  //
+  // Mesuré le 13 septembre 2026 contre la Library of Congress, qui les emploie
+  // pour les diacritiques : une recherche rendait le titre
+  // « L'E&#x301;tranger a&#x300; la mer » — affiché tel quel à la
+  // bibliothécaire, et pré-rempli tel quel dans sa notice.
+  //
+  // ⚠ Le défaut est SILENCIEUX par construction : il produit un titre, donc
+  // rien ne lève et rien ne manque. Seule une lecture par un œil humain — ou
+  // une recette qui affiche ce qu'elle reçoit — le montre.
+  htmlEntities: true,
   parseTagValue: false,
   trimValues: true,
 });
@@ -26,11 +39,34 @@ function toArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+/**
+ * ⚠ NORMALISATION UNICODE — NFC, à la frontière où le texte d'un tiers entre.
+ *
+ * *Trouvé le 13 septembre 2026, en traversant le client SRU contre la Library
+ * of Congress.* Elle émet ses diacritiques en forme DÉCOMPOSÉE : « Ouédraogo »
+ * y est `O u e ◌́ d r a o g o` — seize caractères affichés, dix-huit en
+ * mémoire.
+ *
+ * ```
+ *   brut « Ouédraogo, Aïcha »  longueur 18   === 'Ouédraogo, Aïcha' → FAUX
+ *   NFC  « Ouédraogo, Aïcha »  longueur 16   ===                    → vrai
+ * ```
+ *
+ * ⚠ **CE QUE ÇA COÛTE, ET C'EST SILENCIEUX** : les deux chaînes s'affichent à
+ * l'identique. Mais le fichier d'autorités déduplique par NOM EXACT — une fiche
+ * « Ouédraogo » créée à la main et une autre pré-remplie depuis la LoC
+ * deviennent **deux personnes différentes**, et la déduplication à la source,
+ * qui est tout l'intérêt du fichier d'autorités, est perdue sans que rien ne le
+ * signale.
+ *
+ * On normalise donc ICI, au bord, une fois — jamais en aval, où il faudrait y
+ * penser à chaque comparaison.
+ */
 function textOf(node: unknown): string {
   if (node == null) return '';
-  if (typeof node === 'string') return node;
+  if (typeof node === 'string') return node.normalize('NFC');
   if (typeof node === 'object' && '#text' in (node as Record<string, unknown>)) {
-    return String((node as Record<string, unknown>)['#text'] ?? '');
+    return String((node as Record<string, unknown>)['#text'] ?? '').normalize('NFC');
   }
   return '';
 }

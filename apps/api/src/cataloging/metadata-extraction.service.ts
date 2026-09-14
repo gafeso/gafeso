@@ -144,7 +144,13 @@ export class MetadataExtractionService {
    */
   private extractFromEpub(buffer: Buffer): ExtractedFileMetadata {
     const zip = new AdmZip(buffer);
-    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      // ⚠ Même raison que pour le SRU et le client OAI : un `&#233;` non décodé
+      // entrerait dans le titre d'une notice depuis l'OPF d'un EPUB.
+      htmlEntities: true,
+    });
 
     const containerEntry = zip.getEntry('META-INF/container.xml');
     if (!containerEntry) return EMPTY_METADATA;

@@ -51,6 +51,29 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
       'retrouve un vieux signet croit la fonction supprimée.',
   },
   {
+    cle: 'connexion.codeNonPartiDefinitif',
+    nature: 'promet',
+    raison:
+      'Repli de double authentification : la personne a perdu son appareil TOTP, ' +
+      'ce chemin est sa SEULE porte. Doit nommer à qui s’adresser — et surtout ' +
+      'NE PAS proposer de réessayer : la messagerie n’est pas configurée, rien ' +
+      'ne partira jamais, et « réessayez » est une impasse polie.',
+  },
+  {
+    cle: 'connexion.codeNonPartiReessayable',
+    nature: 'promet',
+    raison:
+      'Même porte unique, autre motif : le serveur a refusé, un nouvel essai a ' +
+      'du sens. Doit le proposer ET nommer le recours si rien n’arrive.',
+  },
+  {
+    cle: 'connexion.codeNonParti',
+    nature: 'promet',
+    raison:
+      'Motif inconnu : on ne devine pas lequel, donc on ne prescrit pas de ' +
+      'geste technique. Doit nommer le recours humain, qui vaut dans tous les cas.',
+  },
+  {
     cle: 'inscription.emailNonParti',
     nature: 'promet',
     raison:

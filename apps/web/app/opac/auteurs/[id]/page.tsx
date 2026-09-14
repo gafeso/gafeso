@@ -1,107 +1,47 @@
-'use client';
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import { auteurPublic } from '@/lib/server-api';
+import { FicheAuteur, type AuthorDetail } from './fiche-auteur';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
-import { getToken } from '@/lib/session';
-import { Card } from '@/components/ui';
-
-interface Work {
-  recordId: string;
-  title: string;
-  year: number | null;
-  recordType: string;
-}
-interface WorksByRole {
-  role: string;
-  count: number;
-  works: Work[];
-}
-interface AuthorDetail {
-  id: string;
-  displayName: string;
-  bio: string | null;
-  birthYear: number | null;
-  deathYear: number | null;
-  worksByRole: WorksByRole[];
-  totalWorks: number;
-}
-
-// Formule par rôle (« Auteur de », « Directeur de mémoire de » — utile aux
-// enseignants) ; repli sur le code brut pour un rôle non prévu.
-const ROLE_HEADINGS: Record<string, string> = {
-  AUTEUR_PRINCIPAL: 'Auteur de',
-  AUTEUR_SECONDAIRE: 'Co-auteur de',
-  DIRECTEUR_MEMOIRE: 'Directeur de mémoire / de thèse de',
-};
-
-function lifespan(a: AuthorDetail): string {
-  if (!a.birthYear && !a.deathYear) return '';
-  return ` (${a.birthYear ?? '?'}–${a.deathYear ?? ''})`;
+/**
+ * Fiche publique d'un auteur — enveloppe SERVEUR.
+ *
+ * ⚠ POURQUOI ELLE EXISTE, et c'est le même motif que pour la notice, mesuré le
+ * 14 septembre 2026 :
+ *
+ *   · la page rendait **200** pour un auteur qui n'existe pas, alors que l'API
+ *     répond 404. Correct pour un lecteur, qui lit « Auteur indisponible » —
+ *     indétectable par une machine, qui ne distingue pas une fiche retirée
+ *     d'une fiche vivante ;
+ *   · et son HTML ne portait que la coque : 65 octets de texte, aucun `<h1>`.
+ *     Un moteur n'y voyait RIEN.
+ *
+ * ⚠ CE QU'ELLE NE FAIT PAS : décider 404 sur une panne. `auteurPublic` rend
+ * trois réponses, pas deux — une API injoignable laisse passer le rendu, et la
+ * fiche dit elle-même son échec. Déclarer disparu ce qu'on n'a pas pu joindre
+ * le ferait savoir aux moteurs, et un désindexage ne se répare pas tout seul.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const { etat, auteur } = await auteurPublic(id);
+  // ⚠ Mêmes trois états que la page : on ne titre que ce qu'on SAIT. Sinon on
+  // retombe sur le segment « Auteurs », qui reste vrai.
+  if (etat !== 'existe') return {};
+  const nom = (auteur as AuthorDetail | null)?.displayName;
+  return nom ? { title: nom } : {};
 }
 
-export default function AuthorDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [author, setAuthor] = useState<AuthorDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<AuthorDetail>(`/opac/authors/${id}`, {}, getToken())
-      .then(setAuthor)
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Auteur indisponible.'),
-      );
-  }, [id]);
-
-  if (error) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-8">
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      </main>
-    );
-  }
-  if (!author) return null;
-
-  return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
-      <Link href="/opac/auteurs" className="text-sm text-muted hover:text-ink">
-        ← Tous les auteurs
-      </Link>
-
-      <h1 className="mt-4 font-serif text-3xl font-bold">
-        {author.displayName}
-        <span className="text-lg font-normal text-muted">{lifespan(author)}</span>
-      </h1>
-      <p className="mt-1 text-sm text-muted">
-        {author.totalWorks} œuvre{author.totalWorks > 1 ? 's' : ''} dans le catalogue
-      </p>
-      {author.bio && <p className="mt-3 text-sm">{author.bio}</p>}
-
-      {author.worksByRole.length === 0 ? (
-        <p className="mt-8 text-sm text-muted">Aucune œuvre rattachée.</p>
-      ) : (
-        author.worksByRole.map((group) => (
-          <section key={group.role} className="mt-8">
-            <h2 className="font-serif text-xl font-bold">
-              {ROLE_HEADINGS[group.role] ?? group.role}{' '}
-              <span className="text-sm font-normal text-muted">({group.count})</span>
-            </h2>
-            <div className="mt-3 flex flex-col gap-2">
-              {group.works.map((w) => (
-                <Card key={w.recordId} className="!p-3">
-                  <Link href={`/opac/${w.recordId}`} className="text-ocre underline">
-                    {w.title}
-                  </Link>
-                  {w.year && <span className="ml-2 text-xs text-muted">{w.year}</span>}
-                </Card>
-              ))}
-            </div>
-          </section>
-        ))
-      )}
-    </main>
-  );
+export default async function FicheAuteurPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const { etat, auteur } = await auteurPublic(id);
+  if (etat === 'introuvable') notFound();
+  return <FicheAuteur initial={(auteur as AuthorDetail) ?? null} />;
 }

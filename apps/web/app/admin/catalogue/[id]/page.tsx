@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -341,7 +342,12 @@ export default function AdminRecordPage() {
       </p>
     );
   }
-  if (!record) return null;
+  if (!record)
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+        <p className="text-sm text-muted">{LIBELLES.chargements.notice}</p>
+      </main>
+    );
 
   return (
     <div>

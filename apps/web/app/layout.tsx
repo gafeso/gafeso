@@ -1,12 +1,34 @@
 import type { Metadata } from 'next';
+import { metadonneesRacine } from '@/lib/titre-onglet';
 import { headers } from 'next/headers';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 
-export const metadata: Metadata = {
-  title: 'Gafeso',
-  description: 'Bibliothèque physique et numérique de votre établissement',
-};
+/**
+ * ⚠ LE TITRE D'ONGLET NE DISAIT PAS DE QUELLE BIBLIOTHÈQUE IL S'AGIT.
+ *
+ * Constaté le 14 septembre 2026 en balayant le chemin PUBLIC sans cookie :
+ * toutes les pages sauf l'accueil portaient `<title>Gafeso</title>` — le nom du
+ * PRODUIT. Une notice dont le `<h1>` dit « Textiles et motifs en Afrique de
+ * l'Ouest » s'annonçait « Gafeso » dans l'onglet, dans un signet, et dans
+ * l'index d'un moteur.
+ *
+ * ⚠ C'est un défaut d'ABSENCE, et aucune mutation ne pouvait le révéler : rien
+ * n'était faux, il n'y avait simplement rien d'écrit. Il s'est trouvé en
+ * ÉNUMÉRANT ce que chaque page publique sert et en demandant qui le montre.
+ *
+ * Le gabarit racine est le seul endroit qui corrige toute la famille : il pose
+ * le nom de l'école en DÉFAUT et en GABARIT, et chaque page ne déclare plus que
+ * son propre segment. Une page ajoutée demain hérite de la propriété sans que
+ * personne y pense — c'est un invariant, pas cinq corrections.
+ *
+ * Le coût est nul : `/tenancy/home` est déjà mis en cache par Next (tags +
+ * revalidate, voir lib/server-api.ts) et toutes les routes sont déjà dynamiques
+ * pour le nonce.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  return metadonneesRacine();
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // SÉCURITÉ / CSP (bug prod 2026-07-16) : la CSP à nonce (middleware.ts) exige

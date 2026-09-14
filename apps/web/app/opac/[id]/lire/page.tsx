@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -88,7 +89,12 @@ export default function LirePage() {
     );
   }
 
-  if (!data) return null;
+  if (!data)
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+        <p className="text-sm text-muted">{LIBELLES.chargements.document}</p>
+      </main>
+    );
 
   return (
     <div className="flex h-screen flex-col">

@@ -293,7 +293,12 @@ export default function CollectionDetailPage() {
   if (error && !collection) {
     return <Alert tone="error">{error}</Alert>;
   }
-  if (!collection) return null;
+  if (!collection)
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+        <p className="text-sm text-muted">{LIBELLES.chargements.collection}</p>
+      </main>
+    );
 
   return (
     <div>

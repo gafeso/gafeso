@@ -12,7 +12,20 @@
  *
  * ⚠ ET LA MOITIÉ QUI COMPTE AUTANT : une PANNE ne doit pas rendre 404. Déclarer
  * disparue une notice qu'on n'a simplement pas pu joindre, c'est le dire aussi
- * aux moteurs qui indexent. `noticeExiste` rend donc trois réponses, pas deux.
+ * aux moteurs qui indexent. La fonction rend donc trois réponses, pas deux.
+ *
+ * ⚠ CE FICHIER ÉPROUVAIT LA MAUVAISE FONCTION, jusqu'au 14 septembre 2026.
+ *
+ * Il portait ses cinq assertions sur une jumelle que PLUS RIEN n'appelait,
+ * depuis que `noticePublique` rend l'existence ET le contenu en un seul appel.
+ * La correspondance « code HTTP → état » de la fonction qui sert réellement la
+ * page n'était donc éprouvée NULLE PART : le test de l'enveloppe la DOUBLE
+ * (`vi.spyOn`), donc il ne mesure que l'usage qu'elle en fait.
+ *
+ * ⚠ Cinq assertions vertes gardaient du code mort. C'est pire qu'une absence de
+ * test : on ne cherche plus. Et ça ne s'est pas vu en lisant le fichier — ça
+ * s'est vu en écrivant le MÊME test pour l'auteur, puis en demandant par
+ * symétrie qui gardait la notice.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +34,7 @@ vi.mock('next/headers', () => ({
   headers: async () => new Map([['host', 'localhost:3000']]),
 }));
 
-const { noticeExiste } = await import('@/lib/server-api');
+const { noticePublique } = await import('@/lib/server-api');
 
 function brancher(reponse: { status: number } | 'panne') {
   vi.stubGlobal(
@@ -48,17 +61,17 @@ afterEach(() => {
 describe('existence d’une notice', () => {
   it('200 ⇒ elle existe', async () => {
     brancher({ status: 200 });
-    expect(await noticeExiste('r1')).toBe('existe');
+    expect((await noticePublique('r1')).etat).toBe('existe');
   });
 
   it('404 ⇒ introuvable — c’est le seul cas qui autorise un 404 de page', async () => {
     brancher({ status: 404 });
-    expect(await noticeExiste('r1')).toBe('introuvable');
+    expect((await noticePublique('r1')).etat).toBe('introuvable');
   });
 
   it('⚠ 500 ⇒ INDISPONIBLE, jamais introuvable', async () => {
     brancher({ status: 500 });
-    expect(await noticeExiste('r1')).toBe('indisponible');
+    expect((await noticePublique('r1')).etat).toBe('indisponible');
   });
 
   it('⚠ API injoignable ⇒ INDISPONIBLE, jamais introuvable', async () => {
@@ -66,13 +79,13 @@ describe('existence d’une notice', () => {
     // le catalogue. C'est exactement le défaut « une non-réponse écrite comme
     // un fait », appliqué au code de réponse HTTP.
     brancher('panne');
-    expect(await noticeExiste('r1')).toBe('indisponible');
+    expect((await noticePublique('r1')).etat).toBe('indisponible');
   });
 
   it('l’identifiant est échappé dans l’URL', async () => {
     // Un identifiant venu de l'URL ne se concatène pas tel quel.
     brancher({ status: 200 });
-    await noticeExiste('a b/c');
+    await noticePublique('a b/c');
     const appel = (globalThis.fetch as unknown as { mock: { calls: string[][] } }).mock.calls[0][0];
     expect(String(appel)).toContain('a%20b%2Fc');
   });

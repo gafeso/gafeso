@@ -165,7 +165,16 @@ async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
  * rien d'autre : la fiche elle-même reste chargée par le composant client, avec
  * la session du lecteur quand il en a une.
  */
-export type ExistenceNotice = 'existe' | 'introuvable' | 'indisponible';
+export type ExistencePublique = 'existe' | 'introuvable' | 'indisponible';
+
+/**
+ * ⚠ ANCIEN NOM, CONSERVÉ. Le type ne décrit pas une notice mais l'EXISTENCE
+ * d'une ressource publique — la même question se pose pour un auteur, et la
+ * réponse a les mêmes trois états. Fondre les deux est ici JUSTE : ils
+ * décrivent bien le même objet, contrairement aux vocabulaires de dépôt qui se
+ * ressemblaient sans décrire la même chose.
+ */
+export type ExistenceNotice = ExistencePublique;
 
 /**
  * Existence ET contenu public d'une notice, en UN seul appel.
@@ -190,6 +199,54 @@ export type ExistenceNotice = 'existe' | 'introuvable' | 'indisponible';
  * et complète. L'inverse — rendre côté serveur avec la session — publierait
  * dans le HTML ce que le contrôle d'accès réserve aux membres.
  */
+/**
+ * Existence ET contenu public d'un auteur, en UN seul appel.
+ *
+ * ⚠ MESURÉ LE 14 SEPTEMBRE 2026, et la fiche auteur portait les DEUX défauts que
+ * la fiche notice avait déjà corrigés :
+ *
+ *   · `/opac/auteurs/<inexistant>` répondait **200** quand l'API répond 404 ;
+ *   · le HTML servi ne portait que la coque — 65 octets de texte, aucun `<h1>`.
+ *
+ * C'était la seule page de DÉTAIL publique dans ce cas. Et ces adresses
+ * circulent : chaque notice renvoie vers ses auteurs.
+ *
+ * ⚠ CE QUE J'AI ÉVITÉ EN CHERCHANT D'ABORD : écrire un second mécanisme. Le
+ * patron existait, éprouvé, commenté — il a suffi de le suivre. Un commentaire
+ * qui explique un choix ne sert qu'à qui le croise.
+ *
+ * ⚠ L'APPEL EST ANONYME, comme pour la notice : le serveur rend la vue PUBLIQUE,
+ * celle qu'un moteur doit voir. Le composant client rappelle ensuite l'API avec
+ * le jeton du lecteur quand il y en a un.
+ */
+export async function auteurPublic(
+  id: string,
+): Promise<{ etat: ExistencePublique; auteur: unknown | null }> {
+  const host = await currentHost();
+  const url = `${apiUrl()}/opac/authors/${encodeURIComponent(id)}?__host=${encodeURIComponent(host)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'x-forwarded-host': host },
+      next: { revalidate: 60 },
+    });
+    if (res.status === 404) return { etat: 'introuvable', auteur: null };
+    if (!res.ok) {
+      console.error(`[server-api] ${url} → HTTP ${res.status} (existence d'auteur)`);
+      return { etat: 'indisponible', auteur: null };
+    }
+    return { etat: 'existe', auteur: await res.json() };
+  } catch (err) {
+    // ⚠ Une panne n'est PAS une absence. Rendre 404 ici dirait aux moteurs que
+    // l'auteur n'existe pas, alors qu'on n'a simplement pas pu le joindre — et
+    // un désindexage se répare en demandant une réindexation, pas tout seul.
+    console.error(
+      `[server-api] échec du fetch ${url} : ${(err as Error).message}. ` +
+        `L'auteur n'est PAS déclaré introuvable pour autant.`,
+    );
+    return { etat: 'indisponible', auteur: null };
+  }
+}
+
 export async function noticePublique(
   id: string,
 ): Promise<{ etat: ExistenceNotice; notice: unknown | null }> {
@@ -217,10 +274,6 @@ export async function noticePublique(
   }
 }
 
-/** Existence seule — conservée pour les appelants qui n'ont pas besoin du corps. */
-export async function noticeExiste(id: string): Promise<ExistenceNotice> {
-  return (await noticePublique(id)).etat;
-}
 
 export async function fetchTenantHome(): Promise<TenantHome | null> {
   return fetchTenant<TenantHome>('/tenancy/home', await currentHost());

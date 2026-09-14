@@ -31,7 +31,22 @@ const TYPES = Object.entries(LIBELLES.typesDeDepot).map(([valeur, libelle]) => (
 interface Depot {
   id: string;
   status: string;
-  /** ⚠ Ne se pose qu'à la CRÉATION : aucune route ne le modifie ensuite. */
+  /**
+   * ⚠ CE COMMENTAIRE DISAIT « aucune route ne le modifie ensuite ». C'était vrai
+   * quand il a été écrit, et faux depuis que le backend a livré
+   * `PATCH /depots/:id/directeur` — que CET ÉCRAN appelle, quatre-vingt-dix
+   * lignes plus bas. Corrigé le 14 septembre 2026.
+   *
+   * ⚠ La famille est connue — « le commentaire qui JUSTIFIE un état meurt avec
+   * l'état » — mais celui-ci ajoute quelque chose : d'ordinaire la
+   * justification et ce qu'elle justifie vivent dans des fichiers différents,
+   * et c'est ce qui les rend invisibles. Ici ils étaient dans le MÊME fichier,
+   * à quatre-vingt-dix lignes l'un de l'autre, et ça n'a rien changé. On ne
+   * relit pas un fichier qui marche, même le sien.
+   *
+   * Aujourd'hui : posé à la création, modifiable par le déposant tant que le
+   * dépôt est un brouillon, et réattribuable par le personnel une fois soumis.
+   */
   directorId: string | null;
   title: string;
   authorName: string;

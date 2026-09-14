@@ -24,6 +24,106 @@
 
 export const LIBELLES = {
   /**
+   * ⚠ LES TITRES D'ONGLET SONT DES TEXTES VISIBLES. Ils s'affichent dans
+   * l'onglet du navigateur, dans un signet, dans un résultat de moteur et dans
+   * l'aperçu d'un lien partagé. Ils sortent donc du code comme le reste.
+   *
+   * ⚠ ET CE SONT LES SEULS QUI QUITTENT L'APPLICATION. Le reste de ce fichier
+   * s'affiche à quelqu'un qui est déjà là ; ceux-ci partent dans l'index d'un
+   * moteur et dans les signets de gens qu'on ne reverra peut-être pas. C'est
+   * la borne de « quand le faux silencieux SORT de l'application » appliquée
+   * non plus à un code HTTP mais à une IDENTITÉ.
+   *
+   * Le nom de l'ÉCOLE est composé par le gabarit racine ; ces libellés ne
+   * portent que le segment propre à la page.
+   */
+  /**
+   * L'écran de CONNEXION — et le repli de double authentification, qui est le
+   * texte le plus lourd de conséquence de tout ce fichier.
+   *
+   * ⚠ CE QUI ÉTAIT FAUX, mesuré le 14 septembre 2026. Le bouton affichait
+   * « Code envoyé par email ✓ » dès que l'appel rendait 200 — **sans lire ce
+   * que l'API répondait**. Or elle rend le sort RÉEL de l'envoi depuis le
+   * 12 septembre, et son commentaire dit pourquoi : « quelqu'un qui a perdu son
+   * appareil TOTP n'a plus que ce chemin ».
+   *
+   * Le backend avait livré sa moitié. La nôtre n'a jamais été branchée : la
+   * correction existait, et le mensonge restait affiché.
+   *
+   * ⚠ C'est « UN FAUX QUI RETIRE LE SEUL RECOURS » dans sa forme la plus pure.
+   * La personne ne peut pas se connecter, elle attend devant une boîte vide,
+   * et rien ne lui dit qu'il faut demander de l'aide.
+   */
+  connexion: {
+    /**
+     * ⚠ NE S'AFFICHE QUE SI L'API A DIT `sent: true`. Jamais sur un simple 200 :
+     * c'est exactement la distinction qui manquait.
+     */
+    codeEnvoye: 'Code envoyé par email ✓ (renvoyer)',
+    codeDemander: 'Recevoir un code par email',
+    /**
+     * `smtp_absent` — rien n'est parti et rien ne partira tant que la
+     * configuration ne change pas. Dire « réessayez » ici serait cruel : le
+     * texte nomme donc la SORTIE, et elle est humaine.
+     */
+    codeNonPartiDefinitif:
+      'Le code n’a PAS pu être envoyé : la messagerie de votre établissement n’est pas ' +
+      'configurée, et un nouvel essai n’y changera rien. Demandez à votre bibliothèque ou ' +
+      'à votre administrateur de vous rouvrir l’accès.',
+    /** `smtp_error` — le serveur a refusé ; un nouvel essai a du sens. */
+    codeNonPartiReessayable:
+      'Le code n’a PAS pu être envoyé : la messagerie a refusé le message. Réessayez dans ' +
+      'un instant ; si rien n’arrive, demandez à votre bibliothèque de vous rouvrir l’accès.',
+    /** Tout autre motif — on ne devine pas lequel, on donne la même sortie. */
+    codeNonParti:
+      'Le code n’a PAS pu être envoyé. Demandez à votre bibliothèque ou à votre ' +
+      'administrateur de vous rouvrir l’accès.',
+  },
+
+
+  /**
+   * ⚠ LES ÉCRANS QUI NE MONTRAIENT RIEN PENDANT QU'ILS CHARGENT.
+   *
+   * Relevé le 14 septembre 2026 : cinq `if (!x) return null` sur des écrans de
+   * détail. Deux sont couverts par le rendu serveur ; trois restaient BLANCS
+   * pendant tout leur chargement — dont le lecteur, qui télécharge le document
+   * entier avant d'afficher quoi que ce soit.
+   *
+   * ⚠ Un écran blanc n'affirme rien de faux — c'est pourquoi il échappe à la
+   * famille des non-réponses écrites comme des faits. Mais sur une connexion
+   * lente, et c'est le contexte de ce produit, il se lit comme une PANNE. Le
+   * produit porte partout ailleurs un libellé de chargement : ces trois-là
+   * dérogeaient à sa propre convention.
+   */
+  chargements: {
+    /** ⚠ Dit ce qu'on attend, pas seulement qu'on attend : ici le fichier lui-même. */
+    document: 'Ouverture du document…',
+    notice: 'Chargement de la notice…',
+    collection: 'Chargement de la collection…',
+    /**
+     * `smtp_absent` — rien n'est parti et rien ne partira tant que la
+     * configuration ne change pas. Dire « réessayez » ici serait cruel : le
+     * texte nomme donc la SORTIE, et elle est humaine.
+     */
+  },
+
+  titres: {
+    catalogue: 'Catalogue',
+    auteurs: 'Auteurs',
+    connexion: 'Se connecter',
+    inscription: 'Créer un compte',
+    motDePasse: 'Définir mon mot de passe',
+    lecture: 'Lecture',
+    /**
+     * ⚠ Ne subsiste que lorsque le tenant NE RÉSOUT PAS — hôte inconnu, API
+     * injoignable. On ne devine alors aucun nom d'établissement : un titre qui
+     * nomme la mauvaise école est pire qu'un titre générique, parce qu'il part
+     * dans un signet et qu'il y reste.
+     */
+    replique: 'Gafeso',
+    descriptionParDefaut: 'Bibliothèque physique et numérique de votre établissement',
+  },
+  /**
    * Textes partagés par plusieurs écrans. Un DOMAINE, pas un fourre-tout : il
    * n'accueille que ce qui serait rigoureusement identique partout.
    *

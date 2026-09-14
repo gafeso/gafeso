@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { LIBELLES } from '@/lib/libelles';
 import { saveSession, SessionUser } from '@/lib/session';
 import { landingPathForRole } from '@/lib/roles';
 import { Button, Card, Input } from '@/components/ui';
@@ -93,10 +94,27 @@ export default function LoginPage() {
   async function sendEmailCode() {
     setError(null);
     try {
-      await api('/auth/login/2fa/email', {
-        method: 'POST',
-        body: JSON.stringify({ twoFactorToken }),
-      });
+      // ⚠ ON LIT LE SORT DE L'ENVOI. L'API le REND depuis le 12 septembre 2026 —
+      // 200 veut dire « la demande a été traitée », pas « le courriel est parti ».
+      // Écrire « Code envoyé ✓ » sur un simple 200 enfermait dehors quelqu'un qui
+      // a perdu son appareil TOTP : ce repli est sa seule porte.
+      const issue = await api<{ sent: boolean; reason?: string }>(
+        '/auth/login/2fa/email',
+        { method: 'POST', body: JSON.stringify({ twoFactorToken }) },
+      );
+      if (issue?.sent === false) {
+        // ⚠ LE MOTIF CHANGE LE GESTE À FAIRE, donc il change la phrase. « Réessayez »
+        // devant une messagerie non configurée est une impasse polie.
+        setEmailSent(false);
+        setError(
+          issue.reason === 'smtp_absent'
+            ? LIBELLES.connexion.codeNonPartiDefinitif
+            : issue.reason === 'smtp_error'
+              ? LIBELLES.connexion.codeNonPartiReessayable
+              : LIBELLES.connexion.codeNonParti,
+        );
+        return;
+      }
       setEmailSent(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Envoi impossible.');
@@ -197,7 +215,7 @@ export default function LoginPage() {
                   onClick={sendEmailCode}
                   className="text-sm text-ocre underline"
                 >
-                  {emailSent ? 'Code envoyé par email ✓ (renvoyer)' : 'Recevoir un code par email'}
+                  {emailSent ? LIBELLES.connexion.codeEnvoye : LIBELLES.connexion.codeDemander}
                 </button>
               )}
               <button

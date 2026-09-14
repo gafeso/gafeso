@@ -45,7 +45,10 @@ function liste(v: unknown): string[] {
   const brut = Array.isArray(v) ? v : [v];
   return brut
     .map((x) => (typeof x === 'object' && x !== null ? String((x as { '#text'?: unknown })['#text'] ?? '') : String(x)))
-    .map((x) => x.trim())
+    // ⚠ NFC ici aussi : le Dublin Core d'un entrepôt tiers peut être décomposé,
+    // et un auteur moissonné doit se confondre avec le même auteur saisi à la
+    // main — c'est le fichier d'autorités qui en dépend.
+    .map((x) => x.trim().normalize('NFC'))
     .filter(Boolean);
 }
 
