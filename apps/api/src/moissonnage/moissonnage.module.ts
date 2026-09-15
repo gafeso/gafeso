@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CatalogingModule } from '../cataloging/cataloging.module';
 import { AuditModule } from '../audit/audit.module';
+import { ModulesModule } from '../modules/modules.module';
 import { AuthModule } from '../auth/auth.module';
 import { MoissonnageController } from './moissonnage.controller';
 import { ClientOai } from './client-oai';
@@ -16,7 +17,12 @@ import { ProvenanceService } from './provenance.service';
  * arrivé deux fois sur `DepotsModule`, avec 1051 puis 1226 tests au vert.
  */
 @Module({
-  imports: [CatalogingModule, AuditModule, AuthModule],
+  // ⚠ `ModulesModule` : `ModuleActifGuard`, posé sur le contrôleur depuis
+  // `fc27951`, a besoin de `ModulesService`. Son absence ne casse AUCUN test —
+  // elle casse le DÉMARRAGE de l'API, et `main` a passé une nuit dans cet état
+  // avec 1 491 tests verts. Un test unitaire n'exerce jamais le graphe
+  // d'injection : il construit le service à la main, avec des doublures.
+  imports: [CatalogingModule, AuditModule, AuthModule, ModulesModule],
   controllers: [MoissonnageController],
   providers: [MoissonnageService, MoissonnageScheduler, ProvenanceService, { provide: ClientOai, useFactory: () => new ClientOai() }],
   exports: [MoissonnageService, ProvenanceService],

@@ -62,7 +62,17 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     // compte a fait son office — il a fallu revenir ici, et constater au
     // passage que le relevé ne savait pas lire une garde posée au niveau de la
     // CLASSE, c'est-à-dire la forme la plus sûre.
-    expect(declarees.length).toBe(19);
+    // ⚠ 19 → 29 le 14 septembre 2026, et le compte a convoqué deux fois : les
+    // sept routes du moissonnage, et TROIS routes de dépôt qui étaient gardées
+    // depuis des jours sans être déclarées — le balayage inverse ne voyait pas
+    // les `@ModuleRequis` posés sur une CLASSE.
+    // 29 → 32 le 15 septembre 2026 : les trois routes de `statistiques`.
+    // 32 → 33 le 15 septembre 2026 : `GET /stats/rapport-annuel` (P8-2). Le
+    // garde l'a attrapée seul — elle hérite du décorateur de CLASSE, et c'est
+    // exactement le cas auquel il était aveugle il y a deux jours.
+    // 33 → 38 le 15 septembre 2026 : les cinq routes de `rappels`, qui
+    // n'étaient gardées par aucun module.
+    expect(declarees.length).toBe(38);
     for (const { cle } of declarees) {
       const [fichier, reste] = cle.split(' :: ');
       const [verbe, ...ch] = reste.split(' ');
@@ -101,7 +111,35 @@ describe('gardes de module — aucune route de module sans son garde', () => {
       );
     };
     for (const fichier of parcourir('')) {
-      const lignes = readFileSync(join(RACINE, fichier), 'utf-8').split('\n');
+      const source = readFileSync(join(RACINE, fichier), 'utf-8');
+      const lignes = source.split('\n');
+
+      // ⚠ UNE GARDE POSÉE SUR LA CLASSE COUVRE TOUTES SES ROUTES — et ce
+      // balayage ne la voyait pas. *Mesuré le 14 septembre 2026.*
+      //
+      // Il remontait d'un `@ModuleRequis` vers le verbe HTTP le plus proche,
+      // donc il ne voyait que les décorateurs posés sur une MÉTHODE. Le
+      // circuit de dépôt porte le sien sur la CLASSE : ses quinze routes
+      // étaient gardées, la déclaration n'en listait que douze, et ce test
+      // passait au vert. Trois routes ajoutées après coup — `soumis`,
+      // `reattribuer`, `directeurs` — refusaient donc correctement sans que
+      // rien ne l'atteste.
+      //
+      // Le sens de ce test est « aucune route gardée n'échappe à la
+      // déclaration » : il doit donc énumérer les routes d'un contrôleur
+      // gardé EN ENTIER, exactement comme Nest le fait.
+      const classe = /export class/.exec(source);
+      const decorateurDeClasse =
+        classe && source.slice(0, classe.index).includes('@ModuleRequis(');
+      if (decorateurDeClasse) {
+        lignes.forEach((l) => {
+          const m = /^  @(Get|Post|Patch|Put|Delete)\('?([^')]*)'?\)/.exec(l);
+          if (!m) return;
+          const cle = `${fichier} :: ${m[1]} ${m[2] ?? ''}`.trim();
+          if (!declareesSet.has(cle)) orphelines.push(cle);
+        });
+      }
+
       lignes.forEach((l, i) => {
         if (!l.includes('@ModuleRequis(')) return;
         // Remonter au verbe HTTP de ce bloc de décorateurs.
@@ -122,13 +160,20 @@ describe('gardes de module — aucune route de module sans son garde', () => {
   });
 
   it('un module activable sans aucune route l’assume explicitement', () => {
-    // `rappels` n'a pas de route à lui : son extinction agit sur le
-    // PLANIFICATEUR, pas sur une route. Déclarer une liste vide est un choix
-    // écrit ; ne rien déclarer serait un oubli indistinguable.
+    // ⚠ CE TEST A AFFIRMÉ LE CONTRAIRE PENDANT DES SEMAINES. Il disait que
+    // « `rappels` n'a pas de route à lui : son extinction agit sur le
+    // PLANIFICATEUR ». Le contrôleur en porte CINQ, dont `POST run`, qui envoie
+    // des courriels à tous les adhérents en retard — et il n'était gardé par
+    // aucun module. Une liste vide DÉCLARÉE est un choix écrit ; elle était ici
+    // un constat faux, et le test le figeait.
     for (const id of MODULES_ACTIVABLES) {
       expect(ROUTES_PAR_MODULE, `${id} doit être déclaré, même vide`).toHaveProperty(id);
+      expect(
+        ROUTES_PAR_MODULE[id].length,
+        `${id} : une liste VIDE se déclare, elle ne se constate pas — ` +
+          'vérifiez qu’aucune route du module n’échappe au garde.',
+      ).toBeGreaterThan(0);
     }
-    expect(ROUTES_PAR_MODULE.rappels).toEqual([]);
   });
 });
 

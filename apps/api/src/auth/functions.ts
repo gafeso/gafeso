@@ -82,6 +82,25 @@ export const FONCTIONS = {
    * d'`etablissement.gerer`.
    */
   CIRCULATION_RETARDS: 'circulation.retards',
+  /**
+   * ⚠ ENVOYER N'EST PAS LIRE, ET C'EST TOUTE LA RAISON DE CETTE FONCTION.
+   *
+   * `circulation.retards` gardait, sous un seul droit, la LECTURE des retards
+   * et `POST /reminders/run` — qui envoie un courriel à TOUS les adhérents en
+   * retard de l'établissement. Chasser les retards est le métier du
+   * Bibliothécaire ; déclencher un envoi de masse au nom de l'école ne l'est
+   * pas.
+   *
+   * ⚠ La règle du dépôt tranche sans hésiter : *un défaut d'activation ne se
+   * pose jamais sur un comportement qui ÉMET vers l'extérieur*, et son test est
+   * « si ce geste est faux, est-ce que quelqu'un d'EXTÉRIEUR l'apprend ? ».
+   * Ici : deux mille courriels portant le nom de l'établissement. Une action
+   * sortante ne se rattrape pas.
+   *
+   * Notre fonction était plus large que son modèle : `overdues_report` de Koha
+   * est un droit de LECTURE.
+   */
+  RAPPELS_ENVOYER: 'rappels.envoyer',
   /** Activer les comptes en attente (file d'attente). */
   COMPTES_ACTIVER: 'comptes.activer',
   /** Gérer les comptes : création du personnel, suspension, assignation de rôle. */
@@ -208,6 +227,10 @@ export const CATALOGUE_FONCTIONS: { code: Fonction; libelle: string }[] = [
     code: FONCTIONS.CIRCULATION_RETARDS,
     libelle: 'Voir les retards et les rappels — ouvre : Rappels',
   },
+  {
+    code: FONCTIONS.RAPPELS_ENVOYER,
+    libelle: 'Déclencher les rappels et régler leurs modèles — ouvre : Rappels',
+  },
   { code: FONCTIONS.COMPTES_ACTIVER, libelle: 'Activer les comptes en attente' },
   { code: FONCTIONS.COMPTES_GERER, libelle: 'Gérer les comptes et assigner les rôles' },
   {
@@ -302,6 +325,20 @@ export const ROLES_SYSTEME: SystemRoleDefinition[] = [
       FONCTIONS.OUTILS_CATALOGUE,
       FONCTIONS.CIRCULATION_FAIRE,
       FONCTIONS.ADHERENTS_GERER,
+      // ⚠ ÉLARGISSEMENT ACCORDÉ LE 14 SEPTEMBRE 2026 — motif complet dans
+      // ELARGISSEMENTS_ACCORDES (decoupage-permissions.ts). Portée MESURÉE
+      // avant d'accorder : UNE route, en LECTURE — « lister les comptes de
+      // l'école ». L'activation, la pose d'un rôle, l'import des étudiants
+      // attendus et les classes gardent leurs propres fonctions, que ce rôle
+      // ne porte pas. Le rôle Gestionnaire n'est donc PAS replié ici.
+      FONCTIONS.LECTEURS_VOIR,
+      // ⚠ ÉLARGISSEMENT ACCORDÉ LE 15 SEPTEMBRE 2026 — la LECTURE seule.
+      // Chasser les retards est son métier, et il porte déjà
+      // `circulation.faire`. L'ENVOI et le réglage des modèles restent à
+      // l'Administrateur sous `rappels.envoyer` : c'est la SCISSION qui rend
+      // cet élargissement possible sans donner une action sortante de masse.
+      // Motif complet dans ELARGISSEMENTS_ACCORDES.
+      FONCTIONS.CIRCULATION_RETARDS,
     ],
   },
   {

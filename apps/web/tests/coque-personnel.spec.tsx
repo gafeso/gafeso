@@ -11,6 +11,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { AdminShell } from '@/components/admin-shell';
 import { Header } from '@/components/header';
 import { fermerSession, ouvrirSession } from './aide-session';
+import { fonctionsDuRole } from './aide-roles-systeme';
 
 let cheminCourant = '/admin/catalogue';
 
@@ -19,21 +20,12 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-// Fonctions réelles du rôle système Bibliothécaire (apps/api/src/auth/functions.ts).
-const BIBLIOTHECAIRE = [
-  'document.lire',
-  'catalogue.gerer',
-  'outils.catalogue',
-  'circulation.faire',
-  'adherents.gerer',
-];
-const GESTIONNAIRE = [
-  'document.lire',
-  'outils.lecteurs',
-  'lecteurs.voir',
-  'comptes.activer',
-  'lecteurs.gerer',
-];
+// ⚠ LA COMPOSITION EST LUE DANS SA SOURCE, plus recopiée. Une copie écrite à la
+// main est cohérente avec elle-même : elle devient fausse sans que rien ne
+// tombe. C'est arrivé le 14 septembre 2026, quand le Bibliothécaire a reçu
+// `lecteurs.voir` — la copie d'ici ne l'a pas su.
+const BIBLIOTHECAIRE = fonctionsDuRole('Bibliothécaire');
+const GESTIONNAIRE = fonctionsDuRole('Gestionnaire');
 
 /** @param fonctions liste, ou 'jamais' pour une réponse qui n'arrive pas. */
 function brancherSession(fonctions: string[] | null | 'jamais') {

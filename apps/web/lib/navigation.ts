@@ -93,8 +93,18 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // ⚠ AVANT « à cataloguer » dans l'ordre du travail : ce qui ATTEND une
       // décision précède ce qui attend une notice. Même fonction, aucune porte
       // nouvelle — `catalogue.gerer` ouvre déjà les quatre entrées ci-dessus.
-      { href: '/admin/depots-soumis', libelle: 'Dépôts en attente', fonctions: ['catalogue.gerer'] },
-      { href: '/admin/depots-a-cataloguer', libelle: 'Dépôts à cataloguer', fonctions: ['catalogue.gerer'] },
+      {
+        href: '/admin/depots-soumis',
+        libelle: 'Dépôts en attente',
+        fonctions: ['catalogue.gerer'],
+        module: 'depot',
+      },
+      {
+        href: '/admin/depots-a-cataloguer',
+        libelle: 'Dépôts à cataloguer',
+        fonctions: ['catalogue.gerer'],
+        module: 'depot',
+      },
     ],
   },
   {
@@ -145,6 +155,11 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         libelle: 'Moissonnage',
         fonctions: ['outils.catalogue'],
         groupe: 'Catalogue',
+        // ⚠ Le module est déclaré depuis le 14 septembre 2026, et le contrôleur
+        // porte sa garde. Sans cette ligne, éteindre le moissonnage laissait
+        // l'entrée et l'adresse ouvertes sur des routes que l'API refuse — une
+        // interface qui ment sur ce qu'elle vient de faire.
+        module: 'moissonnage',
       },
       {
         href: '/admin/recolement',
@@ -168,9 +183,26 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         href: '/admin/statistiques',
         libelle: 'Statistiques',
         fonctions: ['statistiques.voir'],
-        // Porté par un module dans la cible — mais l'écran EXISTE et fonctionne.
-        // Le masquer serait une régression, pas une réorganisation.
-        modulePrevu: 'statistiques',
+        // ⚠ `modulePrevu` EST DEVENU `module` le 15 septembre 2026 (P8-1). La
+        // note disait « porté par un module dans la cible » — elle datait sa
+        // propre péremption et a survécu à sa condition pendant toute une
+        // phase. Le module est déclaré, ses trois routes sont gardées : le
+        // champ d'attente n'a plus de raison d'être ici.
+        module: 'statistiques',
+      },
+      {
+        // ⚠ À CÔTÉ DES STATISTIQUES, ET PAS DEDANS. Le tableau de bord répond
+        // « comment ça va » au quotidien ; le rapport annuel est un DOCUMENT
+        // qu'une directrice remet à son université une fois par an. Les
+        // confondre dans un seul écran ferait chercher un bilan d'année dans
+        // une page de pilotage — et inversement.
+        //
+        // Même fonction et même module que son voisin : c'est la même donnée,
+        // lue autrement.
+        href: '/admin/rapport-annuel',
+        libelle: 'Rapport annuel',
+        fonctions: ['statistiques.voir'],
+        module: 'statistiques',
       },
     ],
   },
@@ -312,7 +344,33 @@ export function ongletsVisibles(
  * en recette le 11 septembre 2026, `/admin/interoperabilite` s'affichait encore
  * normalement module éteint, et annonçait un entrepôt qui répond 403.
  */
+/**
+ * Routes qui dépendent d'un module SANS passer par le menu du personnel.
+ *
+ * ⚠ POURQUOI ELLES EXISTENT À PART. `NAVIGATION_PERSONNEL` ne décrit que la
+ * coque du personnel. Le circuit de dépôt a deux écrans qui n'y sont pas :
+ * `/mon-depot` appartient à l'ÉTUDIANT et `/depots-a-valider` au DIRECTEUR —
+ * tous deux atteints depuis l'en-tête, pas depuis le menu.
+ *
+ * Sans cette table, éteindre le module `depot` laissait ces deux adresses
+ * parfaitement accessibles, et leurs liens visibles. Mesuré le 14 septembre
+ * 2026 : `moduleDeLaRoute` ne parcourait que le menu, donc elle rendait
+ * `undefined` pour elles — et `undefined` veut dire « aucun module requis ».
+ *
+ * ⚠ `/mes-encadrements` N'EN FAIT PAS PARTIE, et c'est délibéré : il liste les
+ * thèses déjà CATALOGUÉES qu'on a dirigées, en lisant le catalogue. Éteindre le
+ * dépôt ferme le circuit, il n'efface pas ce qui en est sorti.
+ */
+export const ROUTES_HORS_MENU: Readonly<Record<string, string>> = {
+  '/mon-depot': 'depot',
+  '/depots-a-valider': 'depot',
+};
+
 export function moduleDeLaRoute(pathname: string): string | undefined {
+  for (const [href, module] of Object.entries(ROUTES_HORS_MENU)) {
+    if (pathname === href || pathname.startsWith(`${href}/`)) return module;
+  }
+
   let gagnant: { module?: string; longueur: number } | undefined;
   for (const onglet of NAVIGATION_PERSONNEL) {
     for (const entree of onglet.entrees) {

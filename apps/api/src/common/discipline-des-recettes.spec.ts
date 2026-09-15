@@ -47,6 +47,33 @@ const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
     discipline: 'lecture-seule',
     motif: 'compare ROLES_SYSTEME à ce que chaque schéma porte — réparer serait une mutation',
   },
+  'cataloging/fonds-conforme-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'LE TAMIS — il relit le fonds à travers les règles du produit (backlog ' +
+      'n°27). Un seed qui écrit par Prisma ne passe ni les DTO ni les ' +
+      'validations : ce tamis dit ce qu’il a laissé passer. Il ne fait que lire.',
+  },
+  'cataloging/formes-decomposees-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'demande au SERVEUR si du texte décomposé est entré dans les colonnes qui ' +
+      'décident (la classe) ou identifient (nom, titre). Elle ne fait que lire.',
+  },
+  'admin/deprovision-en-base.spec.ts': {
+    discipline: 'nettoyage-recense',
+    motif:
+      'fabrique une école jetable et une ligne dans chacune des sept tables ' +
+      'partagées, puis appelle la vraie déprovision. Son nettoyage EST ce ' +
+      'qu’elle mesure ; un finally rattrape le cas où la méthode échoue.',
+  },
+  'tenancy/isolement-des-ecoles-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'demande au SERVEUR si une école voit les données d’une autre — schémas ' +
+      'séparés ET tables partagées. Elle ne fait que lire : une fuite se ' +
+      'constate, elle ne se répare pas depuis un test.',
+  },
   'tenancy/derive-des-schemas-en-base.spec.ts': {
     discipline: 'lecture-seule',
     motif: 'compare les schémas d’école au gabarit `public`',
@@ -102,7 +129,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT huit — une neuvième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT douze — une treizième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

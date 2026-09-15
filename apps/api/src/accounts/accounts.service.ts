@@ -114,9 +114,30 @@ export class AccountsService {
     lignes: { matricule: string; email: string; firstName: string; lastName: string; className: string }[];
     errors: ImportRowError[];
   } {
+    // ⚠ NFC À LA FRONTIÈRE, SUR LE FICHIER ENTIER — et c'est la plus lourde
+    // des trois frontières Unicode relevées, parce qu'ici le texte ne s'affiche
+    // pas seulement : il DÉCIDE.
+    //
+    // Une école exporte sa liste d'étudiants depuis Excel, souvent sous macOS,
+    // qui produit la forme DÉCOMPOSÉE : « Traoré » y est `Traore` + U+0301.
+    // Or `className` est comparé par ÉGALITÉ STRICTE DE CHAÎNES dans la
+    // décision d'accès (`access-control.matching.ts`) et cherché tel quel dans
+    // `schoolClass.findUnique({ where: { name } })`.
+    //
+    // Sans cette ligne : une classe saisie à l'écran (composée) et la même
+    // classe importée (décomposée) s'affichent À L'IDENTIQUE et ne s'égalent
+    // pas. L'étudiant se voit refuser les collections de sa propre classe, et
+    // le refus la NOMME — « Classe requise : L1 Droit » à quelqu'un qui est en
+    // L1 Droit. Personne ne peut diagnostiquer ça depuis un écran.
+    //
+    // Sur le fichier entier plutôt que champ par champ : un en-tête accentué
+    // est exposé au même défaut, et un CSV n'a que des délimiteurs ASCII — la
+    // composition ne peut donc pas en déplacer la structure.
+    const texte = csv.normalize('NFC');
+
     let rows: { record: Record<string, string>; info: { lines: number } }[];
     try {
-      rows = parse(csv, {
+      rows = parse(texte, {
         columns: true,
         skip_empty_lines: true,
         trim: true,

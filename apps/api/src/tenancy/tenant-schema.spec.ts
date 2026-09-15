@@ -257,6 +257,9 @@ describe('tenant-schema — rattrapage des index (audit perf 2026-07-14)', () =>
       'CREATE INDEX IF NOT EXISTS "checkouts_patron_id_return_date_idx" ON "tenant_zinda"."checkouts" ("patron_id", "return_date")',
       'CREATE INDEX IF NOT EXISTS "checkouts_checkout_date_idx" ON "tenant_zinda"."checkouts" ("checkout_date")',
       'CREATE INDEX IF NOT EXISTS "checkouts_return_date_idx" ON "tenant_zinda"."checkouts" ("return_date")',
+      'CREATE INDEX IF NOT EXISTS "usage_events_occurred_at_idx" ON "tenant_zinda"."usage_events" ("occurred_at")',
+      'CREATE INDEX IF NOT EXISTS "usage_events_kind_occurred_at_idx" ON "tenant_zinda"."usage_events" ("kind", "occurred_at")',
+      'CREATE INDEX IF NOT EXISTS "usage_events_record_id_idx" ON "tenant_zinda"."usage_events" ("record_id")',
     ]);
   });
 
@@ -270,19 +273,24 @@ describe('tenant-schema — rattrapage des index (audit perf 2026-07-14)', () =>
       { table_name: 'checkouts', columns: ['patron_id', 'return_date'] },
       { table_name: 'checkouts', columns: ['checkout_date'] },
       { table_name: 'checkouts', columns: ['return_date'] },
+      // Rapport annuel (P8-1).
+      { table_name: 'usage_events', columns: ['occurred_at'] },
+      { table_name: 'usage_events', columns: ['kind', 'occurred_at'] },
+      { table_name: 'usage_events', columns: ['record_id'] },
     ]);
     expect(statements).toEqual([]);
   });
 
   it('ne confond pas un index de colonnes différentes ni un ordre différent', () => {
     // holds(patron_id, status) et checkouts(due_date) existent : ils ne
-    // couvrent AUCUN des index attendus → les 6 restent à créer.
+    // couvrent AUCUN des index attendus → les 9 restent à créer.
     const statements = buildMissingIndexStatements('zinda', [
       { table_name: 'holds', columns: ['patron_id', 'status'] },
       { table_name: 'checkouts', columns: ['due_date'] },
       { table_name: 'holds', columns: ['status', 'record_id'] }, // ordre inversé
     ]);
-    expect(statements).toHaveLength(6);
+    // ⚠ 6 → 9 le 15 septembre 2026 : les trois index de `usage_events`.
+    expect(statements).toHaveLength(9);
   });
 });
 

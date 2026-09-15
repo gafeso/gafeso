@@ -59,20 +59,25 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement QUATRE', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement HUIT', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
     //
-    // ⚠ PASSÉ DE TROIS À QUATRE le 12 septembre 2026, et le compte a fait son
-    // office : il a fallu revenir ici et vérifier que le garde neuf respecte
-    // les deux promesses de ce fichier — nom en `-en-base`, et ROUGE quand la
-    // base ne répond pas plutôt que vert sur rien.
+    // ⚠ PASSÉ DE TROIS À QUATRE le 12 septembre 2026, puis à SIX le 14 —
+    // l'isolement entre écoles et la déprovision. Le compte a fait son office
+    // les deux fois : il a fallu revenir ici et vérifier que les gardes neufs
+    // respectent les deux promesses de ce fichier — nom en `-en-base`, et
+    // ROUGE quand la base ne répond pas plutôt que vert sur rien.
     expect(VIVANTS.map((f) => f.replace(RACINE + '/', '')).sort()).toEqual([
+      'admin/deprovision-en-base.spec.ts',
+      'cataloging/fonds-conforme-en-base.spec.ts',
+      'cataloging/formes-decomposees-en-base.spec.ts',
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
       'roles/roles-systeme-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
+      'tenancy/isolement-des-ecoles-en-base.spec.ts',
     ]);
   });
 

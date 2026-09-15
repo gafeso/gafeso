@@ -19,6 +19,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { ClientIp } from '../audit/client-ip.decorator';
@@ -46,16 +48,21 @@ import {
  * détient l'autre — voir sans pouvoir agir, ou pouvoir agir sans savoir sur
  * quoi. C'est le défaut payé sur la réattribution d'un dépôt.
  *
- * ⚠ PAS DE `@ModuleRequis('moissonnage')` POUR L'INSTANT, et c'est délibéré :
- * un module activable doit déclarer au moins un écran qui EXISTE dans
- * `apps/web` (`ecrans-declares.spec.ts` le vérifie). L'écran est P7-4. Le
- * déclarer maintenant obligerait à promettre un écran imaginaire — la faute
- * exacte que ce garde a été écrit pour empêcher. À reprendre avec P7-4.
+ * ⚠ `@ModuleRequis('moissonnage')` EST POSÉ DEPUIS LE 14 SEPTEMBRE 2026, et ce
+ * commentaire disait l'inverse jusque-là : « pas pour l'instant, l'écran est
+ * P7-4 ». Les deux écrans existent désormais (`admin/moissonnage` et son
+ * détail), ils sont recettés, et la condition que ce commentaire nommait a donc
+ * disparu — c'est la famille du commentaire qui JUSTIFIE un état et lui survit.
+ *
+ * Ce qu'il protégeait reste vrai et reste en vigueur : un module activable doit
+ * déclarer au moins un écran qui EXISTE dans `apps/web`, sans quoi la boîte de
+ * confirmation promet un écran imaginaire.
  */
 @ApiTags('moissonnage')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, FunctionsGuard)
+@UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
 @RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
+@ModuleRequis('moissonnage')
 @Controller('moissonnage')
 export class MoissonnageController {
   constructor(

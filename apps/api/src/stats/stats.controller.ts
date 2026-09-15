@@ -13,6 +13,11 @@ import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
+import { annee } from './rapport-annuel';
+import { RapportAnnuelService } from './rapport-annuel.service';
+import { RapportAnnuelDto } from './dto/rapport-annuel.dto';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { FONCTIONS } from '../auth/functions';
 import { EXPORT_DATASETS, ExportDataset, StatsService } from './stats.service';
 import { StatsQueryDto } from './dto/stats-query.dto';
@@ -25,11 +30,17 @@ import { CSV_BOM } from './csv';
  */
 @ApiTags('stats')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, FunctionsGuard)
+@UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
 @RequiresFunctions(FONCTIONS.STATISTIQUES_VOIR)
+// ⚠ SUR LA CLASSE : les trois routes l'héritent, et une quatrième écrite
+// demain aussi. Le garde REFUSE en nommant le module — jamais un 200 appauvri
+// ni une liste vide, qui se liraient « il n'y a rien » au lieu de « c'est
+// éteint ».
+@ModuleRequis('statistiques')
 @Controller('stats')
 export class StatsController {
-  constructor(private readonly stats: StatsService) {}
+  constructor(private readonly stats: StatsService,
+    private readonly rapport: RapportAnnuelService,) {}
 
   private tenant(tenant: ResolvedTenant | null): ResolvedTenant {
     if (!tenant) throw new BadRequestException('Tenant non résolu.');
@@ -76,6 +87,24 @@ export class StatsController {
       period,
     );
     this.sendCsv(res, filename, period.from, csv);
+  }
+
+  @Get('rapport-annuel')
+  @ApiOperation({
+    summary: 'Le rapport annuel de l’établissement — ce qu’une directrice remet à son université',
+    description:
+      'Année civile complète. ⚠ Un bloc qu’on ne peut pas calculer est ABSENT ' +
+      'et NOMMÉ, jamais rempli de zéros : ce document sert à décider d’un ' +
+      'budget, et un zéro faux y coûte plus que partout ailleurs. Aucune ' +
+      'donnée personnelle, et aucun groupe de moins de 5 — un effectif trop ' +
+      'faible identifie des personnes sans les nommer.',
+  })
+  async rapportAnnuel(
+    @CurrentTenant() tenantOrNull: ResolvedTenant | null,
+    @Query() query: RapportAnnuelDto,
+  ) {
+    const tenant = this.tenant(tenantOrNull);
+    return this.rapport.produire(tenant.slug, tenant.name ?? tenant.slug, annee(query.anneeDemandee()));
   }
 
   @Get('report')

@@ -14,6 +14,7 @@ import { CatalogingService } from '../cataloging/cataloging.service';
 import { AuthorsService } from '../authors/authors.service';
 import { CategoriesService } from '../categories/categories.service';
 import { RolesService } from '../roles/roles.service';
+import { MODELES_A_SUPPRIMER, proprietePrisma } from './lignes-partagees-d-une-ecole';
 import { EXEMPLE_HOME_CONTENT, EXEMPLE_HOME_THEME } from '../tenancy/home-seed-exemple';
 import {
   buildAddMissingColumnsStatements,
@@ -571,20 +572,39 @@ export class AdminService {
   /**
    * Déprovisionne une école : supprime son schéma (CASCADE) et ses lignes dans
    * `public`. Destructif — supprime toutes les données de l'école.
+   *
+   * ⚠ LA LISTE DES TABLES NETTOYÉES N'EST PAS ÉCRITE ICI : elle est parcourue
+   * depuis `LIGNES_PARTAGEES`, que `deprovision-complet.spec.ts` confronte au
+   * schéma. Jusqu'au 14 septembre 2026 elle l'était, et elle ne couvrait QUE
+   * les trois tables portant une clé étrangère RESTRICT — celles que
+   * PostgreSQL refusait de laisser passer. Les cinq autres, que rien ne
+   * défendait, restaient en base : collections, règles d'accès, rappels
+   * (`recipientEmail`), journal d'audit (`actorEmail`, `ip`).
+   *
+   * Le compte rendu dit ce qui a été RETIRÉ, table par table : une suppression
+   * qui annonce « fait » sans dire quoi ne se vérifie pas.
    */
   async deprovisionTenant(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
     if (!tenant) throw new NotFoundException('École introuvable.');
 
+    const retire: Record<string, number> = {};
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(buildDeprovisionStatement(slug));
-      await tx.subscription.deleteMany({ where: { tenantId: tenant.id } });
-      await tx.domain.deleteMany({ where: { tenantId: tenant.id } });
-      await tx.tenantSettings.deleteMany({ where: { tenantId: tenant.id } });
+      for (const modele of MODELES_A_SUPPRIMER) {
+        const delegue = (
+          tx as unknown as Record<string, { deleteMany(a: unknown): Promise<{ count: number }> }>
+        )[proprietePrisma(modele)];
+        const { count } = await delegue.deleteMany({ where: { tenantId: tenant.id } });
+        if (count > 0) retire[modele] = count;
+      }
       await tx.tenant.delete({ where: { id: tenant.id } });
     });
 
-    this.logger.log(`École déprovisionnée : ${slug}`);
-    return { deprovisioned: true, slug };
+    const detail = Object.entries(retire)
+      .map(([m, n]) => `${m}=${n}`)
+      .join(', ');
+    this.logger.log(`École déprovisionnée : ${slug}${detail ? ` — ${detail}` : ''}`);
+    return { deprovisioned: true, slug, retire };
   }
 }

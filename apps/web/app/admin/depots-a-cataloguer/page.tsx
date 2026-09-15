@@ -80,13 +80,42 @@ export default function DepotsACataloguerPage() {
 
   async function lire(id: string) {
     setErreur(null);
+    // ⚠ L'ONGLET S'OUVRE AU CLIC, PAS APRÈS L'ATTENTE. Signalé par la session
+    // backend le 15 septembre 2026. Un `window.open` placé APRÈS un `await` a
+    // perdu le contexte du geste utilisateur — c'est précisément le motif que
+    // les bloqueurs de fenêtres surgissantes visent. Selon le navigateur il
+    // passe ou il est refusé, et s'il est refusé le clic ne produit RIEN : ni
+    // document, ni message.
+    //
+    // ⚠ ET PAS `noopener` DANS LES OPTIONS, contrairement à la forme d'abord
+    // proposée. La spécification fait rendre `null` à `window.open` quand
+    // `noopener` est demandé — c'est son office, puisque le lien entre les deux
+    // fenêtres est coupé dans les deux sens. Le correctif aurait donc pris la
+    // branche « bloqué » À TOUS LES COUPS, et n'aurait jamais ouvert de
+    // document. On garde la poignée, et on coupe le lien nous-mêmes avec
+    // `opener = null` : même propriété de sécurité, poignée conservée.
+    //
+    // ⚠ Non vérifié dans le volet de navigateur de développement, qui refuse
+    // TOUTES les fenêtres surgissantes, même depuis un vrai clic : la mesure y
+    // rend `null` dans les deux cas et ne discrimine donc rien.
+    const onglet = window.open('', '_blank');
+    if (!onglet) {
+      setErreur(T.fenetreBloquee);
+      return;
+    }
+    onglet.opener = null;
     try {
       const res = await api<{ url: string }>(`/depots/${id}/document`, {}, getToken());
-      window.open(res.url, '_blank', 'noopener,noreferrer');
+      // L'URL est signée et vit 5 minutes : on l'ouvre, on ne la garde pas.
+      onglet.location = res.url;
     } catch (err) {
+      // ⚠ On referme l'onglet vide : le laisser ouvert ferait croire que quelque
+      // chose s'est passé, et le message d'erreur est sur l'autre écran.
+      onglet.close();
       setErreur(err instanceof ApiError ? err.message : T.echecLecture);
     }
   }
+
 
   async function chercher() {
     if (requete.trim() === '') return;

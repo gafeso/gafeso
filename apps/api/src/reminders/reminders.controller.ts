@@ -14,6 +14,8 @@ import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
+import { ModuleRequis } from '../modules/module-requis.decorator';
 import { FONCTIONS } from '../auth/functions';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
@@ -32,7 +34,13 @@ import { ReminderLogQueryDto } from './dto/reminder-log-query.dto';
  */
 @ApiTags('reminders')
 @Controller('reminders')
-@UseGuards(JwtAuthGuard, FunctionsGuard)
+@UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
+// ⚠ IL MANQUAIT, et le docstring de `runForTenant` affirmait qu'il était là.
+// Une école qui avait éteint les rappels recevait quand même ses courriels dès
+// que quelqu'un cliquait « Déclencher maintenant ».
+@ModuleRequis('rappels')
+// La LECTURE des retards. Les deux routes qui ÉMETTENT ou qui RÈGLENT portent
+// en plus `rappels.envoyer`, ci-dessous.
 @RequiresFunctions(FONCTIONS.CIRCULATION_RETARDS)
 @ApiBearerAuth()
 export class RemindersController {
@@ -54,6 +62,11 @@ export class RemindersController {
   }
 
   @Patch('settings')
+  // ⚠ RÉGLER, CE N'EST PAS LIRE. Changer les modèles et la bascule automatique
+  // décide de ce qui partira, à qui et sous quel texte. Les DEUX fonctions sont
+  // exigées : `getAllAndOverride` remplace la garde de classe, donc la lister
+  // ici est ce qui garde la lecture en plus de l'envoi.
+  @RequiresFunctions(FONCTIONS.CIRCULATION_RETARDS, FONCTIONS.RAPPELS_ENVOYER)
   @ApiOperation({ summary: 'Modifier les paramètres et modèles de rappels' })
   async updateSettings(
     @CurrentTenant() tenantOrNull: ResolvedTenant | null,
@@ -108,6 +121,10 @@ export class RemindersController {
   }
 
   @Post('run')
+  // ⚠ LA ROUTE QUI ÉMET. Elle envoie des courriels à TOUS les adhérents en
+  // retard de l'établissement — une action sortante de masse, qui ne se
+  // rattrape pas. Elle ne se donne pas avec le droit de consulter une liste.
+  @RequiresFunctions(FONCTIONS.CIRCULATION_RETARDS, FONCTIONS.RAPPELS_ENVOYER)
   @ApiOperation({
     summary: 'Déclencher les rappels de circulation maintenant',
     description:

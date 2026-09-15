@@ -9,6 +9,7 @@ import { useMyFunctions } from '@/lib/functions';
 import { ongletDe, premiereEntreeAccessible } from '@/lib/navigation';
 import { Button } from '@/components/ui';
 import { LIBELLES } from '@/lib/libelles';
+import { useModulesActifs } from '@/lib/modules-actifs';
 
 // Barre publique : accueil et catalogue, pour tout le monde.
 const NAV = [
@@ -29,6 +30,14 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
   const [menuOuvert, setMenuOuvert] = useState(false);
   const propres = useMyFunctions();
   const effectives = fonctions !== undefined ? fonctions : propres.functions;
+  // ⚠ LE CIRCUIT DE DÉPÔT PASSE PAR ICI, pas par le menu du personnel : sans ce
+  // filtre, éteindre le module `depot` laissait « Mon dépôt » et « Dépôts à
+  // valider » affichés — donc des portes vers des routes que l'API refuse.
+  // `null` (on ne sait pas encore, ou page publique) laisse passer : masquer sur
+  // une information qu'on n'a pas ferait disparaître un écran auquel la personne
+  // a droit. La garantie reste l'API, comme pour le menu.
+  const { modulesActifs } = useModulesActifs();
+  const moduleEteint = (id: string) => modulesActifs !== null && !modulesActifs.includes(id);
 
   // Porte d'entrée vers l'espace professionnel. Conditionnée à « cette
   // personne a-t-elle au moins une entrée ? » plutôt qu'à une liste de rôles :
@@ -73,7 +82,7 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
         // étudiant d'une école qui n'ouvre pas le dépôt ne doit pas voir une
         // entrée qui le refusera — c'est la règle du dépôt : pas d'entrée sans
         // écran, pas d'écran sans droit.
-        ...(effectives?.includes('depot.deposer')
+        ...(effectives?.includes('depot.deposer') && !moduleEteint('depot')
           ? [{ href: '/mon-depot', label: LIBELLES.monDepot.titre, title: 'Déposer un mémoire ou une thèse, et suivre son avancement' }]
           : []),
         // Même règle pour « Mes encadrements » : l'entrée n'existe que pour qui
@@ -81,7 +90,7 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
         // pas ce suivi ne doit pas voir une porte qui lui refusera l'entrée.
         // Le directeur : sa file de décisions. Même règle que les deux
         // au-dessus — l'entrée n'existe que pour qui détient la fonction.
-        ...(effectives?.includes('depot.valider')
+        ...(effectives?.includes('depot.valider') && !moduleEteint('depot')
           ? [
               {
                 href: '/depots-a-valider',
@@ -90,6 +99,13 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
               },
             ]
           : []),
+        // ⚠ PAS DE CONDITION DE MODULE ICI, ET C'EST MESURÉ. J'ai failli en
+        // poser une « par symétrie » avec les deux liens au-dessus. Le service
+        // interroge `recordContributor` joint au CATALOGUE, pas les dépôts :
+        // une thèse cataloguée il y a trois ans reste dirigée par son
+        // directeur. Éteindre le dépôt ferme le circuit ; il n'efface pas ce
+        // qui en est sorti. Le témoin de `modules-filtrage-menu.spec.ts` existe
+        // précisément pour attraper cet ajout-là, et il m'a attrapé.
         ...(effectives?.includes('encadrements.voir')
           ? [
               {

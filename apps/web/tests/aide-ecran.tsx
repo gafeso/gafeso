@@ -40,6 +40,7 @@ import PageGuichet from '@/app/guichet/page';
 import FicheAdherent from '@/app/admin/adherents/[id]/page';
 import PageInteroperabilite from '@/app/admin/interoperabilite/page';
 import PageStatistiques from '@/app/admin/statistiques/page';
+import PageRapportAnnuel from '@/app/admin/rapport-annuel/page';
 import PageCatalogue from '@/app/admin/catalogue/page';
 import PageAuteurs from '@/app/admin/auteurs/page';
 import PageCategories from '@/app/admin/categories/page';
@@ -62,6 +63,7 @@ import PageDepotsSoumis from '@/app/admin/depots-soumis/page';
 import PageMoissonnage from '@/app/admin/moissonnage/page';
 import PageMoissonnageDetail from '@/app/admin/moissonnage/[id]/page';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
+import { modulesActivables, modulesDuRegistre } from './aide-modules';
 import { ouvrirSession } from './aide-session';
 import { poserAdresse } from './aide-navigation';
 
@@ -88,6 +90,10 @@ export const ECRANS = {
   '/admin/statistiques': {
     composant: PageStatistiques,
     fichier: 'app/admin/statistiques/page.tsx',
+  },
+  '/admin/rapport-annuel': {
+    composant: PageRapportAnnuel,
+    fichier: 'app/admin/rapport-annuel/page.tsx',
   },
   // ── Le reste de l'espace professionnel ────────────────────────────────────
   //
@@ -208,8 +214,15 @@ export interface Montage {
   reponses?: Record<string, unknown>;
 }
 
-/** Tous les modules non-noyau du registre, pour écrire `modules` sans les lister. */
-export const MODULES_ACTIVABLES = ['amendes', 'interoperabilite', 'rappels'] as const;
+/**
+ * Tous les modules non-noyau, LUS DANS LE REGISTRE — plus recopiés.
+ *
+ * ⚠ La liste écrite à la main est devenue fausse le 14 septembre 2026, quand le
+ * circuit de dépôt a reçu ses entrées : la doublure décrivait un monde sans
+ * `depot`, les écrans montaient sur « module éteint », et les tests accusaient
+ * le produit.
+ */
+export const MODULES_ACTIVABLES = modulesActivables();
 
 /**
  * Le corps de `GET /modules`, dans la forme COMPLÈTE que l'écran attend.
@@ -221,25 +234,21 @@ export const MODULES_ACTIVABLES = ['amendes', 'interoperabilite', 'rappels'] as 
  * fautive : deux consommateurs de la même route n'en lisent pas la même part.
  */
 function corpsDesModules(actifs: string[]) {
-  const noyau = ['auth', 'usagers', 'catalogue', 'circulation', 'administration'];
-  const module = (id: string, libelle: string, estNoyau: boolean) => ({
-    id,
-    libelle,
-    description: `Description de ${libelle}.`,
-    dependances: estNoyau ? [] : ['circulation'],
-    noyau: estNoyau,
-    actif: estNoyau || actifs.includes(id),
-    verrouille: estNoyau,
+  // ⚠ CONSTRUIT DEPUIS LE REGISTRE : un module ajouté côté API apparaît ici sans
+  // qu'on y touche. C'est ce qui manquait — la liste en dur ne connaissait pas
+  // `depot`, donc la doublure le déclarait absent plutôt qu'éteint.
+  return modulesDuRegistre().map((m) => ({
+    id: m.id,
+    libelle: m.libelle,
+    description: `Description de ${m.libelle}.`,
+    dependances: m.dependances,
+    noyau: m.noyau,
+    actif: m.noyau || actifs.includes(m.id),
+    verrouille: m.noyau,
     motifVerrouillage: null,
-    motif: estNoyau ? { code: 'noyau' as const, modules: [] } : null,
-    ecrans: estNoyau ? [] : [`un écran de ${libelle}`],
-  });
-  return [
-    ...noyau.map((id) => module(id, id[0].toUpperCase() + id.slice(1), true)),
-    module('amendes', 'Amendes', false),
-    module('interoperabilite', 'Interopérabilité', false),
-    module('rappels', 'Rappels', false),
-  ];
+    motif: m.noyau ? { code: 'noyau' as const, modules: [] } : null,
+    ecrans: m.noyau ? [] : [`un écran de ${m.libelle}`],
+  }));
 }
 
 /**

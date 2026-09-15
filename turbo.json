@@ -7,19 +7,53 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**"
+      ],
+      // ⚠ LES INPUTS TRAVERSENT LES ESPACES DE TRAVAIL, ET CE N'EST PAS UN
+      // EXCÈS DE PRUDENCE. Dix-huit de nos gardes lisent DÉLIBÉRÉMENT l'autre
+      // paquet : `ecrans-declares` lit les pages du front, et dix tests du
+      // front lisent le catalogue, le registre et les rôles de l'API.
+      //
+      // Sans ces globs, Turbo hache les fichiers du PAQUET SEUL. Une
+      // modification du front laissait donc `@gafeso/api:test` en CACHE HIT, et
+      // `npm test` à la racine REJOUAIT UN JOURNAL VERT pendant que le garde
+      // était rouge. Mesuré le 15 septembre 2026 : une page d'essai non
+      // déclarée faisait échouer `ecrans-declares` lancé directement, et sortir
+      // la racine en 0.
+      //
+      // ⚠ Le cache reste utile : deux exécutions sans changement restent un
+      // FULL TURBO. Ce qui change, c'est que le changement de l'AUTRE paquet
+      // compte désormais comme un changement.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../api/src/**",
+        "../web/app/**",
+        "../web/lib/**",
+        "../web/components/**"
+      ]
     },
     "db:generate": {
       "cache": false

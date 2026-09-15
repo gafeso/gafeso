@@ -19,42 +19,10 @@
  * fonctions-connues-de-l-api.spec.ts : le couplage EXISTE dans les faits.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAVIGATION_PERSONNEL } from '@/lib/navigation';
 import { FONCTIONS_SANS_ECRAN } from '@/lib/fonctions-sans-ecran';
-
-const CATALOGUE_API = resolve(process.cwd(), '..', 'api', 'src', 'auth', 'functions.ts');
-const source = readFileSync(CATALOGUE_API, 'utf-8');
-
-/** Les identifiants du catalogue, par nom de constante (CATALOGUE_GERER → …). */
-function catalogue(): Record<string, string> {
-  const bloc = source.slice(
-    source.indexOf('export const FONCTIONS'),
-    source.indexOf('} as const;'),
-  );
-  return Object.fromEntries([...bloc.matchAll(/(\w+):\s*'([a-z]+\.[a-z]+)'/g)].map((m) => [m[1], m[2]]));
-}
-
-/** Les rôles système et leurs fonctions, résolus en identifiants. */
-function rolesSysteme(): { nom: string; fonctions: string[] }[] {
-  const fon = catalogue();
-  const bloc = source.slice(source.indexOf('export const ROLES_SYSTEME'));
-  return [...bloc.matchAll(/name:\s*'([^']+)',[\s\S]*?functions:\s*(\[[\s\S]*?\]|TOUTES_LES_FONCTIONS)/g)].map(
-    (m) => ({
-      nom: m[1],
-      // ⚠ L'Administrateur porte TOUTES_LES_FONCTIONS, pas une liste. Il est
-      // écarté plus bas : par construction il détient des fonctions que sa
-      // propre navigation n'expose pas toutes, et l'exiger de lui rendrait ce
-      // test ingérable sans rien apprendre.
-      fonctions:
-        m[2] === 'TOUTES_LES_FONCTIONS'
-          ? []
-          : [...m[2].matchAll(/FONCTIONS\.(\w+)/g)].map((f) => fon[f[1]]).filter(Boolean),
-    }),
-  );
-}
+import { rolesSysteme } from './aide-roles-systeme';
 
 /** Les fonctions qu'une entrée de menu réclame. */
 const fonctionsDuMenu = new Set(

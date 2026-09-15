@@ -467,3 +467,57 @@ describe('Mon dépôt · ce qu’on n’affirme pas', () => {
     expect(LIBELLES.refusDeDroit.depot).not.toMatch(/introuvable/i);
   });
 });
+
+/**
+ * ⚠ POURQUOI « SOUMETTRE » EST DÉSACTIVÉ — signalé par la session backend le
+ * 15 septembre 2026, et c'est NOTRE règle qui était enfreinte.
+ *
+ * Le bouton était grisé sans dire pourquoi : ni `title`, ni `aria-label`, ni
+ * `aria-describedby`. Le seul indice était l'étiquette voisine du champ de
+ * fichier — et un lecteur d'écran n'annonce qu'« bouton, non disponible ».
+ *
+ * ⚠ « Une règle CONDITIONNELLE se lit à l'écran, elle ne se découvre pas par un
+ * refus » est écrit dans ce dépôt depuis le 11 septembre. Ici elle ne se
+ * découvrait même PAS par un refus : le bouton ne répond pas. C'est le cas le
+ * plus fermé de la famille — la personne n'a aucun moyen d'apprendre ce qui
+ * manque, ni en lisant, ni en essayant.
+ */
+describe('⚠ le bouton Soumettre dit POURQUOI il est désactivé', () => {
+  const brouillon = (extra: Record<string, unknown>) => depot('brouillon', extra);
+
+  it('rien n’est fourni : les DEUX manques sont nommés', async () => {
+    brancher([brouillon({ fileName: null, directorId: null })]);
+    render(<PageMonDepot />);
+    const aide = await screen.findByText(LIBELLES.monDepot.manqueLesDeux);
+    const bouton = screen.getByRole('button', { name: LIBELLES.monDepot.soumettre });
+    expect(bouton).toBeDisabled();
+    // ⚠ ANNONCÉ, pas seulement affiché : c'est ce qui manquait.
+    expect(bouton.getAttribute('aria-describedby')).toBe(aide.id);
+  });
+
+  it('le document manque seul : on ne parle QUE de lui', async () => {
+    brancher([brouillon({ fileName: null, directorId: 'u-zongo' })]);
+    render(<PageMonDepot />);
+    expect(await screen.findByText(LIBELLES.monDepot.manqueDocument)).toBeTruthy();
+    expect(screen.queryByText(LIBELLES.monDepot.manqueLesDeux)).toBeNull();
+  });
+
+  it('le directeur manque seul : idem, et symétrique', async () => {
+    brancher([brouillon({ fileName: 'memoire.pdf', directorId: null })]);
+    render(<PageMonDepot />);
+    expect(await screen.findByText(LIBELLES.monDepot.manqueDirecteur)).toBeTruthy();
+  });
+
+  it('⚠ tout est prêt : AUCUNE phrase, et le bouton répond', async () => {
+    // Sans ce témoin, une phrase affichée en permanence passerait pour une
+    // explication — et dirait qu'il manque quelque chose alors que non.
+    brancher([brouillon({ fileName: 'memoire.pdf', directorId: 'u-zongo' })]);
+    render(<PageMonDepot />);
+    const bouton = await screen.findByRole('button', { name: LIBELLES.monDepot.soumettre });
+    expect(bouton).not.toBeDisabled();
+    expect(bouton.getAttribute('aria-describedby')).toBeNull();
+    expect(screen.queryByText(LIBELLES.monDepot.manqueDocument)).toBeNull();
+    expect(screen.queryByText(LIBELLES.monDepot.manqueDirecteur)).toBeNull();
+    expect(screen.queryByText(LIBELLES.monDepot.manqueLesDeux)).toBeNull();
+  });
+});

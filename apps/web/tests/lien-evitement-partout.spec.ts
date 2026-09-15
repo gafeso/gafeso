@@ -129,13 +129,23 @@ describe('Lien d’évitement', () => {
 
   /**
    * ⚠ TÉMOIN DU RETRAIT DES COMMENTAIRES, sur le cas qui a pris le test en
-   * défaut. `admin-shell.tsx` PARLE de `<main>` dans un commentaire et en rend
-   * quatre : un relevé qui en compte cinq lit du texte, pas du code.
+   * défaut. `admin-shell.tsx` PARLE de `<main>` dans un commentaire : un relevé
+   * qui le compte lit du texte, pas du code.
+   *
+   * ⚠ LA PROPRIÉTÉ EST L'ÉCART, PAS LE TOTAL. Les comptes absolus ont changé le
+   * 14 septembre 2026 — l'écran « module éteint » a été extrait dans son propre
+   * composant, emportant un `<main>` — et le témoin a convoqué quelqu'un, ce qui
+   * est sa fonction. Mais un total se périme à chaque ajout ; l'ÉCART de un, lui,
+   * dit exactement ce que ce témoin existe pour dire.
    */
   it('témoin — un <main> cité dans un commentaire n’est pas compté', () => {
     const brut = lire('components/admin-shell.tsx');
     expect(brut).toContain('`<main>` MANQUAIT ICI');
-    expect(brut.match(/<main\b[^>]*>/g) ?? []).toHaveLength(5);
-    expect(sansCommentaires(brut).match(/<main\b[^>]*>/g) ?? []).toHaveLength(4);
+    const avec = (brut.match(/<main\b[^>]*>/g) ?? []).length;
+    const sans = (sansCommentaires(brut).match(/<main\b[^>]*>/g) ?? []).length;
+    // Exactement un de plus dans la source brute : celui qui est cité.
+    expect(avec - sans).toBe(1);
+    // Et un compte exact sur le CODE, qui convoque le jour où il change.
+    expect(sans).toBe(3);
   });
 });

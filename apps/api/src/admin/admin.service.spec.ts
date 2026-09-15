@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MODELES_A_SUPPRIMER, proprietePrisma } from './lignes-partagees-d-une-ecole';
 import {
   BadRequestException,
   ConflictException,
@@ -17,15 +18,19 @@ function makePrisma(overrides: Record<string, any> = {}) {
       create: vi.fn(async ({ data }: any) => ({ id: 'tenant-1', ...data })),
       delete: vi.fn().mockResolvedValue({}),
     },
-    subscription: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    domain: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    tenantSettings: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     $executeRawUnsafe: vi.fn().mockResolvedValue(0),
     // Socle par défaut créé dans la même transaction que le tenant.
     collection: {
       create: vi.fn(async ({ data }: any) => ({ id: 'coll-1', ...data })),
     },
   };
+  // ⚠ Un `deleteMany` par modèle DÉCLARÉ, dérivé de LIGNES_PARTAGEES et jamais
+  // recopié : une doublure écrite à la main resterait sur les trois tables
+  // d'origine et rendrait vert un service qui en oublie cinq.
+  for (const modele of MODELES_A_SUPPRIMER) {
+    const prop = proprietePrisma(modele);
+    tx[prop] = { ...(tx[prop] ?? {}), deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
+  }
   const prisma: any = {
     tenant: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -150,7 +155,7 @@ describe('AdminService — provisioning', () => {
     ({ service, prisma, tx } = makeService());
   });
 
-  it('crée le tenant puis exécute la DDL du schéma (schéma + 26 tables + 22 FK)', async () => {
+  it('crée le tenant puis exécute la DDL du schéma (schéma + 27 tables + 22 FK)', async () => {
     const result = await service.provisionTenant({
       name: 'Lycée Zinda',
       slug: 'zinda',
@@ -180,7 +185,9 @@ describe('AdminService — provisioning', () => {
     // PAS les clés étrangères, donc qu'une école neuve aurait reçu des tables
     // sans contrainte là où les écoles existantes en ont, sans que rien ne le
     // dise. Les deux entrées manquaient dans `TENANT_FOREIGN_KEYS`.
-    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(61);
+    // ⚠ 61 → 62 le 15 septembre 2026 : `usage_events` (P8-1), sans clé
+    // étrangère — voir le motif dans le registre des tables par-tenant.
+    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(62);
     const first = tx.$executeRawUnsafe.mock.calls[0][0];
     expect(first).toBe('CREATE SCHEMA "tenant_zinda"');
 
@@ -294,6 +301,11 @@ describe('AdminService — sync-schema (colonnes ajoutées après coup)', () => 
       { table_name: 'checkouts', columns: ['patron_id', 'return_date'] },
       { table_name: 'checkouts', columns: ['checkout_date'] },
       { table_name: 'checkouts', columns: ['return_date'] },
+      // Rapport annuel (P8-1) — cette école « qui a tout » les porte aussi,
+      // sinon le cas ne décrit plus une école à jour.
+      { table_name: 'usage_events', columns: ['occurred_at'] },
+      { table_name: 'usage_events', columns: ['kind', 'occurred_at'] },
+      { table_name: 'usage_events', columns: ['record_id'] },
     ];
     prisma.$queryRawUnsafe = fauxQueryRaw({
       colonnesPublic: sameColumns,
@@ -377,14 +389,27 @@ describe('AdminService — déprovisioning', () => {
 
     const res = await service.deprovisionTenant('zinda');
 
-    expect(res).toEqual({ deprovisioned: true, slug: 'zinda' });
     expect(tx.$executeRawUnsafe).toHaveBeenCalledWith(
       'DROP SCHEMA IF EXISTS "tenant_zinda" CASCADE',
     );
-    expect(tx.domain.deleteMany).toHaveBeenCalledWith({
-      where: { tenantId: 'tenant-1' },
-    });
+
+    // ⚠ L'INVARIANT, pas trois tables nommées : CHAQUE modèle déclaré doit
+    // recevoir son `deleteMany`. Nommer `domain` seul est exactement ce qui a
+    // laissé cinq tables derrière — le test vérifiait ce qu'on avait pensé à
+    // écrire, jamais ce qu'on avait oublié.
+    for (const modele of MODELES_A_SUPPRIMER) {
+      expect(
+        tx[proprietePrisma(modele)].deleteMany,
+        `${modele} : la déprovision ne le vide pas`,
+      ).toHaveBeenCalledWith({ where: { tenantId: 'tenant-1' } });
+    }
     expect(tx.tenant.delete).toHaveBeenCalledWith({ where: { id: 'tenant-1' } });
+
+    // Et elle RAPPORTE ce qu'elle a retiré : « fait » sans dire quoi ne se
+    // vérifie pas.
+    expect(res.deprovisioned).toBe(true);
+    expect(res.slug).toBe('zinda');
+    expect(Object.keys(res.retire).sort()).toEqual([...MODELES_A_SUPPRIMER].sort());
   });
 
   it('échoue si l’école n’existe pas', async () => {

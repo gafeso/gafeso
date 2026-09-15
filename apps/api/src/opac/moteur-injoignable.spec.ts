@@ -69,7 +69,8 @@ function opac(search: SearchService, notices = 352) {
     {} as never,
     { forTenant: () => ({ biblioRecord: { count: async () => notices } }) } as never,
     { provenance: async () => null } as never,
-  );
+      { enregistrer: async () => true } as never
+    );
 }
 
 describe('SearchService — il RAPPORTE l’indisponibilité, il ne la traduit pas', () => {

@@ -122,7 +122,16 @@ export function AreaLineChart({
 
   // Étiquettes X clairsemées (max ~7) pour rester lisibles en projection.
   const step = Math.max(1, Math.ceil(n / 7));
-  const gridVals = [0, Math.round(max / 2), max];
+  // ⚠ DÉDUPLIQUÉ, ET CE N'EST PAS COSMÉTIQUE. `max` est borné à 1 par le bas ;
+  // quand le jour le plus chargé compte UN prêt, `[0, Math.round(0.5), 1]` vaut
+  // `[0, 1, 1]` — deux clés React identiques. React avertit, puis omet ou
+  // duplique un repère : la grille du graphique est alors fausse.
+  //
+  // ⚠ Le cas n'est pas théorique, c'est celui d'une PETITE bibliothèque ou
+  // d'une période courte — donc celui d'un client qui démarre, et celui d'une
+  // démonstration. Le défaut se voyait dans la sortie des tests depuis un
+  // moment, sous forme d'avertissement React que personne ne lisait.
+  const gridVals = [...new Set([0, Math.round(max / 2), max])];
 
   return (
     <div className="overflow-x-auto">

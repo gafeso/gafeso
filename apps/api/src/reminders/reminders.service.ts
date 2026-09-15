@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../accounts/mail/mail.service';
@@ -285,11 +285,40 @@ export class RemindersService {
    *
    * ⚠ CE CONTOURNEMENT N'EST ACCEPTABLE QUE PARCE QUE SA ROUTE EST GARDÉE.
    * Si le module est éteint, l'appel doit être refusé AVANT d'arriver ici — par
-   * le garde de module (P4-3), qui nomme le module inactif. Sans ce garde, cette
-   * méthode serait une porte ouverte : « envoyer maintenant » enverrait des
-   * courriels au nom d'un module que l'établissement a éteint.
+   * le garde de module (P4-3), qui nomme le module inactif — ET par la
+   * vérification que porte cette méthode elle-même, ci-dessous.
+   *
+   * ⚠ Ce commentaire a affirmé cette protection pendant que le garde n'était
+   * PAS posé sur le contrôleur. Un commentaire qui décrit une sauvegarde
+   * absente rassure exactement là où il faudrait s'inquiéter.
    */
   async runForTenant(tenantId: string, slug: string, asOf: Date = new Date()) {
+    // ⚠ LA VÉRIFICATION EST ICI AUSSI, ET PAS SEULEMENT SUR LA ROUTE.
+    //
+    // Le commentaire ci-dessus affirmait que le garde de module protégeait ce
+    // chemin. **Il n'était pas posé** — `RemindersController` ne portait aucun
+    // `@ModuleRequis`, et le planificateur était le SEUL des deux appelants de
+    // `processTenant` à vérifier le module. Une école qui avait éteint les
+    // rappels recevait quand même ses courriels dès que quelqu'un cliquait
+    // « Déclencher maintenant ». Mesuré le 15 septembre 2026.
+    //
+    // ⚠ ET ON NE SE CONTENTE PAS DE POSER LA GARDE DE ROUTE. Une propriété
+    // défendue au seul niveau HTTP a une porte de plus dès qu'un appelant
+    // apparaît — une commande, un planificateur, un autre service. Ici
+    // l'action ÉMET vers l'extérieur et ne se rattrape pas : deux mille
+    // courriels portant le nom de l'école. La garde vit donc là où l'envoi se
+    // décide.
+    if (!(await this.modules.estActif(tenantId, 'rappels'))) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message:
+          'Le module « Rappels » est désactivé pour cet établissement : aucun ' +
+          'rappel n’est envoyé. Aucune donnée n’a été supprimée — une ' +
+          'réactivation rend l’envoi de nouveau possible.',
+        module: 'rappels',
+        moduleActif: false,
+      });
+    }
     const settings = await this.prisma.tenantSettings.findUnique({ where: { tenantId } });
     return this.processTenant(tenantId, slug, settings, asOf);
   }

@@ -107,6 +107,123 @@ export const LIBELLES = {
      */
   },
 
+  /**
+   * LE RAPPORT ANNUEL — P8-3, moitié front, 15 septembre 2026.
+   *
+   * ⚠ CE N'EST PAS UN TABLEAU DE BORD, et l'écran doit le dire par sa FORME.
+   * Le tableau de bord répond « comment ça va » au quotidien ; celui-ci est le
+   * document qu'une directrice remet à son université une fois par an, et
+   * qu'elle fait à la main aujourd'hui. Il est lu par des gens qui n'ont pas
+   * construit le produit, et il sert à décider d'un budget.
+   *
+   * ⚠ TROIS PROPRIÉTÉS DU CONTRAT DÉCIDENT DE CET ÉCRAN, et aucune n'est
+   * cosmétique :
+   *
+   * 1. LES RÉSERVES SONT EN TÊTE. L'API les rend en premier et son commentaire
+   *    dit pourquoi — « ce que le rapport NE PEUT PAS dire, en tête plutôt
+   *    qu'en note de bas ». Les reléguer en pied de page rendrait le document
+   *    plus flatteur et moins vrai.
+   * 2. UN BLOC ABSENT DIT SON MOTIF, et ne ressemble PAS à une panne. C'est une
+   *    limite honnête, pas une erreur : la peindre en rouge apprendrait à lire
+   *    les rouges comme du décor.
+   * 3. UNE LIGNE MASQUÉE RESTE. La supprimer ferait disparaître le groupe du
+   *    rapport, et un lecteur en conclurait qu'il n'existe pas — c'est
+   *    exactement le faux que ce seuil existe pour éviter.
+   */
+  rapportAnnuel: {
+    titre: 'Rapport annuel',
+    introduction:
+      'Le bilan de l’année civile, tel qu’il peut être remis à l’université. Chaque chiffre ' +
+      'est calculé sur la période indiquée ; ce qui ne peut pas l’être est dit, jamais remplacé ' +
+      'par un zéro.',
+    chargement: 'Calcul du rapport annuel…',
+    choisirAnnee: 'Année du rapport',
+    /**
+     * ⚠ LE LIBELLÉ DE L'API SUFFIT, et le doubler était une faute.
+     *
+     * Première écriture : « ${libelle} — du ${debut} au ${fin} inclus ». À
+     * l'écran, ça donnait « du 1er janvier au 31 décembre 2026 — du 1 janvier
+     * 2026 au 31 décembre 2026 inclus » : la même phrase deux fois, et la
+     * seconde moins bien écrite que la première (« 1 janvier » au lieu de
+     * « 1er »).
+     *
+     * L'API compose déjà sa période en français, et son commentaire dit
+     * qu'elle porte LE DERNIER JOUR COMPTÉ, pas la borne exclue. Il n'y avait
+     * rien à ajouter — seulement à ne pas réécrire moins bien.
+     */
+    periode: (libelle: string) => libelle,
+
+    /**
+     * ⚠ « CE QUE CE RAPPORT NE PEUT PAS DIRE » — le titre est délibérément net.
+     * « Notes méthodologiques » se saute ; celui-ci se lit, parce qu'il annonce
+     * une limite et non un appareil critique.
+     */
+    reservesTitre: 'Ce que ce rapport ne peut pas dire',
+    reservesIntroduction:
+      'À lire avant les chiffres. Ces limites tiennent à ce que le logiciel enregistre, ' +
+      'pas à l’activité de la bibliothèque.',
+
+    /** Un bloc que l'API déclare non calculable. */
+    blocAbsentTitre: 'Non mesurable',
+    /**
+     * ⚠ NE DIT PAS « ERREUR » ET NE PROPOSE PAS DE RÉESSAYER. Le chiffre
+     * n'existe pas ; un nouvel essai n'y changera rien, et le suggérer ferait
+     * chercher une panne là où il y a une limite assumée.
+     */
+    blocAbsentPrefixe: 'Ce bloc n’est pas calculable, et voici pourquoi :',
+
+    blocs: {
+      fonds: 'Le fonds',
+      lecteurs: 'Les lecteurs',
+      circulation: 'La circulation',
+      numerique: 'Le numérique',
+      depot: 'Les dépôts universitaires',
+      diffusion: 'La diffusion vers l’extérieur',
+    },
+    champs: {
+      documents: 'Documents au catalogue',
+      exemplaires: 'Exemplaires',
+      documentsNumeriques: 'Documents numérisés',
+      cataloguesDansLAnnee: 'Catalogués dans l’année',
+      inscrits: 'Lecteurs inscrits',
+      actifsDansLAnnee: 'Lecteurs actifs dans l’année',
+      prets: 'Prêts',
+      retours: 'Retours',
+      pretsEnRetardAuTerme: 'Prêts en retard au 31 décembre',
+      tauxDeRotation: 'Taux de rotation',
+      lecturesEnLigne: 'Lectures en ligne',
+      telechargements: 'Téléchargements',
+      lecturesHorsLigne: 'Lectures hors ligne',
+      deposes: 'Dépôts créés',
+      soumis: 'Soumis à un directeur',
+      valides: 'Validés',
+      refuses: 'Refusés',
+      catalogues: 'Entrés au catalogue',
+    },
+    repartitionTitre: 'Répartition',
+    /** ⚠ Ce que porte une ligne dont l'effectif est masqué. Le groupe RESTE. */
+    colonneGroupe: 'Groupe',
+    colonneNombre: 'Nombre',
+    /** Le taux de rotation peut être nul faute de fonds : on le DIT. */
+    tauxIndisponible: 'non calculable (aucun exemplaire)',
+    /**
+     * ⚠ L'ANNÉE EN COURS N'EST PAS FINIE, ET LE DOCUMENT NE LE DIT PAS TOUT SEUL.
+     *
+     * Le défaut porte sur l'année ÉCOULÉE — un rapport annuel se produit en
+     * janvier pour l'année qui vient de finir. Mais rien n'empêche de choisir
+     * l'année en cours dans le sélecteur, et les chiffres sont alors PARTIELS :
+     * un mois d'octobre rend dix mois d'activité, présentés comme un bilan.
+     *
+     * ⚠ Ce document sert à demander un budget. Un total partiel qui ne se
+     * signale pas est un faux — et c'est le seul faux que ce rapport peut
+     * produire sans qu'aucun de ses blocs soit en cause.
+     */
+    anneeEnCours: (jusquA: string) =>
+      `Année en cours : chiffres arrêtés au ${jusquA}, et non sur douze mois. ` +
+      `Ce n’est pas un bilan annuel.`,
+    imprimer: 'Imprimer',
+  },
+
   titres: {
     catalogue: 'Catalogue',
     auteurs: 'Auteurs',
@@ -498,6 +615,21 @@ export const LIBELLES = {
     lire: 'Lire le document',
     sansDocument: 'Aucun document joint à ce dépôt.',
     echecLecture: 'Le document n’a pas pu être ouvert.',
+    /**
+     * ⚠ LA TROISIÈME ISSUE, ET ELLE ÉTAIT INDISCERNABLE DES DEUX AUTRES.
+     *
+     * Ouvrir le document demande une fenêtre. Si le navigateur la bloque, le
+     * clic ne produisait RIEN : ni document, ni message. Le directeur recommence,
+     * conclut que le bouton est cassé, et abandonne — sur le geste qui lui sert
+     * à décider d'un dépôt.
+     *
+     * Trois issues doivent se distinguer : le document s'ouvre, l'appel échoue,
+     * ou la FENÊTRE est refusée. La troisième n'est pas une panne du produit, et
+     * la phrase dit donc quoi faire plutôt que de s'excuser.
+     */
+    fenetreBloquee:
+      'Votre navigateur a bloqué la fenêtre du document. Autorisez les fenêtres ' +
+      'surgissantes pour ce site, puis réessayez.',
     valider: 'Valider ce dépôt',
     /**
      * ⚠ Dit ce que la validation FAIT, et surtout ce qu'elle ne fait pas :
@@ -717,6 +849,21 @@ export const LIBELLES = {
       `Notice « ${titre} » rattachée : le dépôt quitte cette liste et son document est désormais au catalogue.`,
     echec: 'Le rattachement n’a pas pu être enregistré.',
     echecLecture: 'Le document n’a pas pu être ouvert.',
+    /**
+     * ⚠ LA TROISIÈME ISSUE, ET ELLE ÉTAIT INDISCERNABLE DES DEUX AUTRES.
+     *
+     * Ouvrir le document demande une fenêtre. Si le navigateur la bloque, le
+     * clic ne produisait RIEN : ni document, ni message. Le directeur recommence,
+     * conclut que le bouton est cassé, et abandonne — sur le geste qui lui sert
+     * à décider d'un dépôt.
+     *
+     * Trois issues doivent se distinguer : le document s'ouvre, l'appel échoue,
+     * ou la FENÊTRE est refusée. La troisième n'est pas une panne du produit, et
+     * la phrase dit donc quoi faire plutôt que de s'excuser.
+     */
+    fenetreBloquee:
+      'Votre navigateur a bloqué la fenêtre du document. Autorisez les fenêtres ' +
+      'surgissantes pour ce site, puis réessayez.',
   },
 
   porteDuDepot: {
@@ -760,6 +907,31 @@ export const LIBELLES = {
    * ⚠ Trois états, pas deux : sans date servie, on n'invente pas d'échéance.
    */
   reservations: {
+    /**
+     * ⚠ CE QUE LE GUICHET NE SAVAIT PAS, relevé le 14 septembre 2026.
+     *
+     * Le retour d'un document réservé affichait « À mettre de côté — le
+     * réservataire a N jours pour venir le retirer », ce qui **laisse croire
+     * qu'il a été prévenu**. L'API rend pourtant `nonPrevenus` — et son
+     * commentaire disait déjà tout : « la bibliothécaire met un document de
+     * côté, croit le lecteur prévenu, et le document repart au suivant à
+     * l'expiration sans que celui qui l'attendait ait jamais rien su ».
+     *
+     * ⚠ DEUX SILENCES QUI SE CUMULENT : le courriel échoue sans bruit, et
+     * l'écran ne dit rien. Chacun seul est rattrapable ; ensemble ils ferment
+     * la porte. Le type du front ne DÉCLARAIT même pas le champ.
+     */
+    nonPrevenuDefinitif:
+      'Ce lecteur n’a PAS pu être prévenu, et il ne le sera pas : son compte n’a pas ' +
+      'd’adresse courriel exploitable. Prévenez-le autrement — au comptoir, ou par ' +
+      'téléphone — sinon le document repartira au suivant sans qu’il ait rien su.',
+    /**
+     * Les autres motifs relâchent la réservation : une nouvelle tentative AURA
+     * lieu. On le dit, parce que l'action de la bibliothécaire n'est pas la même.
+     */
+    nonPrevenuRetente:
+      'Ce lecteur n’a PAS encore été prévenu : l’envoi a échoué et sera retenté. ' +
+      'Si vous le voyez passer, dites-le-lui — le délai de retrait court déjà.',
     aRetirerAvant: (date: string) => `À retirer avant le ${date}`,
     /** ⚠ Dit ce qui arrive si on ne vient pas — sinon la date n'est qu'un chiffre. */
     apresEcheance: 'Passé ce délai, le document repart à la personne suivante.',
@@ -1430,7 +1602,27 @@ export const LIBELLES = {
     /** ⚠ Dit POURQUOI on ne peut plus, pas seulement qu'on ne peut pas. */
     fichierFige:
       'Le document n’est plus remplaçable : il a été transmis à votre directeur avec le dépôt.',
-    soumettre: 'Soumettre à mon directeur',
+/**
+     * ⚠ POURQUOI « SOUMETTRE » EST DÉSACTIVÉ — signalé par la session backend le
+     * 15 septembre 2026, et c'est notre propre règle qui était enfreinte.
+     *
+     * Le bouton était grisé sans dire pourquoi : ni `title`, ni `aria-label`,
+     * ni `aria-describedby`. Le seul indice était l'étiquette voisine du champ
+     * de fichier — et un lecteur d'écran n'annonce qu'un bouton grisé.
+     *
+     * ⚠ La règle du dépôt est écrite depuis le 11 septembre : « une règle
+     * CONDITIONNELLE se lit à l'écran, elle ne se découvre pas par un refus ».
+     * Ici elle ne se découvrait même pas par un refus — le bouton ne répond
+     * pas. C'est le cas le plus fermé de la famille.
+     *
+     * Ces phrases sont VISIBLES autant qu'annoncées : les réserver au lecteur
+     * d'écran ferait deux produits, et laisserait voyant celui qui a le moins
+     * besoin d'aide.
+     */
+    manqueDocument: 'Ajoutez le document avant de soumettre.',
+    manqueDirecteur: 'Désignez un directeur avant de soumettre.',
+    manqueLesDeux: 'Ajoutez le document et désignez un directeur avant de soumettre.',
+        soumettre: 'Soumettre à mon directeur',
     /**
      * ⚠ LA SORTIE D'UN DÉPÔT SOUMIS — 12 septembre 2026, arbitrée par Jean.
      *

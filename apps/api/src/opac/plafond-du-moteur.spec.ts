@@ -73,7 +73,8 @@ function service(total = FONDS) {
     {} as never,
     fausseBase(total) as never,
     { provenance: async () => null } as never,
-  );
+      { enregistrer: async () => true } as never
+    );
 }
 
 describe('La constellation ne peut pas se contredire elle-même', () => {

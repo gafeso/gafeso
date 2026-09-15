@@ -56,6 +56,7 @@ function makeController() {
     {} as any,
     prisma as any,
     { log: vi.fn() } as any,
+    { enregistrer: async () => true } as never,
   );
 }
 

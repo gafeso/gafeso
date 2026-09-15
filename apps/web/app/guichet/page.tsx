@@ -15,10 +15,33 @@ interface CheckoutResult {
   rule: { loanPeriodDays: number; finePerDay: number };
 }
 
+/** Une réservation que l'API n'a PAS pu annoncer à son lecteur. */
+interface NonPrevenu {
+  holdId: string;
+  titre: string;
+  /**
+   * `aucun_destinataire` — pas d'adresse exploitable : `notifiedAt` reste posé,
+   *   donc **aucune nouvelle tentative**. Le lecteur ne sera jamais prévenu.
+   * `smtp_absent` / `smtp_error` — la réservation est relâchée, un nouvel envoi
+   *   aura lieu.
+   *
+   * ⚠ La distinction change le geste de la bibliothécaire, donc elle change la
+   * phrase : dans un cas elle doit prévenir elle-même, dans l'autre non.
+   */
+  motif: string;
+}
+
 interface ReturnResult {
   returned: boolean;
   fine: { overdueDays: number; amountXof: number };
   holdReady: { holdId: string; patronId: string; pickupDays: number } | null;
+  /**
+   * ⚠ CE CHAMP ÉTAIT SERVI ET NON DÉCLARÉ. L'API le rend depuis qu'elle a cessé
+   * de jeter l'issue de la notification ; le front ne le lisait pas, donc le
+   * guichet croyait le lecteur prévenu. C'est « une colonne SERVIE que personne
+   * ne montre », sur l'écran où l'ignorer coûte une réservation perdue.
+   */
+  nonPrevenus?: NonPrevenu[];
 }
 
 interface PatronSituation {
@@ -423,6 +446,25 @@ function ReturnTab() {
                 À mettre de côté — le réservataire a {result.holdReady.pickupDays} jours
                 pour venir le retirer.
               </p>
+                  {/*
+                    ⚠ ON NE SUPPOSE PAS QUE LE LECTEUR A ÉTÉ PRÉVENU. L'API dit
+                    qui ne l'a pas été ; sans cette lecture, la phrase ci-dessus
+                    laisse croire qu'il viendra, et le document repart au suivant
+                    à l'expiration sans qu'il ait jamais rien su.
+                  */}
+                  {(() => {
+                    const rate = result.nonPrevenus?.find(
+                      (n) => n.holdId === result.holdReady!.holdId,
+                    );
+                    if (!rate) return null;
+                    return (
+                      <p className="mt-2 font-semibold">
+                        {rate.motif === 'aucun_destinataire'
+                          ? LIBELLES.reservations.nonPrevenuDefinitif
+                          : LIBELLES.reservations.nonPrevenuRetente}
+                      </p>
+                    );
+                  })()}
             </div>
           )}
         </div>

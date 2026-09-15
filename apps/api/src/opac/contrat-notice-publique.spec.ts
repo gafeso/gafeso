@@ -55,6 +55,7 @@ function service(provenance: unknown = null) {
       {} as never,
       {} as never,
       { provenance: async () => provenance } as never,
+      { enregistrer: async () => true } as never
     ),
   };
 }

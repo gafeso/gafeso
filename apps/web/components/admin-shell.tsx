@@ -19,6 +19,7 @@ import { usePathname } from 'next/navigation';
 import { useMyFunctions } from '@/lib/functions';
 import { useModulesActifs } from '@/lib/modules-actifs';
 import { moduleDeLaRoute, ongletDe, ongletsVisibles } from '@/lib/navigation';
+import { EcranModuleEteint } from '@/components/ecran-module-eteint';
 import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
@@ -66,29 +67,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // pas sur une information qu'on n'a pas encore. La garantie reste l'API.
   const moduleRequis = moduleDeLaRoute(pathname);
   if (moduleRequis && modulesActifs && !modulesActifs.includes(moduleRequis)) {
-    return (
-      <>
-        <LienDEvitement />
-        <Header fonctions={functions} />
-        <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
-          {/*
-            ⚠ UNE INFORMATION, PAS UNE ALERTE — et le texte le disait déjà
-            pendant que la forme disait le contraire. Un module désactivé est un
-            état que le produit permet de créer EXPRÈS : un administrateur l'a
-            éteint, la veille peut-être. Le peindre en rouge et l'annoncer comme
-            une alerte qualifie d'anomalie un réglage volontaire, et apprend à
-            lire les rouges comme du décor.
-            La règle du dépôt est écrite : ce que quelqu'un a pu vouloir
-            s'affiche en information ; l'avertissement est réservé à ce que
-            personne n'a pu vouloir.
-          */}
-          <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-muted">
-            {LIBELLES.modules.ecranModuleInactif}
-          </p>
-        </main>
-      </>
-    );
+    return <EcranModuleEteint fonctions={functions} />;
   }
+
 
   if (onglets.length === 0) {
     return (

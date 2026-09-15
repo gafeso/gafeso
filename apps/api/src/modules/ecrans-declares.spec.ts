@@ -69,6 +69,91 @@ function codeDeLaPage(chemin: string): string {
   return retirerCommentaires(readFileSync(f, 'utf-8'));
 }
 
+/**
+ * ⚠ LE GARDE PERDAIT SA PORTÉE À MESURE QUE LE PROJET APPLIQUAIT SA PROPRE
+ * RÈGLE — et c'est ce qui l'a rendu aveugle aux quatre écrans du dépôt.
+ *
+ * *Mesuré le 14 septembre 2026.*
+ *
+ * `motifEcrans` cherche des mots FRANÇAIS dans le code d'une page. Or la règle
+ * « les textes visibles sortent du code » (10 septembre) les en fait sortir :
+ * une page migrée n'écrit plus « Dépôts à cataloguer », elle écrit `T.titre`.
+ * Les mots restent dans un commentaire d'en-tête — que ce fichier RETIRE, à
+ * juste titre.
+ *
+ * Résultat mesuré : sur les quatre écrans du circuit de dépôt, **zéro** était
+ * visible à ce garde. `mon-depot` n'était déclaré que parce que quelqu'un
+ * l'avait écrit à la main ; les trois autres étaient absents de la déclaration
+ * et le garde rendait VERT.
+ *
+ * ⚠ Ce n'est pas un défaut du garde ni de la règle : c'est leur RENCONTRE. Un
+ * garde qui s'affaiblit à chaque lot conforme est plus dangereux qu'un garde
+ * absent — il s'éteint progressivement, sans jamais rougir.
+ *
+ * Le remède suit la règle au lieu de la subir : le texte d'une page est son
+ * code PLUS les libellés qu'elle NOMME. Chaque page référence `LIBELLES.<clé>`
+ * — on résout ces clés dans `libelles.ts` et on les joint au texte examiné.
+ */
+const LIBELLES_SRC = join(APP, '../lib/libelles.ts');
+
+/**
+ * ⚠ AU LIBELLÉ PRÈS, ET PAS AU PAQUET — sinon le garde crie à tort, et un
+ * détecteur qui crie à tort se fait désactiver.
+ *
+ * *Mesuré le 14 septembre 2026, en élargissant ce garde : prendre le bloc
+ * ENTIER de `LIBELLES.adherents` attribuait à la LISTE des adhérents les
+ * libellés d'amendes que seule la FICHE affiche — les deux pages partagent un
+ * paquet. Deux faux positifs sur six signalements.*
+ *
+ * On résout donc les feuilles RÉELLEMENT employées : `T.amendes`,
+ * `LIBELLES.adherents.amendes`. Une page qui importe un paquet sans en lire la
+ * feuille n'hérite plus de son texte.
+ */
+function feuillesEmployees(code: string): Map<string, Set<string>> {
+  const parPaquet = new Map<string, Set<string>>();
+  const ajouter = (paquet: string, feuille: string) => {
+    if (!parPaquet.has(paquet)) parPaquet.set(paquet, new Set());
+    parPaquet.get(paquet)!.add(feuille);
+  };
+  // `const T = LIBELLES.adherents;` → alias T
+  const alias = new Map<string, string>();
+  for (const m of code.matchAll(/const (\w+)\s*=\s*LIBELLES\.(\w+)/g)) alias.set(m[1], m[2]);
+  for (const [a, paquet] of alias) {
+    for (const m of code.matchAll(new RegExp(`\\b${a}\\.(\\w+)`, 'g'))) ajouter(paquet, m[1]);
+  }
+  for (const m of code.matchAll(/LIBELLES\.(\w+)\.(\w+)/g)) ajouter(m[1], m[2]);
+  return parPaquet;
+}
+
+function texteDesLibelles(parPaquet: Map<string, Set<string>>): string {
+  if (!existsSync(LIBELLES_SRC) || parPaquet.size === 0) return '';
+  // ⚠ Commentaires retirés ICI AUSSI : « Rappel discret, en tête de liste »
+  // dans un commentaire de `libelles.ts` faisait signaler `admin/collections`
+  // comme concernée par le module `rappels`. Même cause que pour les pages.
+  const src = retirerCommentaires(readFileSync(LIBELLES_SRC, 'utf-8'));
+  let texte = '';
+  for (const [paquet, feuilles] of parPaquet) {
+    const debut = src.indexOf(`\n  ${paquet}: {`);
+    if (debut < 0) continue;
+    const fin = src.indexOf('\n  },', debut);
+    const bloc = src.slice(debut, fin < 0 ? undefined : fin);
+    for (const feuille of feuilles) {
+      // La ligne (ou la fonction) qui porte cette feuille, jusqu'à la suivante.
+      const d = bloc.indexOf(`\n    ${feuille}:`);
+      if (d < 0) continue;
+      const f = bloc.indexOf('\n    ', d + 6);
+      texte += bloc.slice(d, f < 0 ? undefined : f) + '\n';
+    }
+  }
+  return texte;
+}
+
+/** Le code de la page ET les libellés qu'elle EMPLOIE — voir le bloc ci-dessus. */
+function texteDeLaPage(chemin: string): string {
+  const code = codeDeLaPage(chemin);
+  return code + '\n' + texteDesLibelles(feuillesEmployees(code));
+}
+
 describe('écrans déclarés — le front est là où on le croit', () => {
   const pages = pagesDuFront();
 
@@ -111,7 +196,7 @@ describe('écrans déclarés — le front est là où on le croit', () => {
       );
       const motif = new RegExp(m.motifEcrans, 'i');
       for (const page of pages) {
-        if (!motif.test(codeDeLaPage(page))) continue;
+        if (!motif.test(texteDeLaPage(page))) continue;
         if (!declarees.has(page)) oublis.push(`${id} → ${page} parle de « ${m.motifEcrans} »`);
       }
     }

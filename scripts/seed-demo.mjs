@@ -113,7 +113,19 @@ const PAGE_ACCUEIL = {
     heroTitleAccent: 'à portée de main',
     lead:
       'Cherchez, empruntez et lisez les ressources de votre bibliothèque — sur le campus comme hors connexion.',
-    searchHint: 'Plus de 12 000 références, thèses et mémoires compris.',
+    // ⚠ AUCUN CHIFFRE ICI, ET C'EST DÉLIBÉRÉ. Cette ligne annonçait « Plus de
+    // 12 000 références » sur une école qui en compte 480 — vingt-cinq fois
+    // trop, sur la PREMIÈRE phrase que lit un visiteur du catalogue public.
+    //
+    // C'est « un libellé qui décrit un ÉTAT DU SYSTÈME n'est pas une constante,
+    // c'est une mesure figée dans une chaîne » : le nombre était peut-être vrai
+    // le jour où la maquette a été écrite, il ne l'a jamais été en base.
+    //
+    // ⚠ Et il ne suffit pas de le corriger à 480 : ce texte est saisi par
+    // l'établissement, et il vieillira au premier import. Un indice de
+    // recherche décrit ce qu'on CHERCHE, pas combien il y en a — les chiffres
+    // réels vivent dans la constellation, calculée à chaque visite.
+    searchHint: 'Livres, thèses, mémoires et documents numérisés de l’établissement.',
     logoUrl: null,
     // Les trois champs historiques restent VIDES : la liste ci-dessous fait
     // foi, et les remplir ferait apparaître le bloc « ancienne image sans
@@ -202,9 +214,20 @@ const STAFF = [
   { email: 'bib@exemple.bf', firstName: 'Salif', lastName: 'Ouédraogo', role: 'LIBRARIAN' },
 ];
 
+// ⚠ UN ÉTUDIANT NOMMÉ PAR FILIÈRE, ET C'EST POUR LA DÉMONSTRATION DU CONTRÔLE
+// D'ACCÈS. Elle se montre en ouvrant DEUX comptes côte à côte : chacun voit le
+// socle plus sa filière, jamais celle de l'autre. Mesuré par la vraie fonction
+// de décision le 15 septembre 2026 — L1_DROIT voit « Travaux de recherche —
+// Droit », L1_INFO voit « — Informatique », et aucun ne voit l'autre.
+//
+// Sans `justine@`, la comparaison opposait `awa@exemple.bf` à
+// `etu-2026-0105@exemple.bf` : une personne face à un matricule. Le public
+// regarde l'adresse, et l'asymétrie suggère que l'un des deux est un cas
+// particulier — alors que c'est exactement l'inverse qu'on démontre.
 const STUDENTS = [
   { matricule: 'ETU-2026-0001', email: 'awa@exemple.bf', firstName: 'Awa', lastName: 'Traoré', className: 'L1_DROIT' },
   { matricule: 'ETU-2026-0002', email: 'boubacar@exemple.bf', firstName: 'Boubacar', lastName: 'Diallo', className: 'M2_MEDECINE' },
+  { matricule: 'ETU-2026-0004', email: 'justine@exemple.bf', firstName: 'Justine', lastName: 'Ilboudo', className: 'L1_INFO' },
 ];
 
 const EXPECTED = [
@@ -803,6 +826,80 @@ async function seedTenant(db) {
   }
   log(`${rattaches}/${ENSEIGNANTS.length} enseignants rattachés à leur fiche d'autorité`);
 
+  // ── Chaque enseignant rattaché DIRIGE quelque chose ───────────────────────
+  //
+  // ⚠ SANS CE BLOC, UN COMPTE RELIÉ PEUT N'AVOIR RIEN À MONTRER. Les directions
+  // sont tirées au sort dans un vivier de noms : mesuré le 15 septembre 2026,
+  // « Zongo, Pauline » en avait 2 et « Sanogo, Alain » AUCUNE. L'écran « Mes
+  // encadrements » lui répondait donc une liste vide — et une liste vide sur un
+  // compte qui a l'air correct est pire que pas d'écran : on ne sait pas si
+  // c'est le produit ou la donnée.
+  //
+  // ⚠ ON RÉATTRIBUE, ON N'AJOUTE PAS. Ajouter un second `DIRECTEUR_MEMOIRE` à
+  // une notice donnerait deux directeurs à un même mémoire — ce qu'aucune
+  // université ne fait, et ce que l'export ETD-MS rendrait tel quel.
+  const MINIMUM_ENCADREMENTS = 4;
+  // ⚠ LES FICHES DES ENSEIGNANTS SONT EXCLUES DU VIVIER, TOUTES, ET DÈS LE
+  // DÉPART. Sans ça, le second enseignant reprend les lignes qu'on vient de
+  // donner au premier : `authorId: { not: fiche.id }` n'exclut que LUI-MÊME,
+  // et deux sélections triées pareil rendent les mêmes lignes.
+  //
+  // Mesuré le 15 septembre 2026 en appliquant ce bloc à la main : « Zongo »
+  // restait à 2 encadrements pendant que « Sanogo » en avait 4 — Sanogo lui
+  // avait repris les siens. Trouvé par le témoin qui compte PAR enseignant,
+  // pas par le total, qui lui était juste (162 avant, 162 après).
+  const fichesEnseignants = (
+    await Promise.all(
+      ENSEIGNANTS.map((e) =>
+        db.author.findFirst({
+          where: { displayName: `${e.lastName}, ${e.firstName}` },
+          select: { id: true },
+        }),
+      ),
+    )
+  ).filter(Boolean);
+  const idsReserves = fichesEnseignants.map((f) => f.id);
+
+  for (const fiche of fichesEnseignants) {
+    const dejaSiennes = await db.recordContributor.count({
+      where: { authorId: fiche.id, role: 'DIRECTEUR_MEMOIRE' },
+    });
+    const manque = MINIMUM_ENCADREMENTS - dejaSiennes;
+    if (manque <= 0) continue; // idempotent : une relance ne réattribue rien
+    const aPrendre = await db.recordContributor.findMany({
+      where: { role: 'DIRECTEUR_MEMOIRE', authorId: { notIn: idsReserves } },
+      select: { id: true },
+      orderBy: { id: 'asc' }, // déterministe : deux exécutions prennent les mêmes
+      take: manque,
+    });
+    for (const c of aPrendre) {
+      await db.recordContributor.update({ where: { id: c.id }, data: { authorId: fiche.id } });
+    }
+  }
+  const encadrements = await Promise.all(
+    ENSEIGNANTS.map(async (e) => {
+      const f = await db.author.findFirst({
+        where: { displayName: `${e.lastName}, ${e.firstName}` },
+        select: { id: true },
+      });
+      return f
+        ? db.recordContributor.count({ where: { authorId: f.id, role: 'DIRECTEUR_MEMOIRE' } })
+        : 0;
+    }),
+  );
+  log(`encadrements par enseignant : ${encadrements.join(', ')} (minimum ${MINIMUM_ENCADREMENTS})`);
+  // ⚠ UN TÉMOIN QUI ÉCHOUE, pas seulement qui journalise. La première écriture
+  // de ce bloc laissait un enseignant à 2 encadrements et l'imprimait sans
+  // broncher : une ligne de journal se lit distraitement, un seed qui s'arrête
+  // ne se lit pas du tout.
+  if (encadrements.some((n) => n < MINIMUM_ENCADREMENTS)) {
+    throw new Error(
+      `Un enseignant rattaché a moins de ${MINIMUM_ENCADREMENTS} encadrements ` +
+        `(${encadrements.join(', ')}) : « Mes encadrements » lui montrerait une ` +
+        'liste presque vide en démonstration.',
+    );
+  }
+
   // ⚠ Reliquat de fixture : « Auteur, Un », sans œuvre, trie EN TÊTE de l'index
   // alphabétique — c'est la première ligne que voit qui ouvre « Auteurs ». Un
   // auteur à zéro œuvre en tête d'index fait douter de tout le reste.
@@ -1189,7 +1286,256 @@ async function seedTenant(db) {
   );
 }
 
-// ── 4. Réindexation Meilisearch (via l'API) ───────────────────
+// ── Activité : dépôts, usage, lectures hors ligne ─────────────
+//
+// ⚠ CE QUI MANQUAIT POUR QUE LE RAPPORT ANNUEL SE MONTRE. Mesuré le
+// 15 septembre 2026 : le seed ne créait AUCUN dépôt, aucune licence hors
+// ligne, aucun événement d'usage. Le bloc « dépôt » — celui qu'aucun autre
+// produit ne peut fournir, et celui qui intéresse une directrice — serait
+// resté vide devant un client.
+//
+// ⚠ ET LE RAPPORT LE PLUS HONNÊTE EST LE MOINS DÉMONTRABLE : la règle « un
+// chiffre incalculable est ABSENT, jamais zéro » donne, sur des données vides,
+// un document de réserves. On enrichit donc la DONNÉE, jamais la règle.
+//
+// ⚠ RÉPARTI SUR DEUX ANNÉES CIVILES, et ce n'est pas un excès. Le rapport
+// propose par défaut l'année ÉCOULÉE — un rapport se produit en janvier pour
+// l'année qui vient de finir. Ne semer que l'année courante rendrait un
+// document VIDE à qui ouvre l'écran sans rien changer, c'est-à-dire à tout le
+// monde la première fois.
+// ⚠ LA MARQUE VIT SUR L'IDENTIFIANT, JAMAIS DANS UN TEXTE AFFICHÉ. Elle sert
+// l'idempotence — relancer ne doit toucher QUE ce que cette section a produit —
+// et un préfixe dans le TITRE se serait affiché tel quel en démonstration :
+// « [demo] Le régime foncier coutumier au Burkina Faso ». Un identifiant, non.
+const MARQUE_SEED = 'demo-p8-';
+
+const DEPOTS = [
+  { titre: 'Le régime foncier coutumier au Burkina Faso', type: 'these', etat: 'valide', moisAvant: 20, catalogue: true },
+  { titre: 'Accès aux soins maternels en zone rurale', type: 'these', etat: 'valide', moisAvant: 14, catalogue: true },
+  { titre: 'La médiation pénale dans le droit OHADA', type: 'memoire', etat: 'valide', moisAvant: 8, catalogue: false },
+  { titre: 'Numérisation des archives administratives', type: 'memoire', etat: 'refuse', moisAvant: 6, catalogue: false },
+  { titre: 'Le contentieux électoral au Sahel', type: 'these', etat: 'soumis', moisAvant: 2, catalogue: false },
+  { titre: 'Pharmacopée traditionnelle et santé publique', type: 'memoire', etat: 'brouillon', moisAvant: 1, catalogue: false },
+];
+
+/** Une date à N mois en arrière, à midi UTC — jamais sur une borne d'année. */
+function ilYA(mois, maintenant = new Date()) {
+  const d = new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth() - mois, 12, 12));
+  return d;
+}
+
+async function seedActivite(db) {
+  const deposant = await db.user.findFirst({ where: { email: 'awa@exemple.bf' } });
+  // ⚠ LE DIRECTEUR EST UN ENSEIGNANT, PAS LE BIBLIOTHÉCAIRE. Mesuré le
+  // 15 septembre 2026 : `bib@exemple.bf` retombe sur le rôle système
+  // LIBRARIAN, qui ne porte PAS `depot.valider`. Les six dépôts de
+  // démonstration lui étaient confiés — sa file « Dépôts à valider » serait
+  // restée vide, et le circuit bloqué au milieu devant un client.
+  //
+  // `zongo@exemple.bf` porte le rôle « Enseignant » (`depot.valider`,
+  // `encadrements.voir`) : il peut décider, et il a des encadrements à montrer.
+  const directeur = await db.user.findFirst({ where: { email: 'zongo@exemple.bf' } });
+  if (!deposant || !directeur) {
+    console.log('  ⚠ activité : comptes de démonstration absents, section ignorée.');
+    return;
+  }
+
+  // ⚠ ET ON VÉRIFIE QU'IL PEUT DÉCIDER, plutôt que de le supposer. Un circuit
+  // dont le directeur n'a pas le droit est infranchissable — c'est le défaut
+  // exact de P6, et il ne se voit qu'en essayant.
+  const roleDuDirecteur = directeur.roleId
+    ? await db.role.findUnique({ where: { id: directeur.roleId }, select: { functions: true } })
+    : null;
+  if (!roleDuDirecteur?.functions.includes('depot.valider')) {
+    throw new Error(
+      `Le directeur des dépôts de démonstration (${directeur.email}) ne porte pas ` +
+        '`depot.valider` : la file « Dépôts à valider » serait vide et le circuit bloqué.',
+    );
+  }
+
+  // ⚠ IDEMPOTENCE PAR MARQUE, jamais par compte. Relancer ne doit rien empiler,
+  // et ne doit toucher QUE ce que cette section a produit — la recette du
+  // 13 septembre a laissé deux dépôts titrés « RECETTE » qui ne sont pas à
+  // nous : on ne les emporte pas.
+  await db.deposit.deleteMany({ where: { id: { startsWith: MARQUE_SEED } } });
+  await db.offlineLicense.deleteMany({ where: { id: { startsWith: MARQUE_SEED } } });
+  await db.device.deleteMany({ where: { id: { startsWith: MARQUE_SEED } } });
+  await db.usageEvent.deleteMany({ where: { id: { startsWith: MARQUE_SEED } } });
+
+  // ⚠ UN DÉPÔT SANS DOCUMENT EST UN ÉTAT QUE LE PRODUIT REFUSE. `soumettre`
+  // exige `fileKey` — « Téléversez le document avant de soumettre ». Le seed
+  // écrivant en base, il pouvait fabriquer des dépôts soumis, validés et
+  // catalogués SANS fichier : l'écran affichait alors, sur la même carte,
+  // « Le document n'est plus remplaçable : il a été transmis à votre
+  // directeur » ET « Aucun document joint pour l'instant ».
+  //
+  // Un fonds de démonstration qui contient ce que le produit rejette ne
+  // démontre pas le produit — c'est la règle que ce fichier applique déjà aux
+  // notices, et qu'il n'appliquait pas aux dépôts. Mesuré à l'écran le
+  // 15 septembre 2026, session `awa@`.
+  const clePdf = await deposerPdfDExemple();
+
+  const notices = await db.biblioRecord.findMany({ select: { id: true }, take: 40 });
+  if (notices.length === 0) {
+    console.log('  ⚠ activité : aucune notice, section ignorée.');
+    return;
+  }
+
+  let deposes = 0;
+  for (const d of DEPOTS) {
+    const cree = ilYA(d.moisAvant);
+    const soumis = d.etat === 'brouillon' ? null : ilYA(d.moisAvant - 1 < 0 ? 0 : d.moisAvant - 1);
+    const decide = d.etat === 'valide' || d.etat === 'refuse' ? ilYA(Math.max(0, d.moisAvant - 2)) : null;
+    await db.deposit.create({
+      data: {
+        depositorId: deposant.id,
+        directorId: directeur.id,
+        notifiedDirectorId: soumis ? directeur.id : null,
+        authorName: 'Awa Traoré',
+        id: `${MARQUE_SEED}depot-${deposes}`,
+        title: d.titre,
+        documentType: d.type,
+        status: d.etat,
+        createdAt: cree,
+        updatedAt: decide ?? soumis ?? cree,
+        submittedAt: soumis,
+        decidedAt: decide,
+        recordId: d.catalogue ? notices[deposes % notices.length].id : null,
+        // ⚠ LE BROUILLON N'EN A PAS, et c'est voulu : c'est l'état où
+        // l'étudiant n'a pas encore joint son document, et l'écran doit
+        // pouvoir le montrer. Tous les autres en ont un, sinon ils
+        // décriraient un état impossible.
+        ...(d.etat === 'brouillon' || !clePdf
+          ? {}
+          : {
+              fileKey: clePdf,
+              fileName: 'memoire.pdf',
+              fileFormat: 'PDF',
+              fileSize: 1024,
+            }),
+        refusalReason: d.etat === 'refuse' ? 'Plan insuffisamment étayé — à reprendre.' : null,
+        decidedById: d.etat === 'valide' || d.etat === 'refuse' ? directeur.id : null,
+      },
+    });
+    deposes++;
+  }
+
+  // ⚠ LICENCES HORS LIGNE : le matériel cryptographique est VOLONTAIREMENT
+  // non vérifiable et il le DIT. Une signature plausible ferait croire à une
+  // licence réelle, qu'un appareil rejetterait sans qu'on comprenne pourquoi.
+  // Le rapport ne compte que `issuedAt` ; il n'a pas besoin qu'elles soient
+  // valides, et personne ne doit croire qu'elles le sont.
+  const appareil = await db.device.create({
+    data: {
+      userId: deposant.id,
+      id: `${MARQUE_SEED}appareil`,
+      label: 'Téléphone de démonstration',
+      publicKey: 'cle-publique-de-demonstration-NON-FONCTIONNELLE',
+    },
+  });
+  let licences = 0;
+  for (const mois of [15, 11, 7, 4, 2]) {
+    const emise = ilYA(mois);
+    await db.offlineLicense.create({
+      data: {
+        recordId: notices[licences % notices.length].id,
+        userId: deposant.id,
+        deviceId: appareil.id,
+        issuedAt: emise,
+        expiresAt: new Date(emise.getTime() + 30 * 24 * 3600 * 1000),
+        id: `${MARQUE_SEED}licence-${licences}`,
+        wrappedCek: 'cek-de-demonstration-NON-FONCTIONNELLE',
+        signature: 'signature-de-demonstration-NON-VERIFIABLE',
+      },
+    });
+    licences++;
+  }
+
+  // ⚠ USAGE : des ÉVÉNEMENTS, pas des personnes — aucun identifiant
+  // d'utilisateur n'existe sur cette table. Étalés sur vingt mois pour que les
+  // deux années civiles portent des chiffres.
+  const evenements = [];
+  for (let i = 0; i < 480; i++) {
+    const mois = i % 20;
+    const jour = (i * 7) % 26;
+    const quand = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth() - mois,
+      jour + 1,
+      9 + (i % 9),
+    ));
+    evenements.push({
+      id: `${MARQUE_SEED}usage-${i}`,
+      recordId: notices[i % notices.length].id,
+      kind: i % 6 === 0 ? 'TELECHARGEMENT' : 'LECTURE',
+      occurredAt: quand,
+    });
+  }
+  await db.usageEvent.createMany({ data: evenements });
+
+  // ── L'ANNÉE PRÉCÉDENTE N'EST PAS VIDE ─────────────────────────────────────
+  //
+  // ⚠ LE RAPPORT ANNUEL S'OUVRE SUR L'ANNÉE ÉCOULÉE — c'est le contrat, et il
+  // est juste : un rapport se produit en janvier pour l'année qui vient de
+  // finir. Or le seed créait TOUTES les notices et TOUS les prêts au moment où
+  // il tourne. Le rapport par défaut décrivait donc **une bibliothèque morte** :
+  // 0 prêt, 0 retour, 0 catalogué, 0 lecteur actif — sur les blocs qui sont le
+  // cœur du document.
+  //
+  // Signalé par la recette du front le 15 septembre 2026, et la remarque est
+  // juste : quelqu'un avait pensé à étaler les événements NUMÉRIQUES sur deux
+  // années, personne ne l'avait fait pour la circulation ni pour le catalogue.
+  //
+  // ⚠ ON ANTIDATE UNE PART, ON N'EN CRÉE PAS DE NOUVEAUX. Ajouter des prêts
+  // fausserait les totaux que d'autres écrans affichent ; déplacer une part des
+  // dates répartit la même activité sur deux exercices, ce qu'une bibliothèque
+  // réelle présente de toute façon.
+  const AN_DERNIER = new Date().getUTCFullYear() - 1;
+  const dansAnDernier = (mois, jour) => new Date(Date.UTC(AN_DERNIER, mois, jour, 10));
+
+  const toutesLesNotices = await db.biblioRecord.findMany({
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  const aAntidater = toutesLesNotices.slice(0, Math.floor(toutesLesNotices.length * 0.45));
+  for (const [i, n] of aAntidater.entries()) {
+    await db.biblioRecord.update({
+      where: { id: n.id },
+      data: { createdAt: dansAnDernier(i % 12, (i % 26) + 1) },
+    });
+  }
+
+  const prets = await db.checkout.findMany({
+    select: { id: true, returnDate: true },
+    orderBy: { id: 'asc' },
+  });
+  const pretsAAntidater = prets.slice(0, Math.floor(prets.length * 0.5));
+  for (const [i, c] of pretsAAntidater.entries()) {
+    const sortie = dansAnDernier(i % 12, (i % 26) + 1);
+    await db.checkout.update({
+      where: { id: c.id },
+      data: {
+        checkoutDate: sortie,
+        dueDate: new Date(sortie.getTime() + 21 * 24 * 3600 * 1000),
+        // ⚠ Le retour suit la sortie, sinon un prêt de 2025 serait « rendu »
+        // en 2026 et le compte des RETOURS de 2025 resterait à zéro — le
+        // défaut qu'on corrige, déplacé d'une ligne.
+        returnDate: c.returnDate ? new Date(sortie.getTime() + 10 * 24 * 3600 * 1000) : null,
+      },
+    });
+  }
+  log(
+    `${aAntidater.length} notice(s) et ${pretsAAntidater.length} prêt(s) datés de ${AN_DERNIER} — ` +
+      'le rapport de l’année écoulée n’est plus vide',
+  );
+
+  console.log(
+    `  ✔ activité : ${deposes} dépôt(s) aux quatre états, ${licences} licence(s) hors ligne, ` +
+      `${evenements.length} événement(s) d’usage sur 20 mois`,
+  );
+}
+
+// ── Réindexation Meilisearch (via l'API) ───────────────────
 async function reindex() {
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
@@ -1208,8 +1554,140 @@ async function reindex() {
   log('catalogue réindexé (Meilisearch)');
 }
 
+// ── Collections et règles d'accès ─────────────────────────────
+//
+// ⚠ POURQUOI CETTE PARTIE EXISTE, mesuré le 14 septembre 2026. Gafeso se vend
+// sur une phrase : « un étudiant n'accède PAS à toute la bibliothèque ; l'accès
+// dépend de sa classe ». Le mécanisme est écrit, testé, et il a deux portes
+// gardées. Mais l'école de démonstration portait UNE collection, UNE règle et
+// ZÉRO titre dedans : il n'y avait rien à restreindre, donc rien à montrer.
+//
+// Ce n'était pas un défaut de code — c'était un défaut de JEU DE DONNÉES, et
+// pour une démonstration c'est pire : on ne peut pas montrer ce qui distingue
+// le produit.
+//
+// Ce que ça compose, et c'est un RÉCIT, pas un remplissage :
+//   · le fonds général, ouvert à toutes les classes — ouvrages et publications ;
+//   · un fonds de recherche par classe peuplée, restreint à elle seule.
+// La démonstration tient alors en dix secondes : le même catalogue, deux
+// étudiants, deux résultats.
+const RECHERCHE_PAR_CLASSE = [
+  { classe: 'L1_DROIT', domaine: 'droit', nom: 'Travaux de recherche — Droit' },
+  { classe: 'L1_INFO', domaine: 'informatique', nom: 'Travaux de recherche — Informatique' },
+  { classe: 'M2_MEDECINE', domaine: 'medecine', nom: 'Travaux de recherche — Médecine' },
+];
+
+async function seedCollections(pub, db) {
+  const tenant = await pub.tenant.findUnique({ where: { slug: SLUG } });
+  if (!tenant) throw new Error('école introuvable — le provisioning a-t-il tourné ?');
+
+  /** Une collection identifiée par son NOM dans cette école ; créée si absente. */
+  const collection = async (nom, extra = {}) => {
+    const existante = await pub.collection.findFirst({ where: { tenantId: tenant.id, name: nom } });
+    if (existante) return existante;
+    return pub.collection.create({ data: { tenantId: tenant.id, name: nom, ...extra } });
+  };
+
+  /** Une règle d'accès, créée si la même n'existe pas déjà. */
+  const regle = async (collectionId, className) => {
+    const deja = await pub.accessRule.findFirst({
+      where: { collectionId, tenantId: tenant.id, className },
+    });
+    if (!deja) await pub.accessRule.create({ data: { collectionId, tenantId: tenant.id, className } });
+  };
+
+  /**
+   * Rattache des notices à une collection.
+   *
+   * ⚠ `skipDuplicates` s'appuie sur `@@unique([collectionId, recordId])` : c'est
+   * ce qui rend cette fonction rejouable. Sans lui, un second passage lèverait —
+   * et un seed qui ne se rejoue pas n'est pas un seed.
+   */
+  const rattacher = async (collectionId, recordIds) => {
+    if (recordIds.length === 0) return 0;
+    const { count } = await pub.collectionTitle.createMany({
+      data: recordIds.map((recordId) => ({ collectionId, recordId })),
+      skipDuplicates: true,
+    });
+    return count;
+  };
+
+  // ── Le fonds général : ouvert à TOUTES les classes ───────────────────────
+  // Il existe déjà (le provisionnement pose une collection socle, `isDefault`),
+  // et sa règle est « toutes classes ». Ce qui manquait, c'est son CONTENU.
+  const socle =
+    (await pub.collection.findFirst({ where: { tenantId: tenant.id, isDefault: true } })) ??
+    (await collection('Fonds général', { isDefault: true }));
+  await regle(socle.id, null);
+  const general = await db.biblioRecord.findMany({
+    where: { recordType: { in: ['ouvrage', 'publication'] } },
+    select: { id: true },
+  });
+  const posesGeneral = await rattacher(socle.id, general.map((r) => r.id));
+  log(`collection « ${socle.name} » (toutes classes) : ${general.length} notices, ${posesGeneral} ajoutées`);
+
+  // ── Un fonds de recherche par classe, restreint à elle seule ─────────────
+  for (const { classe, domaine, nom } of RECHERCHE_PAR_CLASSE) {
+    const col = await collection(nom, {
+      description: `Mémoires et thèses du domaine « ${domaine} », réservés à la classe ${classe}.`,
+    });
+    await regle(col.id, classe);
+    const travaux = await db.biblioRecord.findMany({
+      where: { recordType: { in: ['memoire', 'these'] }, category: domaine },
+      select: { id: true },
+    });
+    const poses = await rattacher(col.id, travaux.map((r) => r.id));
+    log(`collection « ${nom} » (classe ${classe}) : ${travaux.length} notices, ${poses} ajoutées`);
+  }
+}
+
 // ── Orchestration ─────────────────────────────────────────────
 async function main() {
+  /**
+   * ⚠ NE REJOUER QU'UNE PARTIE — `SEED_ONLY=collections`.
+   *
+   * Le seed complet RÉÉCRIT tous les comptes de l'école, mot de passe compris :
+   * c'est assez proche d'une suppression pour qu'on ne le lance pas à la légère,
+   * et ça change le mot de passe que quelqu'un a peut-être déjà noté.
+   *
+   * Or les collections et leurs règles d'accès sont ce qu'on a le plus souvent
+   * besoin de refaire — c'est la donnée qui manquait le 14 septembre 2026, et
+   * celle qui porte la démonstration du contrôle d'accès. Cette porte les rejoue
+   * seules, sans toucher à personne.
+   */
+  const partie = process.env.SEED_ONLY ?? '';
+  const PARTIES = ['collections', 'activite'];
+  if (partie && !PARTIES.includes(partie)) {
+    throw new Error(`SEED_ONLY inconnu : « ${partie} ». Valeurs admises : ${PARTIES.join(', ')}.`);
+  }
+  if (partie === 'activite') {
+    // ⚠ Rejoue les dépôts, l'usage et les lectures hors ligne SEULS. Aucun
+    // compte touché, aucun mot de passe changé — c'est ce qui permet de
+    // regarnir le rapport annuel avant une démonstration sans rien casser.
+    console.log('Seed Gafeso — activité (dépôts, usage, hors ligne) SEULEMENT\n');
+    const db = new PrismaClient({ datasources: { db: { url: tenantUrl() } } });
+    try {
+      await seedActivite(db);
+    } finally {
+      await db.$disconnect();
+    }
+    console.log('\n✔ Activité à jour. Aucun compte touché.');
+    return;
+  }
+  if (partie === 'collections') {
+    console.log('Seed Gafeso — collections et règles d’accès SEULEMENT\n');
+    const pub = new PrismaClient();
+    const db = new PrismaClient({ datasources: { db: { url: tenantUrl() } } });
+    try {
+      await seedCollections(pub, db);
+    } finally {
+      await pub.$disconnect();
+      await db.$disconnect();
+    }
+    console.log('\n✔ Collections à jour. Aucun compte touché.');
+    return;
+  }
+
   console.log('Seed Gafeso — Université d’Exemple\n');
   await provision();
 
@@ -1218,6 +1696,13 @@ async function main() {
   try {
     await seedPublic(pub);
     await seedTenant(db);
+    // ⚠ APRÈS les deux : les collections vivent dans le schéma PUBLIC et
+    // rattachent des notices du schéma de l'ÉCOLE. Elle a donc besoin des deux
+    // clients, et des notices déjà créées.
+    await seedCollections(pub, db);
+    // ⚠ APRÈS les notices : les dépôts catalogués et les licences hors ligne
+    // pointent des `BiblioRecord.id` qui doivent exister.
+    await seedActivite(db);
   } finally {
     await pub.$disconnect();
     await db.$disconnect();

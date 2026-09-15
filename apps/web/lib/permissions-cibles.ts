@@ -133,9 +133,8 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
   '/admin/comptes': {
     actuelle: ['lecteurs.voir'],
     cible: 'lecteurs.voir',
-    nature: 'elargissement',
-    gagnants: ['Bibliothécaire'],
-    note: "Le renommage comptes.voir → lecteurs.voir est LIVRÉ. Ce qui reste : lecteurs.voir appartient au Gestionnaire et à l'Administrateur, pas au Bibliothécaire.",
+    nature: 'inchangee',
+    note: "⚠ ACCORDÉ LE 14 SEPTEMBRE 2026, donc plus un élargissement en attente : le Bibliothécaire porte désormais lecteurs.voir. Motif et portée mesurée dans ELARGISSEMENTS_ACCORDES (apps/api). Une seule route, en LECTURE — activer un compte, y poser un rôle, importer ou gérer les classes gardent leurs propres fonctions, qu'il ne porte pas.",
   },
   '/admin/classes': {
     actuelle: ['lecteurs.gerer'],
@@ -151,7 +150,7 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
     cible: 'circulation.retards',
     nature: 'elargissement',
     gagnants: ['Bibliothécaire'],
-    note: "La sous-permission dédiée est livrée (Koha isole overdues_report du reste de la circulation). Reste à décider si le Bibliothécaire la porte : aujourd'hui non, seul l'Administrateur.",
+    note: "⚠ ACCORDÉ LE 15 SEPTEMBRE 2026 : le Bibliothécaire porte désormais circulation.retards — la LECTURE seule. La fonction a été SCINDÉE pour le rendre possible : elle gardait aussi POST /reminders/run (un courriel à TOUS les adhérents en retard) et PATCH settings (le texte qui partira). Ces deux-là exigent en plus rappels.envoyer, que seul l'Administrateur porte. Notre fonction était plus large que son modèle : overdues_report de Koha est un droit de LECTURE. Motif et portée mesurée dans ELARGISSEMENTS_ACCORDES (apps/api).",
   },
 
   // ── Outils ───────────────────────────────────────────────────────────────
@@ -175,7 +174,13 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
     cible: 'statistiques.voir',
     nature: 'inchangee',
     note: "Écran porté par le module « statistiques » dans la cible, mais GARDÉ VISIBLE : il existe et fonctionne, le masquer serait une régression. La maquette le destine au rôle Direction, que la cible introduit — donc aucun élargissement pour les rôles en place.",
+  },  '/admin/rapport-annuel': {
+    actuelle: ['statistiques.voir'],
+    cible: 'statistiques.voir',
+    nature: 'inchangee',
+    note: "Écran neuf (P8-3, 15 septembre 2026). Même fonction et même module que le tableau de bord : c'est la même donnée, lue autrement. Aucun élargissement — `statistiques.voir` n'est porté que par l'Administrateur, avant comme après.",
   },
+
 
   // ── Paramétrage ──────────────────────────────────────────────────────────
   // ⚠ L'ENTRÉE À DEUX PERMISSIONS A DISPARU le 11 septembre 2026, et c'est la

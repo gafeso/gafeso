@@ -92,7 +92,21 @@ const CONTROL_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const MAX_METADATA_FIELD_LENGTH = 500;
 
 function sanitizeExtractedText(value: string): string {
-  return value.replace(CONTROL_CHARS_RE, '').trim().slice(0, MAX_METADATA_FIELD_LENGTH);
+  // ⚠ NFC D'ABORD, ET L'ORDRE COMPTE. Un OPF d'EPUB produit sous macOS porte
+  // couramment la forme DÉCOMPOSÉE : « é » y est `e` + U+0301. Sans
+  // normalisation, deux notices dont les titres s'affichent à l'identique sont
+  // des chaînes différentes — la recherche n'en trouve qu'une, et une fiche
+  // d'autorité se dédouble sur un auteur qui n'existe qu'une fois. C'est le
+  // défaut trouvé sur le SRU puis sur l'import MARC, par une troisième porte.
+  //
+  // Avant le bornage, parce que composer RACCOURCIT : découper d'abord
+  // risquerait de séparer une base de sa diacritique et de laisser une marque
+  // combinante orpheline en fin de champ.
+  return value
+    .normalize('NFC')
+    .replace(CONTROL_CHARS_RE, '')
+    .trim()
+    .slice(0, MAX_METADATA_FIELD_LENGTH);
 }
 
 function nonEmpty(value: string | null | undefined): string | null {

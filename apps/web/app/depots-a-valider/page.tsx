@@ -20,6 +20,9 @@ import { LIBELLES } from '@/lib/libelles';
 import { Alert, Badge, Button, Card } from '@/components/ui';
 import { Header } from '@/components/header';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
+import { EcranModuleEteint } from '@/components/ecran-module-eteint';
+import { useModulesActifs } from '@/lib/modules-actifs';
+import { moduleDeLaRoute } from '@/lib/navigation';
 
 const T = LIBELLES.depotsAValider;
 
@@ -47,6 +50,17 @@ const dateFr = (iso: string) =>
   new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(iso));
 
 export default function DepotsAValiderPage() {
+  // ⚠ NI ENTRÉE, NI BOUTON, NI ÉCRAN ATTEIGNABLE PAR SON ADRESSE — la règle
+  // normative de P4, appliquée ICI parce que cet écran vit HORS de la coque du
+  // personnel : la garde d'adresse d'`AdminShell` ne le couvre pas. Mesuré le
+  // 14 septembre 2026 : module `depot` éteint, cette adresse s'affichait
+  // normalement et appelait des routes que l'API refuse.
+  //
+  // Le module est demandé à `moduleDeLaRoute`, PAS écrit en dur : une seule
+  // source dit quelle route dépend de quel module, et elle vit dans
+  // lib/navigation.ts avec le reste.
+  const { modulesActifs } = useModulesActifs();
+  const moduleRequis = moduleDeLaRoute('/depots-a-valider');
   const { functions } = useMyFunctions();
   const peutValider = functions?.includes('depot.valider');
 
@@ -76,14 +90,42 @@ export default function DepotsAValiderPage() {
 
   async function lire(id: string) {
     setErreur(null);
+    // ⚠ L'ONGLET S'OUVRE AU CLIC, PAS APRÈS L'ATTENTE. Signalé par la session
+    // backend le 15 septembre 2026. Un `window.open` placé APRÈS un `await` a
+    // perdu le contexte du geste utilisateur — c'est précisément le motif que
+    // les bloqueurs de fenêtres surgissantes visent. Selon le navigateur il
+    // passe ou il est refusé, et s'il est refusé le clic ne produit RIEN : ni
+    // document, ni message.
+    //
+    // ⚠ ET PAS `noopener` DANS LES OPTIONS, contrairement à la forme d'abord
+    // proposée. La spécification fait rendre `null` à `window.open` quand
+    // `noopener` est demandé — c'est son office, puisque le lien entre les deux
+    // fenêtres est coupé dans les deux sens. Le correctif aurait donc pris la
+    // branche « bloqué » À TOUS LES COUPS, et n'aurait jamais ouvert de
+    // document. On garde la poignée, et on coupe le lien nous-mêmes avec
+    // `opener = null` : même propriété de sécurité, poignée conservée.
+    //
+    // ⚠ Non vérifié dans le volet de navigateur de développement, qui refuse
+    // TOUTES les fenêtres surgissantes, même depuis un vrai clic : la mesure y
+    // rend `null` dans les deux cas et ne discrimine donc rien.
+    const onglet = window.open('', '_blank');
+    if (!onglet) {
+      setErreur(T.fenetreBloquee);
+      return;
+    }
+    onglet.opener = null;
     try {
       const res = await api<{ url: string }>(`/depots/${id}/document`, {}, getToken());
       // L'URL est signée et vit 5 minutes : on l'ouvre, on ne la garde pas.
-      window.open(res.url, '_blank', 'noopener,noreferrer');
+      onglet.location = res.url;
     } catch (err) {
+      // ⚠ On referme l'onglet vide : le laisser ouvert ferait croire que quelque
+      // chose s'est passé, et le message d'erreur est sur l'autre écran.
+      onglet.close();
       setErreur(err instanceof ApiError ? err.message : T.echecLecture);
     }
   }
+
 
   async function decider(id: string, geste: 'valider' | 'refuser', motif?: string) {
     setErreur(null);
@@ -120,6 +162,16 @@ export default function DepotsAValiderPage() {
     }
   }
 
+  // ⚠ AVANT LE REFUS DE DROIT, et l'ordre compte. Module éteint, la raison
+  // n'est pas que cette personne manque d'une fonction : c'est que le circuit
+  // est fermé pour tout l'établissement. Dire « vous n'avez pas le droit »
+  // enverrait quelqu'un réclamer une permission qui ne changerait rien.
+  //
+  // `null` laisse passer : on ne refuse pas sur une information qu'on n'a pas.
+  if (moduleRequis && modulesActifs && !modulesActifs.includes(moduleRequis)) {
+    return <EcranModuleEteint />;
+  }
+
   if (functions && !peutValider) {
     return (
       <>
@@ -133,6 +185,7 @@ export default function DepotsAValiderPage() {
       </>
     );
   }
+
 
   return (
     <>

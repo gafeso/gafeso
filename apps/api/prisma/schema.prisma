@@ -1195,6 +1195,53 @@ model Patron {
 //  · `BiblioRecord.id` reste la clé interne — I1, ce lien le POINTE.
 
 /// UNE SOURCE DÉCLARÉE — l'entrepôt distant qu'on vient chercher.
+/// ═══════════════════════════════════════════════════════════════════════════
+/// USAGE DES DOCUMENTS (P8-1) — table PAR TENANT.
+///
+/// ⚠ ELLE COMPTE DES ÉVÉNEMENTS, PAS DES PERSONNES, et c'est une décision, pas
+/// une simplification. Aucun identifiant d'utilisateur n'est écrit ici :
+///   · le rapport annuel n'a besoin que d'agrégats (décision 2 du brief P8) ;
+///   · une donnée qu'on ne collecte pas ne fuit pas, ne survit pas à une
+///     déprovision ratée, et ne demande pas de base légale.
+///
+/// ⚠ CONSÉQUENCE ASSUMÉE : deux ouvertures par la même personne font DEUX. Le
+/// rapport doit donc dire « consultations », jamais « lecteurs ayant
+/// consulté ». Un libellé qui parlerait de personnes serait faux, et
+/// `rapport-sans-donnee-personnelle.spec.ts` le refuse.
+///
+/// ⚠ AUCUNE CLÉ ÉTRANGÈRE VERS `biblio_records`, ET C'EST VOULU. Une cascade
+/// ferait DISPARAÎTRE les événements d'un document supprimé — donc le chiffre
+/// de 2026 changerait en 2027, après que le rapport a été remis à
+/// l'université. Un rapport annuel doit être REPRODUCTIBLE : on garde
+/// l'identifiant, et un document retiré du catalogue s'affiche comme tel dans
+/// les classements.
+model UsageEvent {
+  id String @id @default(uuid())
+
+  /// Le document concerné. Sans contrainte : voir le bloc ci-dessus.
+  recordId String @map("record_id")
+
+  /// `LECTURE` | `TELECHARGEMENT`. En TEXTE comme les autres vocabulaires
+  /// par-tenant (aucune entrée TENANT_ENUMS nécessaire).
+  ///
+  /// ⚠ LA CONSULTATION D'UNE NOTICE N'EST PAS ICI, et c'est mesuré : elle
+  /// exigerait une écriture à CHAQUE affichage de fiche, robots d'indexation
+  /// compris. Le chiffre serait gonflé par des machines et coûterait le plus
+  /// cher pour dire le moins. Lire et télécharger sont rares et signifiants —
+  /// `getReadUrl` n'est appelé qu'une fois par séance de lecture, les deux
+  /// lecteurs chargeant le fichier entier à l'ouverture.
+  kind String
+
+  /// ⚠ L'HORODATAGE DÉCIDE DE L'ANNÉE D'UN RAPPORT. Les bornes de période sont
+  ///semi-ouvertes partout dans `stats` : `gte: from, lt: to`.
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([occurredAt])
+  @@index([kind, occurredAt])
+  @@index([recordId])
+  @@map("usage_events")
+}
+
 model HarvestSource {
   id   String @id @default(uuid())
   /// Un nom lisible : une URL n'est pas un nom dans une liste.
@@ -1239,9 +1286,9 @@ model HarvestSource {
   lastDatestamp String? @map("last_datestamp")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt      @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  runs      HarvestRun[]
+  runs        HarvestRun[]
   moissonnees HarvestedRecord[]
 
   /// ⚠ PAS `baseUrl` SEULE : viser le même entrepôt avec deux ensembles
@@ -1257,7 +1304,7 @@ model HarvestRun {
   source   HarvestSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   startedAt  DateTime  @default(now()) @map("started_at")
-  finishedAt DateTime?                 @map("finished_at")
+  finishedAt DateTime? @map("finished_at")
 
   /// `en_cours` | `moisson` | `vide` | `injoignable` | `erreur_protocole` —
   /// les quatre issues du client pur, plus l'état courant.
@@ -1299,8 +1346,8 @@ model HarvestRun {
 
 /// L'IDENTITÉ D'UNE NOTICE MOISSONNÉE — ce qui rend le moissonnage REJOUABLE.
 model HarvestedRecord {
-  id       String @id @default(uuid())
-  sourceId String @map("source_id")
+  id       String        @id @default(uuid())
+  sourceId String        @map("source_id")
   /// ⚠ LA RELATION VERS LA SOURCE EST DÉCLARÉE, celle vers la NOTICE ne l'est
   /// pas — et la différence n'est pas un oubli. La clé étrangère
   /// `source_id → harvest_sources(id)` existe en base depuis la migration, avec
@@ -1333,7 +1380,7 @@ model HarvestedRecord {
   status String
 
   firstSeenAt DateTime @default(now()) @map("first_seen_at")
-  lastSeenAt  DateTime @updatedAt      @map("last_seen_at")
+  lastSeenAt  DateTime @updatedAt @map("last_seen_at")
 
   @@unique([sourceId, oaiIdentifier])
   @@index([status])

@@ -77,7 +77,7 @@ const EXCEPTIONS: Exception[] = [
  * `PATCH /depots/:id/directeur` par la désignation du directeur — le compte a
  * fait son travail dès son premier lot, et deux fois le jour même.
  */
-const NOMBRE_D_APPELS = 138;
+const NOMBRE_D_APPELS = 139;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —

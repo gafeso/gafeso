@@ -44,6 +44,53 @@ const SERIE_ZERO = [
 ];
 const UN_POINT = [{ date: '2026-09-01', loans: 0, returns: 0 }];
 
+/**
+ * ⚠ LE JOUR LE PLUS CHARGÉ COMPTE UN PRÊT. C'est le cas d'une petite
+ * bibliothèque, d'une période courte, d'un client qui démarre — et d'une
+ * démonstration. `max` étant borné à 1 par le bas, c'est la SEULE valeur qui
+ * produise deux repères identiques.
+ */
+const MAXIMUM_A_UN = [
+  { date: '2026-09-01', loans: 1, returns: 0 },
+  { date: '2026-09-02', loans: 0, returns: 1 },
+];
+
+describe('⚠ la grille de repères ne se dédouble pas', () => {
+  it('maximum à UN : trois repères demandés, DEUX distincts', () => {
+    // ⚠ `[0, Math.round(max / 2), max]` vaut `[0, 1, 1]` quand max = 1 — en
+    // JavaScript, `Math.round(0.5)` rend 1. React recevait alors deux enfants
+    // de même clé, avertissait, puis omettait ou dupliquait un repère : la
+    // grille du graphique était fausse, exactement là où les chiffres sont
+    // petits et où on regarde le plus attentivement.
+    //
+    // ⚠ CE DÉFAUT A VÉCU DANS LA SORTIE DES TESTS, en avertissement React que
+    // personne ne lisait — « Encountered two children with the same key, `1` ».
+    // Un avertissement n'est pas un échec : il passe dans le vert.
+    const { container } = render(<AreaLineChart data={MAXIMUM_A_UN} />);
+    const reperes = container.querySelectorAll('line[class*="stroke"], g > line');
+    const y = [...container.querySelectorAll('text')]
+      .map((t) => t.textContent)
+      .filter((v) => v !== null && /^\d+$/.test(v));
+    // Les valeurs de l'axe Y sont DISTINCTES : 0 et 1, pas 0, 1, 1.
+    expect(new Set(y).size).toBe(y.length);
+    expect(reperes.length).toBeGreaterThan(0);
+  });
+
+  it('témoin : un maximum ORDINAIRE garde bien ses trois repères', () => {
+    // Sans lui, une déduplication trop zélée passerait inaperçue — le test
+    // ci-dessus serait vert avec un seul repère.
+    const serie = [
+      { date: '2026-09-01', loans: 10, returns: 4 },
+      { date: '2026-09-02', loans: 2, returns: 7 },
+    ];
+    const { container } = render(<AreaLineChart data={serie} />);
+    const y = [...container.querySelectorAll('text')]
+      .map((t) => t.textContent)
+      .filter((v) => v !== null && /^\d+$/.test(v));
+    expect(new Set(y).size).toBe(3);
+  });
+});
+
 describe('⚠ courbe temporelle', () => {
   it('série vide : aucun NaN, aucun Infinity', () => {
     const { container } = render(<AreaLineChart data={SERIE_VIDE} />);

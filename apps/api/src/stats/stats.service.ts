@@ -326,9 +326,26 @@ export class StatsService {
       reminders: 'RAPPELS ENVOYÉS',
       'fund-by-category': 'FONDS PAR CATÉGORIE',
     };
+    // ⚠ LA BORNE HAUTE EST EXCLUE, ET L'EN-TÊTE LE DISAIT PAS.
+    //
+    // Il imprimait « 2026-01-01 → 2027-01-01 » pour l'année 2026, ou
+    // « 2026-01-01 → 2026-12-31 » pour une période demandée jusqu'au 31 — dans
+    // les deux cas une plage que le fichier N'A PAS mesurée. Le contrat, lui,
+    // est juste et documenté (`to` = « Fin de période EXCLUE ») : c'est
+    // l'étiquette qui mentait, d'un jour, en silence et de façon permanente
+    // puisqu'un export est archivé.
+    //
+    // ⚠ ON NE CORRIGE PAS EN RETRANCHANT UN JOUR : `to` vaut `maintenant` par
+    // défaut, et « hier » serait alors faux dans l'autre sens. La seule forme
+    // vraie dans les deux cas est de DIRE la convention.
     const header = toCsv(
       ['Rapport d’activité — période'],
-      [[`${period.from.toISOString().slice(0, 10)} → ${period.to.toISOString().slice(0, 10)}`]],
+      [
+        [
+          `du ${period.from.toISOString().slice(0, 10)} inclus ` +
+            `au ${period.to.toISOString().slice(0, 10)} exclu`,
+        ],
+      ],
     );
     const sections = await Promise.all(
       datasets.map(async (d) => ({ title: titles[d], csv: (await this.datasetCsv(slug, tenantId, d, period, now)).csv })),

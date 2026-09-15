@@ -15,6 +15,9 @@ import { LIBELLES } from '@/lib/libelles';
 import { Alert, Badge, Button, Card, Input, Select } from '@/components/ui';
 import { Header } from '@/components/header';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
+import { EcranModuleEteint } from '@/components/ecran-module-eteint';
+import { useModulesActifs } from '@/lib/modules-actifs';
+import { moduleDeLaRoute } from '@/lib/navigation';
 
 /**
  * ⚠ DÉRIVÉE de `LIBELLES.typesDeDepot`, plus recopiée — 13 septembre 2026.
@@ -88,6 +91,17 @@ const dateFr = (iso: string) =>
   new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(iso));
 
 export default function MonDepotPage() {
+  // ⚠ NI ENTRÉE, NI BOUTON, NI ÉCRAN ATTEIGNABLE PAR SON ADRESSE — la règle
+  // normative de P4, appliquée ICI parce que cet écran vit HORS de la coque du
+  // personnel : la garde d'adresse d'`AdminShell` ne le couvre pas. Mesuré le
+  // 14 septembre 2026 : module `depot` éteint, cette adresse s'affichait
+  // normalement et appelait des routes que l'API refuse.
+  //
+  // Le module est demandé à `moduleDeLaRoute`, PAS écrit en dur : une seule
+  // source dit quelle route dépend de quel module, et elle vit dans
+  // lib/navigation.ts avec le reste.
+  const { modulesActifs } = useModulesActifs();
+  const moduleRequis = moduleDeLaRoute('/mon-depot');
   const { functions } = useMyFunctions();
   const peutDeposer = functions?.includes('depot.deposer');
 
@@ -269,6 +283,16 @@ export default function MonDepotPage() {
     }
   }
 
+  // ⚠ AVANT LE REFUS DE DROIT, et l'ordre compte. Module éteint, la raison
+  // n'est pas que cette personne manque d'une fonction : c'est que le circuit
+  // est fermé pour tout l'établissement. Dire « vous n'avez pas le droit »
+  // enverrait quelqu'un réclamer une permission qui ne changerait rien.
+  //
+  // `null` laisse passer : on ne refuse pas sur une information qu'on n'a pas.
+  if (moduleRequis && modulesActifs && !modulesActifs.includes(moduleRequis)) {
+    return <EcranModuleEteint />;
+  }
+
   if (functions && !peutDeposer) {
     return (
       <>
@@ -282,6 +306,7 @@ export default function MonDepotPage() {
       </>
     );
   }
+
 
   return (
     <>
@@ -461,13 +486,44 @@ export default function MonDepotPage() {
                         }}
                       />
                     </label>
-                    <Button
-                      className="min-h-11"
-                      disabled={!d.fileName || !d.directorId || enCours === d.id}
-                      onClick={() => void soumettre(d.id)}
-                    >
-                      {LIBELLES.monDepot.soumettre}
-                    </Button>
+{/*
+                      ⚠ CE QUI MANQUE SE DIT, ET S'ANNONCE. Le bouton était grisé
+                      sans aucune raison lisible : un lecteur d'écran n'entendait
+                      qu'« bouton, non disponible ». C'est notre règle — une règle
+                      conditionnelle se lit à l'écran — dans son cas le plus
+                      fermé, puisqu'ici elle ne se découvre même pas par un refus.
+
+                      La phrase est VISIBLE et liée par `aria-describedby` : le
+                      même texte pour tout le monde, pas une version pour les
+                      lecteurs d'écran.
+                    */}
+                    {(() => {
+                      const manque = !d.fileName && !d.directorId
+                        ? LIBELLES.monDepot.manqueLesDeux
+                        : !d.fileName
+                          ? LIBELLES.monDepot.manqueDocument
+                          : !d.directorId
+                            ? LIBELLES.monDepot.manqueDirecteur
+                            : null;
+                      const idAide = `soumettre-aide-${d.id}`;
+                      return (
+                        <>
+                          {manque && (
+                            <p id={idAide} className="text-sm text-muted">
+                              {manque}
+                            </p>
+                          )}
+                          <Button
+                            className="min-h-11"
+                            disabled={!d.fileName || !d.directorId || enCours === d.id}
+                            aria-describedby={manque ? idAide : undefined}
+                            onClick={() => void soumettre(d.id)}
+                          >
+                            {LIBELLES.monDepot.soumettre}
+                          </Button>
+                        </>
+                      );
+                    })()}
                   </>
                 ) : (
                   /*

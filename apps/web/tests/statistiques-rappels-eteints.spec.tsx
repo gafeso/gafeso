@@ -52,7 +52,16 @@ const ENVOYES = [{ type: 'OVERDUE', status: 'SENT', count: 7 }];
 function monter(rappelsActif: boolean | null, rappels = ENVOYES) {
   return monterEcran('/admin/statistiques', {
     fonctions: ADMIN,
-    modules: rappelsActif === null ? null : rappelsActif ? ['rappels'] : ['amendes'],
+    // ⚠ `statistiques` EST TOUJOURS DANS LA LISTE, et c'est nécessaire depuis
+    // P8-1 : l'écran appartient désormais à ce module, et la coque rend
+    // « module éteint » s'il en est absent. Ce fichier éprouve l'effet de
+    // `rappels` SUR un bloc, pas l'extinction de l'écran qui le porte.
+    modules:
+      rappelsActif === null
+        ? null
+        : rappelsActif
+          ? ['statistiques', 'rappels']
+          : ['statistiques', 'amendes'],
     reponses: { '/stats/dashboard': tableauDeBord(rappels) },
   });
 }

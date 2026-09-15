@@ -38,7 +38,7 @@ describe('registre — la déclaration', () => {
   });
 
   it('⚠ AUCUN module inerte : les activables sont ceux que P4 rend réellement désactivables', () => {
-    // Déclarer `moissonnage`, `identifiants`, `statistiques` ou
+    // Déclarer `identifiants`, `statistiques` ou
     // `lecture-hors-ligne` afficherait dans l'écran d'activation des
     // interrupteurs qui n'éteignent rien. Le front affiche CE QUE L'API
     // DÉCLARE : la déclaration est donc la source unique, et une case de plus
@@ -52,7 +52,20 @@ describe('registre — la déclaration', () => {
     // école, quand `depot.valider` n'est sur aucun. Aucune école n'était « sans
     // dépôt » — toutes étaient à moitié ouvertes, et aucune ne pouvait
     // l'éteindre. Un circuit qu'on ne peut pas éteindre est un droit imposé.
-    expect(MODULES_ACTIVABLES).toEqual(['amendes', 'interoperabilite', 'depot', 'rappels']);
+    // ⚠ L'ORDRE EST CELUI DU REGISTRE, pas alphabétique : c'est la déclaration
+    // qui fait foi, et l'écran d'activation les affiche dans cet ordre.
+    expect(MODULES_ACTIVABLES).toEqual([
+      'amendes',
+      'interoperabilite',
+      'depot',
+      // ⚠ `statistiques` a rejoint la liste le 15 septembre 2026 (P8-1), et
+      // c'est la TROISIÈME fois que cette liste cite comme inerte un module
+      // livré entre-temps. L'écran existait, ses routes répondaient, et la
+      // navigation le portait sous `modulePrevu` — « prévu » depuis P4.
+      'statistiques',
+      'moissonnage',
+      'rappels',
+    ]);
   });
 
   it('toute dépendance déclarée existe', () => {
@@ -86,7 +99,9 @@ describe('registre — la déclaration', () => {
   });
 
   it('`dependantsDe` trouve bien les dépendants (témoin)', () => {
-    expect(dependantsDe('circulation').sort()).toEqual(['amendes', 'rappels']);
+    // ⚠ `statistiques` dépend aussi de la circulation — elle en agrège les
+    // prêts. Le compte exact oblige à revenir le constater.
+    expect(dependantsDe('circulation').sort()).toEqual(['amendes', 'rappels', 'statistiques']);
     expect(dependantsDe('amendes')).toEqual([]);
   });
 });

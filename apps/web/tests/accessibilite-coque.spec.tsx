@@ -35,6 +35,7 @@ import {
   ADRESSES_HORS_COQUE,
   ECRANS,
   monterEcran,
+  MODULES_ACTIVABLES,
   type Adresse,
 } from './aide-ecran';
 
@@ -47,7 +48,10 @@ const ADMIN = [
   'statistiques.voir', 'etablissement.apparence', 'etablissement.regles',
   'diffusion.gerer', 'securite.roles', 'securite.audit', 'modules.gerer',
 ];
-const TOUS = ['amendes', 'interoperabilite', 'rappels'];
+// ⚠ LU DANS LE REGISTRE, plus recopié : un module ajouté côté API arrive ici
+// sans qu'on y touche. La liste en dur a fait échouer trois tests le
+// 14 septembre 2026 en décrivant un monde où `depot` n'existe pas.
+const TOUS = MODULES_ACTIVABLES as unknown as string[];
 
 const REPONSES = {
   '/patrons/p1/loans': { current: [], history: { entries: [], total: 0, page: 1, pageSize: 10 } },

@@ -50,6 +50,10 @@ export const TENANT_TABLES = [
   'harvest_sources',
   'harvest_runs',
   'harvested_records',
+  // Usage des documents (P8-1) — AUCUNE clé étrangère vers `biblio_records` :
+  // une cascade ferait disparaître les événements d'un document supprimé, donc
+  // le chiffre de 2026 changerait en 2027, après remise du rapport.
+  'usage_events',
 ] as const;
 
 /** Types enum à recréer dans chaque schéma tenant (mêmes libellés que le schéma Prisma). */
@@ -225,6 +229,11 @@ const TENANT_INDEXES: TenantIndex[] = [
   // Séries temporelles du tableau de bord (audit fonctionnel 2026-07-17).
   { table: 'checkouts', columns: ['checkout_date'], name: 'checkouts_checkout_date_idx' },
   { table: 'checkouts', columns: ['return_date'], name: 'checkouts_return_date_idx' },
+  // Rapport annuel (P8-1) : on interroge toujours par PÉRIODE, souvent par
+  // type. Le troisième sert les classements « documents les plus consultés ».
+  { table: 'usage_events', columns: ['occurred_at'], name: 'usage_events_occurred_at_idx' },
+  { table: 'usage_events', columns: ['kind', 'occurred_at'], name: 'usage_events_kind_occurred_at_idx' },
+  { table: 'usage_events', columns: ['record_id'], name: 'usage_events_record_id_idx' },
 ];
 
 /**

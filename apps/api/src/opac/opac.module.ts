@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StatsModule } from '../stats/stats.module';
 import { AuthModule } from '../auth/auth.module';
 import { SearchModule } from '../search/search.module';
 import { CatalogingModule } from '../cataloging/cataloging.module';
@@ -11,7 +12,15 @@ import { OpacService } from './opac.service';
     // ⚠ `MoissonnageModule` : `ProvenanceService`, pour que la notice DISE d'où
   // elle vient (décision 1 du brief P7). Aucun cycle — `moissonnage` ne connaît
   // pas l'OPAC.
-  imports: [AuthModule, SearchModule, CatalogingModule, AccessControlModule, MoissonnageModule],
+  imports: [
+    AuthModule,
+    SearchModule,
+    CatalogingModule,
+    AccessControlModule,
+    MoissonnageModule,
+    // ⚠ Son absence ne casserait AUCUN test — elle casserait le DÉMARRAGE.
+    StatsModule,
+  ],
   controllers: [OpacController],
   providers: [OpacService],
   exports: [OpacService],

@@ -230,7 +230,7 @@ function extractMarc21(fields: MarcFields): ExtractedBiblio {
  *
  * ⚠ ICI ET PAS AILLEURS, parce que c'est l'ENTONNOIR : `extractBiblio` est le
  * seul point par lequel des champs MARC deviennent des champs de notice, quel
- * que soit le chemin — import ISO 2709, import UNIMARC XML, SRU. Normaliser
+ * que soit le chemin — import ISO 2709 (dialecte MARC21 ou UNIMARC), SRU, moissonnage OAI. Normaliser
  * dans les extracteurs demanderait d'y penser à chaque champ ajouté ; une règle
  * de PLACE ne se contourne pas par distraction, une règle de vigilance si.
  *

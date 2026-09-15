@@ -102,7 +102,10 @@ describe('l’administrateur voit TOUT', () => {
     // fonction que le Bibliothécaire détenait sans qu'aucune porte n'existe
     // (backlog n° 8). Ce chiffre s'écrit en dur pour qu'une entrée ajoutée ou
     // perdue par accident fasse tomber le test.
-    expect(toutes.length).toBe(23);
+    // ⚠ 24 depuis le 15 septembre 2026 : /admin/rapport-annuel (P8-3). Le
+    // rapport annuel est un DOCUMENT, pas une vue du tableau de bord — les
+    // confondre ferait chercher un bilan d'année dans une page de pilotage.
+    expect(toutes.length).toBe(24);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 

@@ -123,13 +123,24 @@ describe('Dépôts à valider · rien n’est affirmé avant la réponse', () =>
 
 describe('Dépôts à valider · lire avant de décider', () => {
   it('le document s’ouvre par une URL signée demandée à l’API', async () => {
+    // ⚠ RÉÉCRIT LE 15 SEPTEMBRE 2026. Ce cas affirmait
+    // `open(url, '_blank', 'noopener,noreferrer')` — c'est-à-dire l'ancienne
+    // forme, où la fenêtre s'ouvrait APRÈS l'attente et pouvait être bloquée
+    // sans que rien ne le dise.
+    //
+    // L'onglet s'ouvre désormais AU CLIC, vide, puis reçoit l'adresse. Le test
+    // suit la même trajectoire : on vérifie que l'URL signée est bien demandée
+    // ET qu'elle est posée sur l'onglet déjà ouvert. Voir
+    // `ouverture-du-document.spec.tsx` pour les trois issues, et
+    // `fenetre-ouverte-au-clic.spec.ts` pour l'invariant.
     brancher([depot()]);
     render(<PageDepotsAValider />);
-    const ouvrir = vi.fn();
-    vi.stubGlobal('open', ouvrir);
+    let adresse = '';
+    const onglet = { opener: {} as unknown, close: vi.fn(), set location(v: string) { adresse = v; } };
+    vi.stubGlobal('open', vi.fn(() => onglet));
     fireEvent.click(await screen.findByRole('button', { name: T.lire }));
     await waitFor(() => expect(appels).toContain('GET /api/depots/d1/document'));
-    expect(ouvrir).toHaveBeenCalledWith('https://exemple.test/signee', '_blank', 'noopener,noreferrer');
+    await waitFor(() => expect(adresse).toBe('https://exemple.test/signee'));
   });
 
   it('⚠ sans document, on le DIT plutôt que d’offrir un bouton inerte', async () => {

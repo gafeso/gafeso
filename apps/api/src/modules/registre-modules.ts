@@ -157,7 +157,20 @@ export const MODULES: readonly ModuleDeclare[] = [
     // elle dit le lien, et elle vaudra le jour où quelqu'un voudra l'éteindre.
     dependances: ['catalogue'],
     noyau: false,
-    ecrans: [{ chemin: 'mon-depot', quoi: 'l’écran Mon dépôt' }],
+    ecrans: [
+      { chemin: 'mon-depot', quoi: 'l’écran Mon dépôt (l’étudiant)' },
+      { chemin: 'depots-a-valider', quoi: 'l’écran Dépôts à valider (le directeur)' },
+      { chemin: 'admin/depots-soumis', quoi: 'l’écran Dépôts en attente' },
+      { chemin: 'admin/depots-a-cataloguer', quoi: 'l’écran Dépôts à cataloguer' },
+      {
+        chemin: 'admin/roles',
+        // ⚠ L'écran RESTE ; c'est son avertissement qui tombe. Signaler que
+        // « personne ne peut valider un dépôt » dans une école qui n'a pas
+        // ouvert le dépôt est du bruit — et le bruit use ce qui doit être lu le
+        // jour où il compte.
+        quoi: 'l’avertissement « personne ne peut valider un dépôt »',
+      },
+    ],
     /**
      * ⚠ LE MOTIF NE PEUT PAS ÊTRE `\bdépôts?\b`, ET C'EST MESURÉ. Ce mot
      * apparaît sur `admin/interoperabilite` dans « migration, **dépôt légal**,
@@ -166,13 +179,113 @@ export const MODULES: readonly ModuleDeclare[] = [
      * chose quand le dépôt s'éteint, ce qui est faux. Un garde qui crie à tort
      * se fait désactiver.
      *
-     * ⚠ ET SA BORNE EST ÉCRITE PLUTÔT QUE TUE : il nomme les trois écrans du
-     * circuit, dont deux n'existent pas encore. Une page qui parlerait du dépôt
-     * sans employer ces mots resterait invisible au sens inverse du garde. Un
-     * garde approximatif qui dit qu'il l'est vaut mieux qu'un garde qu'on croit
-     * complet.
+     * ⚠ SA BORNE, RÉÉCRITE LE 14 SEPTEMBRE 2026. Elle disait « il nomme les
+     * trois écrans du circuit, dont deux n'existent pas encore ». Les quatre
+     * existent désormais, et le circuit en compte QUATRE, pas trois : les
+     * « Dépôts en attente » du personnel manquaient à l'appel.
+     *
+     * Le motif porte sur les ROUTES plutôt que sur les mots français, parce que
+     * les textes vivent dans `lib/libelles.ts` : une page n'en contient que des
+     * identifiants. Une page qui parlerait du dépôt sans employer ces chemins
+     * resterait invisible au sens inverse du garde — un garde approximatif qui
+     * dit qu'il l'est vaut mieux qu'un garde qu'on croit complet.
      */
-    motifEcrans: 'mon.d[ée]p[ôo]t|d[ée]p[ôo]ts? à valider|d[ée]p[ôo]ts? à cataloguer',
+    /**
+     * ⚠ UN MOTIF QUI ÉNUMÈRE DES NOMS D'ÉCRANS SE PÉRIME AU PREMIER RENOMMAGE,
+     * et celui-ci l'avait déjà fait une fois : il cherchait « dépôts à
+     * valider » quand l'écran s'appelait « Dépôts en attente », et ne voyait
+     * donc que deux pages sur six. Le rallonger à chaque écran neuf est la
+     * forme qui échoue toujours — il suffit d'en oublier un.
+     *
+     * ⚠ IL NE POUVAIT PAS ÊTRE `\bdépôts?\b` TANT QUE LE GARDE LISAIT LE CODE :
+     * ce mot apparaît sur `admin/interoperabilite` dans « migration, **dépôt
+     * légal**, partage avec une autre bibliothèque », et dans des IDENTIFIANTS
+     * — `interface Depot`, `depot.valider`, `https://depot.exemple.bf`. Un
+     * garde qui crie à tort se fait désactiver.
+     *
+     * La forme retenue lève les deux d'un coup : elle exige **un accent**, ce
+     * qu'aucun identifiant TypeScript ne porte, et elle écarte le seul homonyme
+     * réel. Mesurée sur les 60 pages du front : elle ramène les six écrans du
+     * circuit, et rien d'autre. Un écran renommé demain reste couvert.
+     */
+    motifEcrans: '(?:dép[ôo]t|depôt)s?(?! l[ée]gal)',
+  },
+  {
+    id: 'statistiques',
+    libelle: 'Statistiques',
+    description:
+      'Tableau de bord d’activité et rapport annuel de l’établissement. ' +
+      'Éteint, les chiffres ne sont plus CONSULTABLES — mais l’usage des ' +
+      'documents continue d’être compté, pour que le jour où l’on rallume, ' +
+      'l’année ne soit pas trouée.',
+    // Tout ce qu'il agrège vient du catalogue et de la circulation. Les deux
+    // sont noyau : la dépendance ne verrouille rien, elle dit le lien.
+    dependances: ['catalogue', 'circulation'],
+    noyau: false,
+    ecrans: [
+      { chemin: 'admin/statistiques', quoi: 'l’écran Statistiques (tableau de bord)' },
+      // ⚠ AJOUTÉ LE 15 SEPTEMBRE 2026, et c'est le garde qui l'a exigé — pas une
+      // relecture. L'écran du rapport annuel appelle `/stats/`, donc il tombe
+      // sous le motif du module ; sans cette ligne, la boîte de confirmation
+      // annonçait la disparition d'UN écran quand DEUX partaient.
+      //
+      // C'est le défaut exact de `depot`, trouvé la veille : un module déclaré
+      // qui ne nomme pas tout ce qu'il éteint. La différence est qu'ici le
+      // garde avait déjà son motif, donc il a parlé tout de suite.
+      {
+        chemin: 'admin/rapport-annuel',
+        quoi: 'le rapport annuel remis à l’université',
+      },
+    ],
+    /**
+     * ⚠ PAS `\bstatistiques?\b`, ET C'EST MESURÉ. Le mot apparaît dans des
+     * libellés d'AUTRES écrans — la fiche d'adhérent parle de « statistiques
+     * de prêt », les rappels d'un compte rendu. Exiger de les déclarer serait
+     * faux, et un garde qui crie à tort se fait désactiver.
+     *
+     * Le signal retenu est MÉCANIQUE, comme pour le moissonnage : nos écrans
+     * emploient le paquet de libellés dédié, et appellent `/stats`.
+     *
+     * ⚠ SA BORNE, ÉCRITE : un écran qui parlerait des statistiques sans
+     * employer ce paquet ni appeler ces routes resterait invisible. C'est
+     * étroit — un écran du module emploie ses libellés par construction.
+     */
+    motifEcrans: 'LIBELLES\\.statistiques\\b|/stats/',
+  },
+  {
+    id: 'moissonnage',
+    libelle: 'Moissonnage',
+    description:
+      'Récupération automatique de notices depuis des entrepôts OAI-PMH ' +
+      'extérieurs. Éteint, plus aucune récolte ; les notices déjà moissonnées ' +
+      'et les comptes rendus des récoltes passées sont CONSERVÉS.',
+    // Une notice moissonnée entre au catalogue : sans catalogue, la récolte n'a
+    // pas de destination. `catalogue` est noyau, donc la dépendance ne verrouille
+    // rien — elle dit le lien, et elle vaudra le jour où quelqu'un voudra
+    // l'éteindre.
+    dependances: ['catalogue'],
+    noyau: false,
+    ecrans: [
+      { chemin: 'admin/moissonnage', quoi: 'l’écran Moissonnage' },
+      { chemin: 'admin/moissonnage/[id]', quoi: 'le détail d’un entrepôt et ses comptes rendus' },
+    ],
+    /**
+     * ⚠ LE MOTIF NE PEUT PAS ÊTRE `moissonnage`, ET C'EST MESURÉ. Le mot apparaît
+     * une fois sur `admin/interoperabilite` — « Le moissonnage se fait par… » —
+     * dans l'AUTRE sens : cet écran décrit comment des tiers moissonnent NOTRE
+     * entrepôt, pas comment nous moissonnons les leurs. Le garde aurait exigé de
+     * déclarer l'interopérabilité comme perdant quelque chose quand le
+     * moissonnage s'éteint, ce qui est faux. Un garde qui crie à tort se fait
+     * désactiver.
+     *
+     * Le motif porte donc sur la ROUTE — `moissonnage/`, présent six fois sur
+     * l'écran de liste et deux fois sur le détail, ZÉRO fois sur
+     * l'interopérabilité. Mesuré avant d'être écrit.
+     *
+     * ⚠ SA BORNE : une page qui appellerait le moissonnage sans employer ce
+     * préfixe resterait invisible au garde. Approximatif et qui le dit.
+     */
+    motifEcrans: 'moissonnage/',
   },
   {
     id: 'rappels',
@@ -234,13 +347,49 @@ export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
     'circulation/circulation.controller.ts :: Patch rules/:id',
     'circulation/circulation.controller.ts :: Delete rules/:id',
   ],
+  // ⚠ LES SEPT ROUTES DU MOISSONNAGE, et la garde est posée sur la CLASSE : une
+  // huitième écrite demain l'hérite. Elles sont listées ici quand même — c'est
+  // ce compte exact qui oblige à revenir le jour où l'une change de nom.
+  // ⚠ `rappels` DÉCLARAIT UNE LISTE VIDE, et le commentaire disait que son
+  // extinction n'agissait que sur le PLANIFICATEUR. C'était faux : cinq routes
+  // existent, dont `POST run` qui envoie des courriels à tous les adhérents en
+  // retard. Une école qui avait éteint les rappels les recevait quand même dès
+  // qu'on cliquait. Mesuré et corrigé le 15 septembre 2026.
+  rappels: [
+    'reminders/reminders.controller.ts :: Get settings',
+    'reminders/reminders.controller.ts :: Patch settings',
+    'reminders/reminders.controller.ts :: Get log',
+    'reminders/reminders.controller.ts :: Post preview',
+    'reminders/reminders.controller.ts :: Post run',
+  ],
+  statistiques: [
+    'stats/stats.controller.ts :: Get dashboard',
+    'stats/stats.controller.ts :: Get rapport-annuel',
+    'stats/stats.controller.ts :: Get export',
+    'stats/stats.controller.ts :: Get report',
+  ],
+  moissonnage: [
+    'moissonnage/moissonnage.controller.ts :: Get sources',
+    'moissonnage/moissonnage.controller.ts :: Post sources',
+    'moissonnage/moissonnage.controller.ts :: Patch sources/:id',
+    'moissonnage/moissonnage.controller.ts :: Delete sources/:id',
+    'moissonnage/moissonnage.controller.ts :: Post sources/:id/executer',
+    'moissonnage/moissonnage.controller.ts :: Get sources/:id/executions',
+    'moissonnage/moissonnage.controller.ts :: Get sources/:id/collisions',
+  ],
   interoperabilite: [
     'oai/oai.controller.ts :: Get',
     'oai/oai.controller.ts :: Post',
     'sru/sru.controller.ts :: Get lookup',
   ],
-  // ⚠ LES DOUZE ROUTES DU CIRCUIT, et la garde est posée sur la CLASSE : une
-  // treizième écrite demain l'hérite. Elles sont listées ici quand même —
+  // ⚠ LES QUINZE ROUTES DU CIRCUIT, et la garde est posée sur la CLASSE : une
+  // seizième écrite demain l'hérite.
+  //
+  // ⚠ CETTE LISTE EN A ANNONCÉ DOUZE PENDANT TROIS JOURS, et le garde inverse
+  // ne pouvait pas le dire : il ne lisait que les `@ModuleRequis` posés sur une
+  // MÉTHODE, jamais celui de la CLASSE. Trois routes ajoutées après coup —
+  // `:id/retirer`, `soumis`, `:id/reattribuer` — refusaient correctement sans
+  // que rien ne l'atteste. Corrigé le 15 septembre 2026. Elles sont listées ici quand même —
   // c'est ce compte exact qui oblige à revenir le jour où l'une change de nom.
   depot: [
     'depots/depots.controller.ts :: Post',
@@ -249,6 +398,9 @@ export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
     'depots/depots.controller.ts :: Get mes-depots',
     'depots/depots.controller.ts :: Post :id/document',
     'depots/depots.controller.ts :: Post :id/soumettre',
+    'depots/depots.controller.ts :: Post :id/retirer',
+    'depots/depots.controller.ts :: Get soumis',
+    'depots/depots.controller.ts :: Post :id/reattribuer',
     'depots/depots.controller.ts :: Get :id/document',
     'depots/depots.controller.ts :: Get a-valider',
     'depots/depots.controller.ts :: Post :id/valider',
@@ -256,5 +408,4 @@ export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
     'depots/depots.controller.ts :: Get a-cataloguer',
     'depots/depots.controller.ts :: Post :id/notice',
   ],
-  rappels: [],
 };

@@ -14,7 +14,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NAVIGATION_PERSONNEL, moduleDeLaRoute, ongletsVisibles } from '@/lib/navigation';
+import { moduleDeLaRoute, ROUTES_HORS_MENU, NAVIGATION_PERSONNEL, ongletsVisibles } from '@/lib/navigation';
+import { modulesActivables } from './aide-modules';
 
 const ADMIN = [
   'document.lire', 'catalogue.gerer', 'outils.catalogue', 'circulation.faire',
@@ -27,17 +28,49 @@ const hrefs = (modules: string[] | null) =>
   ongletsVisibles(ADMIN, modules).flatMap((o) => o.entrees.map((e) => e.href));
 
 /** Tous les modules déclarés par les entrées, plus les non-noyau du registre. */
-const TOUS = ['amendes', 'interoperabilite', 'rappels'];
+// ⚠ LU DANS LE REGISTRE DE L'API, plus recopié. La liste en dur a fait échouer
+// trois tests le 14 septembre 2026 en décrivant un monde sans `depot` — et elle
+// l'aurait refait avec `moissonnage`. Un module ajouté côté API arrive ici sans
+// qu'on y touche.
+const TOUS = modulesActivables();
 
 describe('quelles entrées dépendent d’un module', () => {
-  it('témoin : exactement deux, et on sait lesquelles', () => {
+  it('témoin : exactement sept, et on sait lesquelles', () => {
     // ⚠ Un COMPTE, pas une présence. C'est lui qui signale l'entrée ajoutée
-    // demain sans son module — celle à laquelle personne n'aura pensé.
+    // demain sans son module — celle à laquelle personne n'aura pensé. Il a
+    // servi le 14 septembre 2026 : il en attendait deux, le circuit de dépôt en
+    // a apporté deux de plus, et il a convoqué quelqu'un pour le constater.
     const avecModule = NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).filter((e) => e.module);
     expect(avecModule.map((e) => e.href).sort()).toEqual([
+      '/admin/depots-a-cataloguer',
+      '/admin/depots-soumis',
       '/admin/interoperabilite',
+      '/admin/moissonnage',
       '/admin/rappels',
+      '/admin/rapport-annuel',
+      // ⚠ Sixième depuis P8-1 : l'entrée portait `modulePrevu` — un champ
+      // d'ATTENTE, qui a survécu toute une phase à la condition qui le
+      // justifiait. Le module existe, ses routes sont gardées.
+      '/admin/statistiques',
     ]);
+  });
+
+  it('⚠ le circuit de DÉPÔT a deux écrans HORS du menu, et ils comptent aussi', () => {
+    // `/mon-depot` appartient à l'étudiant, `/depots-a-valider` au directeur :
+    // tous deux atteints depuis l'en-tête. Sans `ROUTES_HORS_MENU`, éteindre le
+    // module les laissait parfaitement accessibles — `moduleDeLaRoute` ne
+    // parcourait que le menu, donc elle rendait `undefined`, c'est-à-dire
+    // « aucun module requis ».
+    expect(ROUTES_HORS_MENU).toEqual({ '/mon-depot': 'depot', '/depots-a-valider': 'depot' });
+    expect(moduleDeLaRoute('/mon-depot')).toBe('depot');
+    expect(moduleDeLaRoute('/depots-a-valider')).toBe('depot');
+  });
+
+  it('⚠ `/mes-encadrements` n’en fait PAS partie — et c’est voulu', () => {
+    // Il liste les thèses déjà CATALOGUÉES qu'on a dirigées, en lisant le
+    // catalogue. Éteindre le dépôt ferme le circuit ; il n'efface pas ce qui en
+    // est sorti. Sans ce témoin, quelqu'un l'y ajouterait « par symétrie ».
+    expect(moduleDeLaRoute('/mes-encadrements')).toBeUndefined();
   });
 
   it('⚠ `amendes` n’a PAS d’entrée : ses blocs vivent dans des écrans du noyau', () => {
@@ -63,13 +96,28 @@ describe('⚠ un module éteint retire son entrée', () => {
     expect(hrefs(actifs)).toContain('/admin/interoperabilite');
   });
 
-  it('les deux éteints : les deux disparaissent, le noyau reste entier', () => {
+  it('dépôt éteint : ses DEUX entrées d’administration disparaissent', () => {
+    const actifs = TOUS.filter((m) => m !== 'depot');
+    expect(hrefs(actifs)).not.toContain('/admin/depots-soumis');
+    expect(hrefs(actifs)).not.toContain('/admin/depots-a-cataloguer');
+    // Le reste du catalogue ne bouge pas : le dépôt en dépend, l'inverse est faux.
+    expect(hrefs(actifs)).toContain('/admin/catalogue');
+  });
+
+  it('tout éteint : les quatre disparaissent, le noyau reste entier', () => {
     const restant = hrefs([]);
-    expect(restant).not.toContain('/admin/rappels');
-    expect(restant).not.toContain('/admin/interoperabilite');
-    // Témoin : le noyau n'a pas bougé — 18 entrées sur 20.
+    for (const href of [
+      '/admin/rappels',
+      '/admin/interoperabilite',
+      '/admin/depots-soumis',
+      '/admin/depots-a-cataloguer',
+    ]) {
+      expect(restant).not.toContain(href);
+    }
+    expect(restant).not.toContain('/admin/moissonnage');
+    // Témoin de COMPTE : le noyau n'a pas bougé.
     expect(restant.length).toBe(
-      NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).length - 2,
+      NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).length - 7,
     );
   });
 });

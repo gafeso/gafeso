@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useModulesActifs } from '@/lib/modules-actifs';
 import { LIBELLES } from '@/lib/libelles';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
@@ -71,8 +72,21 @@ export default function RolesPage() {
    * geste — créer un rôle — est une écriture. C'est la règle posée le
    * 10 septembre sur « Aucun domaine créé ».
    */
+  /**
+   * ⚠ ET RIEN SI LE MODULE EST ÉTEINT. Avertir que « personne ne peut valider
+   * un dépôt » dans une école qui n'a pas ouvert le dépôt est du bruit — et le
+   * bruit use ce qui doit être lu le jour où il compte. Un avertissement ne se
+   * place que là où il DÉTROMPE quelqu'un.
+   *
+   * `null` laisse passer, comme partout ailleurs : on n'efface pas un
+   * avertissement sur une panne réseau.
+   */
+  const { modulesActifs } = useModulesActifs();
+  const depotOuvert = modulesActifs === null || modulesActifs.includes('depot');
   const porteDuDepotManque =
-    roles === null ? null : !roles.some((r) => r.functions.includes('depot.valider'));
+    roles === null || !depotOuvert
+      ? null
+      : !roles.some((r) => r.functions.includes('depot.valider'));
 
   /**
    * PROPOSE, ne crée pas : le formulaire s'ouvre pré-rempli et l'administrateur

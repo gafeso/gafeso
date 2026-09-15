@@ -187,6 +187,31 @@ if [ -n "$DESTINATION" ] && [[ "$DESTINATION" != *"-internal"* ]]; then
   exit 1
 fi
 
+# ── 1 bis · AUCUN MARQUEUR DE CONFLIT DANS CE que l on pousse.
+#
+# ⚠ LE pre-commit LE VÉRIFIE DÉJÀ — ET IL A UN TROU EXACTEMENT LÀ OÙ LE DANGER
+# SE PRODUIT. `git rebase --continue` N EXÉCUTE PAS pre-commit : le chemin qui
+# FABRIQUE les conflits est précisément celui que le garde ne couvre pas.
+#
+# Mesuré le 15 septembre 2026 : un script de résolution a levé, git add a pris
+# le fichier sans un mot, rebase --continue a committé, et main aurait porté un
+# marqueur en clair. Ce qui l a attrapé est un COMPTE fait à la main après coup.
+#
+# Le push est le point de passage qui ne se contourne pas : un main publié qui
+# porte un marqueur est vu de tout le monde et ne se reprend plus.
+#
+# ⚠ Les fichiers de LEÇONS sont exclus : ils CITENT ces marqueurs pour les
+# expliquer. Un garde qui crie sur le texte qui le documente se fait désactiver.
+SALES=$(git grep -lE '^(<<<<<<< |>>>>>>> |=======$)' HEAD -- . 2>/dev/null \
+        | grep -vE 'CLAUDE[.]md|docs/journal[.]md|docs/passation[.]md|installer-crochets[.]sh' || true)
+if [ -n "$SALES" ]; then
+  printf '\n%s✗ Marqueurs de conflit dans ce qui serait poussé :%s\n' "$ROUGE" "$FIN"
+  echo "$SALES" | while read -r f; do printf '   %s%s%s\n' "$GRIS" "$f" "$FIN"; done
+  printf '   %sRésolvez TOUS les blocs : il y en a souvent plus d un seul.%s\n' "$GRIS" "$FIN"
+  printf '   %s⚠ git add ne regarde pas le contenu : comptez-les ensuite.%s\n' "$GRIS" "$FIN"
+  exit 1
+fi
+
 # ── 2 · La suite doit être verte.
 #    ⚠ Jamais dans la même commande qu'une action : on lit, puis on décide.
 printf '%s…%s exécution de la suite avant publication\n' "$GRIS" "$FIN"

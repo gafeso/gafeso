@@ -15,6 +15,7 @@ import { OpacSearchDto } from './dto/opac-search.dto';
 import { NOUVEAUTES_PAR_DEFAUT } from './dto/nouveautes.dto';
 import { PARCOURIR_PAR_DEFAUT } from './dto/parcourir.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { USAGE_LECTURE, UsageService } from '../stats/usage.service';
 import { CacheMemoireTTL } from './cache-memoire';
 
 /**
@@ -139,6 +140,7 @@ export class OpacService {
     private readonly accessControl: AccessControlService,
     private readonly prisma: PrismaService,
     private readonly provenances: ProvenanceService,
+    private readonly usage: UsageService,
   ) {}
 
   /**
@@ -638,6 +640,17 @@ export class OpacService {
       id,
       READ_URL_TTL_SECONDS,
     );
+
+    // ⚠ LE COMPTAGE VIENT APRÈS L'AUTORISATION, ET IL NE PEUT PAS LA FAIRE
+    // ÉCHOUER. Perdre une ligne de statistiques ne doit jamais empêcher
+    // quelqu'un de lire sa thèse : `enregistrer` ne rejette pas, et l'appel
+    // n'est pas attendu.
+    //
+    // ⚠ ET C'EST ICI, PAS AILLEURS : `getReadUrl` n'est appelé qu'UNE FOIS par
+    // séance de lecture — les deux lecteurs chargent le fichier entier à
+    // l'ouverture, aucune requête ensuite. Une ligne = une lecture réelle.
+    void this.usage.enregistrer(db, id, USAGE_LECTURE);
+
     return { url, fileFormat, expiresInSeconds, title: record.title };
   }
 

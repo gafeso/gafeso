@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { LIBELLES } from '@/lib/libelles';
 import { fermerSession } from './aide-session';
-import { ECRANS, fichierDEcranExiste, monterEcran } from './aide-ecran';
+import { ECRANS, fichierDEcranExiste, monterEcran, MODULES_ACTIVABLES } from './aide-ecran';
 
 // ⚠ L'unique ligne de plomberie : la fabrique est hissée, elle ne peut pas lire
 // une variable du test, donc c'est `aide-ecran` qui porte l'adresse courante.
@@ -32,7 +32,10 @@ const ADMIN = [
   'statistiques.voir', 'etablissement.apparence', 'etablissement.regles',
   'diffusion.gerer', 'securite.roles', 'securite.audit', 'modules.gerer',
 ];
-const TOUS = ['amendes', 'interoperabilite', 'rappels'];
+// ⚠ LU DANS LE REGISTRE, plus recopié : un module ajouté côté API arrive ici
+// sans qu'on y touche. La liste en dur a fait échouer trois tests le
+// 14 septembre 2026 en décrivant un monde où `depot` n'existe pas.
+const TOUS = MODULES_ACTIVABLES as unknown as string[];
 
 /** Ce que la fiche d'adhérent et le guichet demandent, pour monter sans lever. */
 const REPONSES_ADHERENT = {
@@ -64,8 +67,9 @@ describe('La table des adresses ne ment pas sur le disque', () => {
     const chemins = Object.values(ECRANS).map((e) => e.fichier);
     // ⚠ Le témoin COMPTE, il ne constate pas. Le chiffre change quand la table
     // change, et c'est voulu : on le met à jour en sachant ce qu'on ajoute.
-    expect(chemins).toHaveLength(26);
-    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(26);
+    // ⚠ 27 depuis le 15 septembre 2026 : /admin/rapport-annuel (P8-3).
+    expect(chemins).toHaveLength(27);
+    expect(chemins.filter(fichierDEcranExiste)).toHaveLength(27);
     // Aucun chemin en double : deux adresses qui pointent le même fichier
     // passeraient pour deux écrans couverts.
     expect(new Set(chemins).size).toBe(chemins.length);

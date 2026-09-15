@@ -117,6 +117,38 @@ export function fonctionsApresDecoupage(anciennes: string[]): string[] {
  * motif, et c'est exactement ce qu'on veut relire dans six mois.
  */
 export const ELARGISSEMENTS_ACCORDES: Record<string, { fonctions: string[]; motif: string }> = {
+  Bibliothécaire: {
+    fonctions: ['lecteurs.voir', 'circulation.retards'],
+    motif:
+      '14 septembre 2026 — au comptoir, « pourquoi ce lecteur ne peut-il pas se ' +
+      'connecter ? » était sans réponse : le Bibliothécaire gère les adhérents ' +
+      '(adherents.gerer) mais ne voyait pas si l’un d’eux a un compte, ni son ' +
+      'statut. Il fallait aller chercher un Gestionnaire pour LIRE. ' +
+      '⚠ PORTÉE MESURÉE AVANT D’ACCORDER : lecteurs.voir garde UNE route, en ' +
+      'lecture — « lister les comptes de l’école ». L’activation ' +
+      '(comptes.activer), la pose d’un rôle (comptes.gerer), l’import ' +
+      '(outils.lecteurs) et les classes (lecteurs.gerer) gardent leurs propres ' +
+      'fonctions, qu’il ne porte pas : le rôle Gestionnaire n’est PAS replié. ' +
+      '⚠ Les QUATRE autres élargissements que la maquette lui destinait sont ' +
+      'REFUSÉS le même jour, chacun sur une mesure — voir docs/journal.md.' +
+      '\n\n15 septembre 2026, `circulation.retards` — chasser les retards est ' +
+      'son métier : il tient le guichet (circulation.faire) et gère les ' +
+      'adhérents. ' +
+      '⚠ CET ÉLARGISSEMENT N’A ÉTÉ POSSIBLE QU’APRÈS UNE SCISSION, et c’est le ' +
+      'cœur de la décision. La fonction gardait AUSSI `POST /reminders/run`, ' +
+      'qui envoie un courriel à TOUS les adhérents en retard de ' +
+      'l’établissement, et `PATCH settings`, qui décide du texte qui partira. ' +
+      'Notre fonction était plus large que son modèle : `overdues_report` de ' +
+      'Koha est un droit de LECTURE. ' +
+      '⚠ La règle du dépôt tranche : un défaut d’activation ne se pose jamais ' +
+      'sur un comportement qui ÉMET vers l’extérieur, et son test est « si ce ' +
+      'geste est faux, est-ce que quelqu’un d’EXTÉRIEUR l’apprend ? ». Ici, ' +
+      'deux mille courriels portant le nom de l’école. ' +
+      'PORTÉE MESURÉE : la LECTURE seule — voir les retards, lire les modèles, ' +
+      'en demander un aperçu. L’envoi et le réglage restent à l’Administrateur ' +
+      'sous `rappels.envoyer`. Signalé par la session frontend, tranché par ' +
+      'Jean le 14 septembre.',
+  },
   Étudiant: {
     fonctions: ['depot.deposer'],
     motif:

@@ -32,6 +32,7 @@ import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
+import { USAGE_TELECHARGEMENT, UsageService } from '../stats/usage.service';
 import { AuditService } from '../audit/audit.service';
 import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { ClientIp } from '../audit/client-ip.decorator';
@@ -60,6 +61,7 @@ export class CatalogingController {
     private readonly digitalCopy: DigitalCopyService,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly usage: UsageService,
   ) {}
 
   /** Résout tenant + client Prisma du schéma école. */
@@ -380,7 +382,19 @@ export class CatalogingController {
     @Param('id') id: string,
   ) {
     const { db } = this.ctx(tenant);
-    return this.digitalCopy.getDownloadUrl(db, id);
+    const resultat = await this.digitalCopy.getDownloadUrl(db, id);
+
+    // ⚠ APRÈS l'obtention de l'URL, et sans jamais la faire échouer : perdre
+    // une ligne de comptage ne doit pas empêcher un administrateur de
+    // récupérer un fichier. `enregistrer` ne rejette pas.
+    //
+    // ⚠ TÉLÉCHARGER N'EST PAS LIRE, et les deux ne se confondent pas dans le
+    // rapport : cette route est réservée à `document.telecharger`, quand la
+    // lecture en ligne passe par l'OPAC. Ni les mêmes gestes, ni les mêmes
+    // populations.
+    void this.usage.enregistrer(db, id, USAGE_TELECHARGEMENT);
+
+    return resultat;
   }
 
   @Delete('records/:id/digital-copy')
