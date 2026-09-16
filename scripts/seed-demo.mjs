@@ -25,6 +25,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { loadEnvIfPresent } from './lib/load-env.mjs';
+import { assurerLesInscriptions } from './lib/inscriptions.mjs';
 
 loadEnvIfPresent();
 
@@ -1642,6 +1643,33 @@ async function seedCollections(pub, db) {
 }
 
 // ── Orchestration ─────────────────────────────────────────────
+/**
+ * L'inscription qui accompagne la classe, avec son témoin.
+ *
+ * ⚠ L'ANNÉE ACADÉMIQUE EST DEMANDÉE AU PRODUIT, jamais recalculée ici : sa
+ * règle a déjà été fausse une fois (calcul sur l'année civile, juste de
+ * septembre à décembre). Si `dist/` est absent, on le DIT et on s'arrête —
+ * plutôt que de deviner et de semer une année fausse dans la démonstration.
+ */
+async function assurerLesInscriptionsDeLEcole(db) {
+  const regle = new URL('../apps/api/dist/enrollment/academic-year.js', import.meta.url);
+  let currentAcademicYear;
+  try {
+    ({ currentAcademicYear } = await import(regle.href));
+  } catch {
+    throw new Error(
+      'apps/api/dist/enrollment/academic-year.js est absent — l’année académique est la ' +
+        'RÈGLE DU PRODUIT et n’est pas recopiée ici.\n' +
+        '  Construisez l’API d’abord :  npm run build -w @gafeso/api',
+    );
+  }
+  const annee = currentAcademicYear();
+  const { prevues, creees, sansClasse } = await assurerLesInscriptions(db, annee);
+  for (const m of sansClasse) log(`⚠ classe inconnue, compte NON inscrit : ${m}`);
+  if (creees !== prevues) throw new Error(`inscriptions : ${creees} apparues pour ${prevues} prévues`);
+  log(`inscriptions ${annee} : ${creees} créée(s)`);
+}
+
 async function main() {
   /**
    * ⚠ NE REJOUER QU'UNE PARTIE — `SEED_ONLY=collections`.
@@ -1703,6 +1731,23 @@ async function main() {
     // ⚠ APRÈS les notices : les dépôts catalogués et les licences hors ligne
     // pointent des `BiblioRecord.id` qui doivent exister.
     await seedActivite(db);
+    // ⚠ EN DERNIER, ET C'EST UNE CORRECTION DU 16 SEPTEMBRE 2026.
+    //
+    // Ce seed écrivait `users.class_name` directement, sans jamais créer
+    // l'inscription correspondante. Or `AccountsService` écrit les DEUX dans
+    // la même transaction et son commentaire l'affirme : « les deux ne peuvent
+    // pas diverger ». Elles divergeaient, parce que ce fichier est un SECOND
+    // écrivain qui ne passe pas par les règles du produit.
+    //
+    // Ce que ça coûtait : `/admin/classes` lit `_count.enrollments` et
+    // affichait « 0 étudiant » pour les huit classes, dont trois en portaient
+    // 21, 20 et 20. Le contrôle d'accès, lui, lit `class_name` et
+    // fonctionnait — deux écrans, deux vérités.
+    //
+    // ⚠ EN DERNIER parce que les comptes naissent avant les classes dans ce
+    // fichier, et que d'autres étudiants sont créés plus bas encore. Placé
+    // ailleurs, il en manquerait une partie sans le dire.
+    await assurerLesInscriptionsDeLEcole(db);
   } finally {
     await pub.$disconnect();
     await db.$disconnect();

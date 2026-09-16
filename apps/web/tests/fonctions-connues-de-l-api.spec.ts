@@ -105,7 +105,11 @@ describe('l’administrateur voit TOUT', () => {
     // ⚠ 24 depuis le 15 septembre 2026 : /admin/rapport-annuel (P8-3). Le
     // rapport annuel est un DOCUMENT, pas une vue du tableau de bord — les
     // confondre ferait chercher un bilan d'année dans une page de pilotage.
-    expect(toutes.length).toBe(24);
+    // ⚠ 25 le soir même : `/depots-a-valider` a quitté l'EN-TÊTE pour la barre
+    // métier. Elle n'est pas une entrée NEUVE — elle existait, ailleurs. Ce
+    // compte mesure la barre, pas le produit : une entrée qui déménage le fait
+    // bouger, et c'est ce qu'on veut qu'il signale.
+    expect(toutes.length).toBe(25);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 

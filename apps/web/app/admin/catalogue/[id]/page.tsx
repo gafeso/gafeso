@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { Badge, Button, Card, Input, Select, Textarea } from '@/components/ui';
 import { formatTitle } from '@/lib/titles';
+import { formaterDecimal } from '@/lib/chiffres';
 import { isDefenseType, RECORD_TYPES, yearLabel } from '@/lib/record-types';
 import { ITEM_LOCATIONS } from '@/lib/item-locations';
 import {
@@ -78,7 +79,7 @@ const ACCEPTED_DIGITAL_TYPES = '.pdf,.epub,application/pdf,application/epub+zip'
 
 function formatFileSize(bytes: number): string {
   return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+    ? `${formaterDecimal(bytes / (1024 * 1024), 1)} Mo`
     : `${Math.round(bytes / 1024)} Ko`;
 }
 

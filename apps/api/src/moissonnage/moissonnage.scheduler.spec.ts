@@ -13,7 +13,10 @@ function contexte(
   ecoles = Object.keys(parEcole),
 ) {
   const prisma = {
-    tenant: { findMany: vi.fn(async () => ecoles.map((slug) => ({ slug }))) },
+    // ⚠ L'`id` EST DANS LA DOUBLURE parce que le produit le LIT : le garde de
+    // module interroge `estActif(id, …)`. Une doublure qui ne rend que le slug
+    // ferait passer le test sur une donnée que la production n'envoie jamais.
+    tenant: { findMany: vi.fn(async () => ecoles.map((slug) => ({ id: `id-${slug}`, slug }))) },
     forTenant: vi.fn((slug: string) => {
       const e = parEcole[slug];
       if (!e) throw new Error(`schéma absent : ${slug}`);
@@ -35,7 +38,13 @@ function contexte(
     }),
   } as never;
   const executer = vi.fn(async () => ({ outcome: 'moisson', created: 2, collided: 0, deletions: 0 }));
-  const sched = new MoissonnageScheduler(prisma, { executer } as never);
+  // ⚠ LA DOUBLURE DIT OUI PAR DÉFAUT, et c'est un choix : ces cas éprouvent le
+  // RYTHME, pas le garde de module. Le garde a son propre cas plus bas, avec sa
+  // doublure qui dit non — sans quoi on aurait un garde qu'aucun test ne
+  // traverse dans les deux états.
+  const sched = new MoissonnageScheduler(prisma, { executer } as never, {
+    estActif: vi.fn(async () => true),
+  } as never);
   // Le journal ne doit pas polluer la sortie des tests.
   const logger = (sched as unknown as { logger: Record<string, unknown> }).logger;
   logger.log = () => {};
@@ -128,7 +137,7 @@ describe('⚠ Une école en panne ne prive pas les autres', () => {
 
   it('⚠ un moissonnage qui LÈVE ne fait pas tomber le passage', async () => {
     const prisma = {
-      tenant: { findMany: vi.fn(async () => [{ slug: 'zinda' }]) },
+      tenant: { findMany: vi.fn(async () => [{ id: 'id-zinda', slug: 'zinda' }]) },
       forTenant: vi.fn(() => ({
         harvestSource: { findMany: vi.fn(async () => [SOURCE]) },
         harvestRun: { findFirst: vi.fn(async () => null) },
@@ -138,7 +147,7 @@ describe('⚠ Une école en panne ne prive pas les autres', () => {
       executer: vi.fn(async () => {
         throw new Error('entrepôt inatteignable');
       }),
-    } as never);
+    } as never, { estActif: vi.fn(async () => true) } as never);
     const logger = (sched as unknown as { logger: Record<string, unknown> }).logger;
     logger.log = () => {};
     logger.error = () => {};
@@ -155,6 +164,51 @@ describe('⚠ Un passage à la fois', () => {
     const premier = sched.quotidien(new Date('2026-09-13T04:00:00Z'));
     await sched.quotidien(new Date('2026-09-13T04:00:01Z'));
     await premier;
+    expect(executer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('⚠ L’extinction du module arrête le PLANIFICATEUR, pas seulement la route', () => {
+  /**
+   * Le contrôleur portait `@ModuleRequis('moissonnage')` et cela suffisait tant
+   * que la route était le seul chemin. Ce planificateur est un SECOND appelant :
+   * une école ayant éteint Moissonnage voyait quand même partir des requêtes en
+   * son nom vers des serveurs OAI tiers, chaque jour à 4 h.
+   *
+   * ⚠ LES DEUX ÉTATS DU GARDE SONT ÉPROUVÉS ICI. Un garde qu'on ne traverse que
+   * dans l'état « passant » est indiscernable d'un garde absent — et c'est
+   * précisément ce qui l'a laissé manquer deux jours.
+   */
+  const monter = (actif: boolean) => {
+    const executer = vi.fn(async () => ({ outcome: 'moisson', created: 2, collided: 0, deletions: 0 }));
+    const estActif = vi.fn(async () => actif);
+    const prisma = {
+      tenant: { findMany: vi.fn(async () => [{ id: 'id-zinda', slug: 'zinda' }]) },
+      forTenant: vi.fn(() => ({
+        harvestSource: { findMany: vi.fn(async () => [SOURCE]) },
+        harvestRun: { findFirst: vi.fn(async () => null) },
+      })),
+    } as never;
+    const sched = new MoissonnageScheduler(prisma, { executer } as never, { estActif } as never);
+    const logger = (sched as unknown as { logger: Record<string, unknown> }).logger;
+    logger.log = () => {};
+    logger.warn = () => {};
+    return { sched, executer, estActif, prisma };
+  };
+
+  it('module ÉTEINT : rien ne part, et la base de l’école n’est même pas ouverte', async () => {
+    const { sched, executer, estActif, prisma } = monter(false);
+    await sched.quotidien(new Date('2026-09-16T04:00:00Z'));
+    expect(estActif).toHaveBeenCalledWith('id-zinda', 'moissonnage');
+    expect(executer, 'une école qui a éteint le module ne doit émettre AUCUNE requête').not.toHaveBeenCalled();
+    // ⚠ On éprouve l'EFFET, pas la présence du garde : le client de l'école
+    // n'est pas même construit, donc aucune lecture ne part non plus.
+    expect((prisma as unknown as { forTenant: ReturnType<typeof vi.fn> }).forTenant).not.toHaveBeenCalled();
+  });
+
+  it('module ALLUMÉ : le moissonnage part — sinon ce garde fermerait tout', async () => {
+    const { sched, executer } = monter(true);
+    await sched.quotidien(new Date('2026-09-16T04:00:00Z'));
     expect(executer).toHaveBeenCalledTimes(1);
   });
 });

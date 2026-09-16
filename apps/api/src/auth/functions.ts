@@ -14,12 +14,19 @@ export const FONCTIONS = {
   /**
    * Déposer un mémoire ou une thèse (P6-2).
    *
-   * ⚠ CRÉÉE MAIS ASSIGNÉE À AUCUN RÔLE SYSTÈME, et c'est délibéré. Donner cette
-   * fonction à l'Étudiant est un ÉLARGISSEMENT DE DROITS — plus de personnes
-   * peuvent écrire dans le produit —, et les élargissements sont réservés.
-   * Tant que ce n'est pas tranché, la fonction existe, les routes la réclament,
-   * et PERSONNE ne la porte : le circuit est complet et inatteignable, ce qui
-   * est l'état correct d'un droit non encore accordé.
+   * ⚠ PORTÉE PAR LE RÔLE SYSTÈME ÉTUDIANT depuis l'élargissement accordé le
+   * 14 septembre 2026. Donner cette fonction était un ÉLARGISSEMENT DE DROITS
+   * — plus de personnes peuvent écrire dans le produit —, il a été soumis et
+   * accordé ; le module `depot` reste la seconde clé, une école qui l'éteint
+   * ferme le circuit pour tout le monde.
+   *
+   * ⚠ CE COMMENTAIRE A AFFIRMÉ L'INVERSE PENDANT DEUX JOURS — « PERSONNE ne la
+   * porte : le circuit est complet et inatteignable ». C'était vrai à
+   * l'écriture, et c'est resté écrit après l'élargissement. Le coût est
+   * mesuré : le script de démonstration du 21 septembre en avait conclu que
+   * « Mes encadrements » ne pouvait fonctionner pour personne. Un commentaire
+   * qui JUSTIFIE une conception est celui qu'on relit pour décider — voir
+   * « le commentaire qui justifie un état meurt avec l'état » dans CLAUDE.md.
    */
   DEPOT_DEPOSER: 'depot.deposer',
   /**
@@ -30,7 +37,8 @@ export const FONCTIONS = {
    * dépôts d'un collègue. C'est ce qui rend l'élargissement étroit — on gagne
    * l'accès à des données SUR SOI. Propriété TESTÉE, pas déclarée.
    *
-   * ⚠ N'EST PORTÉE PAR AUCUN RÔLE SYSTÈME, et c'est la décision du 12 septembre
+   * ⚠ N'EST PORTÉE PAR AUCUN RÔLE MÉTIER — l'Administrateur la porte, comme il
+   * porte TOUTES_LES_FONCTIONS. C'est la décision du 12 septembre
    * 2026 : elle est destinée à un rôle DYNAMIQUE « Enseignant », que chaque
    * école crée si elle en a l'usage. Aucun `UserRole` nouveau — l'enum coûte
    * une migration pour un gain nul, et `functionsForLegacyRole` étant
@@ -56,7 +64,8 @@ export const FONCTIONS = {
    * de promotion.
    *
    * Portée par le rôle DYNAMIQUE « Enseignant », posé par le seed de
-   * démonstration. Aucun rôle système ne la porte : une école sans enseignants
+   * démonstration. Aucun rôle MÉTIER ne la porte (l'Administrateur, si : il porte
+ * tout) — une école sans enseignants
    * déclarés n'a pas cet écran, et c'est l'état correct.
    */
   ENCADREMENTS_VOIR: 'encadrements.voir',

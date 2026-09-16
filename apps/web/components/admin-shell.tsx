@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMyFunctions } from '@/lib/functions';
 import { useModulesActifs } from '@/lib/modules-actifs';
-import { moduleDeLaRoute, ongletDe, ongletsVisibles } from '@/lib/navigation';
+import { destinationOnglet, moduleDeLaRoute, ongletDe, ongletsVisibles } from '@/lib/navigation';
 import { EcranModuleEteint } from '@/components/ecran-module-eteint';
 import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
@@ -107,14 +107,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="border-b border-line bg-paper/60">
         <nav
           aria-label="Sections"
-          className="mx-auto flex max-w-5xl flex-wrap gap-1 px-4 py-2 sm:px-6"
+          className="print:hidden mx-auto flex max-w-5xl flex-wrap gap-1 px-4 py-2 sm:px-6"
         >
           {onglets.map((onglet) => {
             const estActif = onglet.id === actif.id;
             return (
               <Link
                 key={onglet.id}
-                href={onglet.entrees[0].href}
+                href={destinationOnglet(onglet)}
                 aria-current={estActif ? 'page' : undefined}
                 // min-h-11 = 44 px, la cible tactile minimale recommandée.
                 // Les onglets faisaient 32 px : mesuré à 375 px, ça se rate.
@@ -134,17 +134,32 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-8 md:py-8">
         {/* Un onglet à une seule entrée n'a pas besoin d'une barre latérale
             qui répète son propre nom. */}
-        {actif.entrees.length > 1 && (
-          <aside className="w-full shrink-0 md:w-52">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              {actif.libelle}
-            </p>
+        {/* ⚠ NI UN ONGLET QUI PORTE UNE PAGE DE RUBRIQUES : c'est la page qui
+            fait l'index, et lui donner AUSSI une barre latérale remettrait le
+            niveau de trop qu'on vient de retirer, sous une autre forme. */}
+        {/* ⚠ `print:hidden` SUR L'ASIDE, pas seulement sur son `nav`. Le titre
+            de section vit AU-DESSUS du `nav` : marquer le `nav` seul laissait
+            le mot « Statistiques » en PREMIÈRE LIGNE du rapport annuel
+            imprimé — un reste d'interface en tête d'un document remis à une
+            université. Trouvé en recette le 15 septembre 2026, en relevant ce
+            qui SUBSISTE après retrait des éléments masqués : le marquage
+            existait, à un élément près, donc rien ne se lisait de travers. */}
+        {actif.entrees.length > 1 && !actif.pageDeRubriques && (
+          <aside className="print:hidden w-full shrink-0 md:w-52">
+            {/* ⚠ PAS DE TITRE ICI, ET C'EST LE POINT DU LOT. Il reprenait le
+                libellé de l'onglet ACTIF : le mot s'affichait donc deux fois,
+                l'une sous l'autre, pour les SIX onglets — et trois fois sur
+                Statistiques, où une entrée porte aussi ce nom. Si un sous-menu
+                répète le nom de son parent, il y a un niveau de trop.
+                L'onglet actif, en pleine couleur juste au-dessus, dit déjà où
+                l'on est ; le `nav` porte son nom accessible pour qui ne le
+                voit pas. */}
             {/* ⚠ Trois `nav` dans cette coque, et deux s'annonçaient
                 « navigation » à l'identique. Un nom par barre, sinon le repère
                 ne repère rien. */}
             <nav
               aria-label={LIBELLES.accessibilite.navDeLaSection(actif.libelle)}
-              className="flex flex-col gap-1"
+              className="print:hidden flex flex-col gap-1"
             >
               {groupes.map((groupe, i) => (
                 <div key={groupe.titre ?? `g${i}`} className="flex flex-col gap-1">

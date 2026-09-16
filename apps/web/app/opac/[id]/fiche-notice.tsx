@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
+
+/** Les textes de la réservation, côté LECTEUR. */
+const T = LIBELLES.reservations;
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -83,16 +87,32 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
     setHoldMsg(null);
     setPlacing(true);
     try {
-      const res = await api<{ readyForPickup: boolean; queuePosition: number }>(
-        '/reader/holds',
-        { method: 'POST', body: JSON.stringify({ recordId: id }) },
-        getToken(),
-      );
-      setHoldMsg(
-        res.readyForPickup
-          ? 'Un exemplaire vous est mis de côté : passez le retirer au comptoir.'
-          : `Réservation enregistrée — vous êtes en position ${res.queuePosition} dans la file.`,
-      );
+      // ⚠ `pickupDays` ET `nonPrevenus` SONT SERVIS, et n'étaient pas même
+      // déclarés ici. Le guichet a été branché sur `nonPrevenus` le
+      // 14 septembre ; le côté LECTEUR — la seule personne qui perd quelque
+      // chose — est resté muet un jour de plus. Une moitié livrée n'est pas une
+      // correction : le côté qui RAPPORTE attend le côté qui LIT.
+      const res = await api<{
+        readyForPickup: boolean;
+        queuePosition: number;
+        pickupDays?: number;
+        nonPrevenus?: { holdId: string; titre: string; motif: string }[];
+      }>('/reader/holds', { method: 'POST', body: JSON.stringify({ recordId: id }) }, getToken());
+
+      if (!res.readyForPickup) {
+        setHoldMsg(`Réservation enregistrée — vous êtes en position ${res.queuePosition} dans la file.`);
+        return;
+      }
+
+      // ⚠ TROIS ÉTATS, PAS DEUX : sans délai servi, on n'invente pas d'échéance.
+      const base =
+        typeof res.pickupDays === 'number'
+          ? T.misDeCoteAvecDelai(res.pickupDays)
+          : T.misDeCoteSansDelai;
+      // ⚠ Toute entrée concerne CETTE réservation : c'est celle qu'on vient de
+      // poser, et l'API ne notifie qu'elle dans ce chemin.
+      const prevenu = (res.nonPrevenus?.length ?? 0) === 0;
+      setHoldMsg(prevenu ? base : `${base} ${T.confirmationNonEnvoyee}`);
     } catch (err) {
       setHoldError(err instanceof ApiError ? err.message : 'Réservation impossible.');
     } finally {
@@ -280,8 +300,23 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
             ))}
           </div>
 
-          {/* Réservation : proposée quand aucun exemplaire n'est disponible. */}
-          {record.availability && !record.availability.borrowable && (
+          {/*
+            ⚠ RÉSERVER EXIGE UN EXEMPLAIRE, et pas seulement « rien d'empruntable ».
+            Décision du 15 septembre 2026. La condition précédente —
+            `!borrowable` — était vraie aussi quand il n'y a AUCUN exemplaire :
+            un document purement numérique proposait donc une réservation.
+
+            ⚠ Une file d'attente sur un fichier n'a pas de sens, et surtout : une
+            file qui ne peut jamais se vider est un FAUX DISPOSITIF. Le lecteur
+            croit avoir une place, et il n'en a pas. Mesuré : 139 notices sur 480
+            sont dans ce cas — 20 avec une copie numérique, 119 sans rien.
+          */}
+          {record.availability && record.availability.totalItems === 0 && (
+            <p className="mt-4 text-sm text-muted">{LIBELLES.ficheNotice.sansExemplaire}</p>
+          )}
+          {record.availability &&
+            record.availability.totalItems > 0 &&
+            !record.availability.borrowable && (
             <div className="mt-4">
               {holdMsg && <Alert tone="success">{holdMsg}</Alert>}
               {holdError && <Alert tone="error">{holdError}</Alert>}
@@ -336,17 +371,19 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
       ) : record.digitalCopy && access && !access.granted ? (
         <div className="mt-2 flex items-center gap-3 rounded-lg border border-dashed border-ocre/50 bg-ocre/5 px-4 py-4 text-sm text-muted">
           <LockIcon className="h-5 w-5 shrink-0 text-ocre" />
+          {/* ⚠ PAS DE BOUTON GRISÉ ICI, ET C'EST UNE RÈGLE DÉJÀ TRANCHÉE SUR CET
+              ÉCRAN. Un `<p>` maquillé en bouton — mêmes formes, grisé, avec
+              `aria-disabled="true"` — se lisait comme une panne au-dessus de la
+              phrase qui, elle, dit ce qui EST. Et l'`aria-disabled` sur un
+              paragraphe ne dit rien à personne : ce n'est pas focalisable, donc
+              jamais atteint au clavier.
+              Reste ce qui informe : le refus, et sous quelle forme le document
+              existe. */}
           <div>
-            <p
-              aria-disabled="true"
-              className="inline-flex items-center gap-2 rounded-md bg-ink/20 px-5 py-2.5 text-sm font-semibold text-ink/60"
-            >
-              Lire en ligne
-              <span className="rounded bg-ink/10 px-1.5 py-0.5 text-xs uppercase">
-                {record.digitalCopy.fileFormat}
-              </span>
+            <p className="font-semibold text-ink">{access.message}</p>
+            <p className="mt-1 text-xs text-muted">
+              {LIBELLES.lectureRefusee.formatExistant(record.digitalCopy.fileFormat)}
             </p>
-            <p className="mt-2">{access.message}</p>
           </div>
         </div>
       ) : record.digitalCopy ? (

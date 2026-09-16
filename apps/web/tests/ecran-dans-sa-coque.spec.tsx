@@ -90,41 +90,50 @@ describe('Défaut n° 1 de P4-2 — la coque doit suivre la bascule', () => {
    * le seul défaut de la semaine qui pousse quelqu'un à refaire une action qui a
    * réussi.
    */
-  it('éteindre Interopérabilité retire son entrée du menu, sans rechargement', async () => {
+  /**
+   * ⚠ L'OBSERVABLE A CHANGÉ LE 15 SEPTEMBRE 2026, PAS LA PROPRIÉTÉ. Ces deux
+   * cas regardaient l'entrée « Interopérabilité » dans la barre latérale
+   * d'Administration. Cet onglet n'a plus de barre latérale : ses écrans se
+   * présentent en RUBRIQUES sur `/admin/administration`, parce que le titre de
+   * la barre répétait le nom de l'onglet.
+   *
+   * On mesure donc la bascule sur l'ONGLET « Statistiques », qui disparaît
+   * entier quand son module s'éteint. C'est le même mécanisme — la coque relit
+   * l'état des modules — sur un observable plus large, donc plus sûr.
+   */
+  it('éteindre Statistiques retire son onglet du menu, sans rechargement', async () => {
     monterEcran('/admin/modules', { fonctions: ADMIN, modules: [...TOUS] });
 
-    // L'entrée est là AVANT le geste — sans ce constat, sa disparition ne
-    // prouverait rien : elle pourrait n'avoir jamais été rendue.
-    const entree = await screen.findByRole('link', { name: 'Interopérabilité' });
-    expect(entree.getAttribute('href')).toBe('/admin/interoperabilite');
+    // L'onglet est là AVANT le geste — sans ce constat, sa disparition ne
+    // prouverait rien : il pourrait n'avoir jamais été rendu.
+    const onglet = await screen.findByRole('link', { name: 'Statistiques' });
+    expect(onglet.getAttribute('href')).toBe('/admin/statistiques');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Désactiver Interopérabilité' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Désactiver Statistiques' }));
     fireEvent.click(await screen.findByRole('button', { name: LIBELLES.modules.confirmer }));
 
     // ⚠ `queryBy*`, pas `findBy*` : pour affirmer une ABSENCE il faut un matcher
     // qui rend `null` tout de suite. `findBy*` attendrait ce qui ne viendra
     // jamais et dirait « j'ai renoncé » là où l'on veut « c'est absent ».
     await waitFor(() =>
-      expect(screen.queryByRole('link', { name: 'Interopérabilité' })).toBeNull(),
+      expect(screen.queryByRole('link', { name: 'Statistiques' })).toBeNull(),
     );
   });
 
   /**
-   * ⚠ L'AUTRE SENS, et il ne se teste pas avec n'importe quel module. « Rappels
-   * envoyés » vit sous l'onglet Guichet : depuis `/admin/modules` la coque rend
-   * la barre latérale d'Administration, donc cette entrée n'est rendue ni avant
-   * ni après — un test écrit dessus échouerait sans rien dire de la bascule.
-   * Interopérabilité est sous le même onglet que l'écran des modules, c'est
-   * donc lui qui exerce l'apparition.
+   * ⚠ L'AUTRE SENS, et il ne se teste pas avec n'importe quel observable. Un
+   * onglet ENTIER qui revient est ce que la barre rend de plus visible ; une
+   * entrée de barre latérale d'un AUTRE onglet ne serait rendue ni avant ni
+   * après, et le test passerait sans rien dire de la bascule.
    */
-  it('rallumer Interopérabilité fait réapparaître son entrée', async () => {
+  it('rallumer Statistiques fait réapparaître son onglet', async () => {
     monterEcran('/admin/modules', { fonctions: ADMIN, modules: ['amendes', 'rappels'] });
-    await screen.findByRole('button', { name: 'Activer Interopérabilité' });
-    expect(screen.queryByRole('link', { name: 'Interopérabilité' })).toBeNull();
+    await screen.findByRole('button', { name: 'Activer Statistiques' });
+    expect(screen.queryByRole('link', { name: 'Statistiques' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Activer Interopérabilité' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activer Statistiques' }));
     await waitFor(() =>
-      expect(screen.getByRole('link', { name: 'Interopérabilité' })).toBeTruthy(),
+      expect(screen.getByRole('link', { name: 'Statistiques' })).toBeTruthy(),
     );
   });
 });
@@ -183,8 +192,51 @@ describe('Défaut n° 2 de P4-2 — l’adresse d’un module éteint est refus�
       modules: null,
       reponses: { '/oai/sources': [], '/interoperabilite': {} },
     });
-    await screen.findByRole('link', { name: 'Interopérabilité' });
+    // ⚠ L'ancre est l'ONGLET, pas une entrée de barre latérale : l'onglet
+    // Administration n'en a plus. Ce qu'on veut prouver est que la coque s'est
+    // rendue ENTIÈRE et sans refus — un onglet suffit à l'établir, et il ne
+    // dépend pas de la forme interne de la section.
+    await screen.findByRole('link', { name: 'Administration' });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+/**
+ * ⚠ CE QUI A ÉTÉ RETIRÉ NE SE GARDE PAS PAR UN CONTRÔLE NÉGATIF.
+ *
+ * Un contrôle négatif MUTE une présence pour voir si un test la défend. Il ne
+ * peut pas, par construction, révéler ce qui n'a PLUS à être écrit — remettre
+ * le titre répété et la barre latérale n'a fait tomber aucun test, et c'est
+ * normal : l'absence se garde en l'AFFIRMANT, jamais en cassant ce qui reste.
+ */
+describe('⚠ le niveau de trop a été retiré, et il ne revient pas', () => {
+  it('la barre latérale ne répète PAS le nom de l’onglet', async () => {
+    // Le titre reprenait `actif.libelle` : le mot s'affichait deux fois, l'une
+    // sous l'autre, pour les SIX onglets. Sur Statistiques, trois fois.
+    monterEcran('/admin/catalogue', { fonctions: ADMIN, modules: [...TOUS] });
+    const barre = await screen.findByRole('navigation', { name: /Catalogue/ });
+    expect(barre.parentElement?.textContent).not.toMatch(/^Catalogue/);
+    // Témoin : la barre est bien rendue et porte ses entrées — sans lui, une
+    // coque qui ne rend RIEN passerait cette assertion.
+    expect(screen.getByRole('link', { name: 'Notices' })).toBeTruthy();
+  });
+
+  it('⚠ l’onglet à rubriques n’a AUCUNE barre latérale', async () => {
+    // C'est la page qui fait l'index. Lui donner aussi une barre remettrait le
+    // niveau de trop sous une autre forme.
+    monterEcran('/admin/modules', { fonctions: ADMIN, modules: [...TOUS] });
+    await screen.findByRole('link', { name: 'Administration' });
+    expect(
+      screen.queryByRole('navigation', { name: /Administration/ }),
+      'l’onglet Administration a retrouvé une barre latérale',
+    ).toBeNull();
+  });
+
+  it('⚠ témoin INVERSÉ : un autre onglet garde la sienne', async () => {
+    // Sans lui, supprimer TOUTES les barres latérales passerait le cas
+    // ci-dessus — et personne ne s'en apercevrait avant de chercher un écran.
+    monterEcran('/admin/catalogue', { fonctions: ADMIN, modules: [...TOUS] });
+    expect(await screen.findByRole('navigation', { name: /Catalogue/ })).toBeTruthy();
   });
 });
 

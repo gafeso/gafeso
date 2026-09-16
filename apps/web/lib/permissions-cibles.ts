@@ -100,6 +100,16 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
     cible: 'outils.catalogue',
     nature: 'inchangee',
   },
+  // ⚠ La file du DIRECTEUR, passée de l'en-tête à la barre métier le
+  // 15 septembre 2026. Aucun droit ne change : `depot.valider` la commandait
+  // déjà comme lien d'en-tête. C'est un DÉMÉNAGEMENT, et il est déclaré ici
+  // parce que cette table couvre toute entrée de la barre — sans quoi le garde
+  // « sans entrée morte » la signalerait comme non déclarée.
+  '/depots-a-valider': {
+    actuelle: ['depot.valider'],
+    cible: 'depot.valider',
+    nature: 'inchangee',
+  },
   '/admin/depots-soumis': {
     actuelle: ['catalogue.gerer'],
     cible: 'catalogue.gerer',

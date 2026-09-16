@@ -37,6 +37,36 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'reservations.confirmationNonEnvoyee',
+    nature: 'promet',
+    raison:
+      'Le lecteur est la SEULE personne qui perd quelque chose : sans cette ' +
+      'phrase, il attend un courriel qui ne viendra jamais et laisse expirer ce ' +
+      'qu’il a réservé. Doit dire que la confirmation n’arrivera PAS et donner ' +
+      'une suite — retenir le délai, ou demander à la bibliothèque. Et surtout ' +
+      'ne pas promettre un nouvel envoi : il n’y en aura pas.',
+  },
+  {
+    cle: 'reservations.misDeCoteSansDelai',
+    nature: 'ressemblance',
+    raison:
+      'Un CONSTAT, pas une promesse : « un exemplaire vous est mis de côté ». ' +
+      'Elle ne s’affiche que lorsque l’API n’a pas servi de délai — trois états ' +
+      'et non deux : on n’invente pas une échéance qu’on ne connaît pas. La ' +
+      'variante qui porte le délai, elle, est une fonction et non un littéral, ' +
+      'donc hors de portée de ce registre ; son accord en nombre est éprouvé ' +
+      'dans reservation-message-du-lecteur.spec.tsx.',
+  },
+  {
+    cle: 'administration.aucuneRubrique',
+    nature: 'promet',
+    raison:
+      'Un paramétrage entièrement vide se lit comme un logiciel cassé. Ce texte ' +
+      'doit dire que l’absence vient des DROITS ou d’un module éteint — jamais ' +
+      'd’une panne — et NOMMER à qui s’adresser, sinon la personne n’a aucune ' +
+      'suite à donner.',
+  },
+  {
     cle: 'motDePasse.recours',
     nature: 'promet',
     raison:

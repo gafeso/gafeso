@@ -5,7 +5,7 @@
 // multi-tenant. En cas d'échec (API down), les défauts Gafeso restent.
 
 import { useEffect } from 'react';
-import { api } from '@/lib/api';
+import { chargerEtablissement } from '@/lib/etablissement';
 
 function hexToRgbTriplet(hex: string): string | null {
   const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -16,15 +16,17 @@ function hexToRgbTriplet(hex: string): string | null {
 
 export function ThemeProvider() {
   useEffect(() => {
-    api<{ primaryColor: string; secondaryColor: string }>('/tenancy/current')
-      .then((tenant) => {
-        const root = document.documentElement;
-        const primary = hexToRgbTriplet(tenant.primaryColor);
-        const secondary = hexToRgbTriplet(tenant.secondaryColor);
-        if (primary) root.style.setProperty('--brand-primary-rgb', primary);
-        if (secondary) root.style.setProperty('--brand-secondary-rgb', secondary);
-      })
-      .catch(() => null);
+    // ⚠ MÊME CHARGEMENT que le menu de compte, mémorisé dans
+    // `lib/etablissement` : les couleurs et le nom de l'école viennent de la
+    // même réponse, et une seule requête part.
+    void chargerEtablissement().then((tenant) => {
+      if (!tenant) return;
+      const root = document.documentElement;
+      const primary = hexToRgbTriplet(tenant.primaryColor);
+      const secondary = hexToRgbTriplet(tenant.secondaryColor);
+      if (primary) root.style.setProperty('--brand-primary-rgb', primary);
+      if (secondary) root.style.setProperty('--brand-secondary-rgb', secondary);
+    });
   }, []);
 
   return null;

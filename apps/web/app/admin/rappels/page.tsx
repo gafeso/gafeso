@@ -48,6 +48,17 @@ const EMPTY = { type: '', status: '' };
 export default function ReminderJournalPage() {
   const { functions } = useMyFunctions();
   const canView = functions?.includes('circulation.retards');
+  /**
+   * ⚠ RÉGLER LES RAPPELS N'EST PAS LES LIRE, et depuis le 15 septembre 2026 ce
+   * n'est plus le même droit. `PATCH /reminders/settings` exige DEUX fonctions
+   * — `circulation.retards` ET `rappels.envoyer` — parce qu'il change les
+   * modèles et la bascule automatique, donc ce qui PART vers les adhérents.
+   *
+   * Le Bibliothécaire porte la première depuis le déploiement, pas la seconde.
+   * Sans ce second filtre, il voyait un formulaire dont l'enregistrement
+   * répondait 403 : un contrôle inerte, sur l'écran d'un métier qui est le sien.
+   */
+  const peutRegler = functions?.includes('rappels.envoyer');
 
   const [filters, setFilters] = useState(EMPTY);
   const [page, setPage] = useState(1);
@@ -206,13 +217,22 @@ export default function ReminderJournalPage() {
           </Button>
         </div>
       )}
-      {/* ⚠ VENU DE /admin/parametres le 11 septembre 2026. Son API exige
-          `circulation.retards` — la permission de CET écran, pas celle de
-          l'établissement. Sur l'écran d'origine il refusait pour la personne
-          même qui pouvait le voir. Le droit et le métier concordent ici. */}
-      <div className="mt-8 max-w-2xl">
-        <ReminderSettings />
-      </div>
+      {/*
+        ⚠ VENU DE /admin/parametres le 11 septembre 2026. Le commentaire disait
+        alors « son API exige `circulation.retards` — le droit et le métier
+        concordent ici ». C'était vrai, et ça a cessé de l'être le 15 septembre :
+        la fonction a été SCINDÉE, et régler les rappels exige désormais aussi
+        `rappels.envoyer`.
+
+        ⚠ Une justification survit toujours à sa condition — c'est la famille la
+        plus répétée de ce dépôt. Elle est réécrite ici plutôt que laissée à
+        rassurer quelqu'un.
+      */}
+      {peutRegler && (
+        <div className="mt-8 max-w-2xl">
+          <ReminderSettings />
+        </div>
+      )}
     </div>
   );
 }

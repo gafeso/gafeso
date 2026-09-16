@@ -19,7 +19,7 @@ export function LienDEvitement() {
   return (
     <a
       href={`#${ID_CONTENU}`}
-      className="lien-evitement z-50 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
+      className="print:hidden lien-evitement z-50 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
     >
       {LIBELLES.accessibilite.allerAuContenu}
     </a>

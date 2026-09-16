@@ -16,14 +16,14 @@
 import { describe, expect, it } from 'vitest';
 import { moduleDeLaRoute, ROUTES_HORS_MENU, NAVIGATION_PERSONNEL, ongletsVisibles } from '@/lib/navigation';
 import { modulesActivables } from './aide-modules';
+import { toutesLesFonctions } from './aide-roles-systeme';
 
-const ADMIN = [
-  'document.lire', 'catalogue.gerer', 'outils.catalogue', 'circulation.faire',
-  'circulation.retards', 'adherents.gerer', 'lecteurs.voir', 'lecteurs.gerer',
-  'outils.lecteurs', 'comptes.activer', 'comptes.gerer', 'collections.gerer',
-  'statistiques.voir', 'etablissement.apparence', 'etablissement.regles',
-  'diffusion.gerer', 'securite.roles', 'securite.audit', 'modules.gerer',
-];
+// ⚠ LU DANS L'API, PLUS RECOPIÉ. Cette liste était écrite à la main, et elle
+// avait vieilli : `depot.valider` n'y figurait pas. Le jour où cette fonction
+// a commandé une entrée de menu — la refonte du 15 septembre 2026 —, le test
+// a compté une entrée de moins que le menu n'en porte, et il a accusé le
+// produit. Une copie de vocabulaire ne se périme pas bruyamment : elle dévie.
+const ADMIN = toutesLesFonctions();
 const hrefs = (modules: string[] | null) =>
   ongletsVisibles(ADMIN, modules).flatMap((o) => o.entrees.map((e) => e.href));
 
@@ -35,7 +35,7 @@ const hrefs = (modules: string[] | null) =>
 const TOUS = modulesActivables();
 
 describe('quelles entrées dépendent d’un module', () => {
-  it('témoin : exactement sept, et on sait lesquelles', () => {
+  it('témoin : exactement huit, et on sait lesquelles', () => {
     // ⚠ Un COMPTE, pas une présence. C'est lui qui signale l'entrée ajoutée
     // demain sans son module — celle à laquelle personne n'aura pensé. Il a
     // servi le 14 septembre 2026 : il en attendait deux, le circuit de dépôt en
@@ -52,17 +52,30 @@ describe('quelles entrées dépendent d’un module', () => {
       // d'ATTENTE, qui a survécu toute une phase à la condition qui le
       // justifiait. Le module existe, ses routes sont gardées.
       '/admin/statistiques',
+      // ⚠ Huitième depuis la refonte de navigation du 15 septembre 2026 :
+      // `/depots-a-valider` a quitté l'EN-TÊTE pour la barre métier. Elle
+      // portait déjà son module dans `ROUTES_HORS_MENU` ; elle le porte
+      // désormais comme entrée, à un seul endroit.
+      '/depots-a-valider',
     ]);
   });
 
-  it('⚠ le circuit de DÉPÔT a deux écrans HORS du menu, et ils comptent aussi', () => {
-    // `/mon-depot` appartient à l'étudiant, `/depots-a-valider` au directeur :
-    // tous deux atteints depuis l'en-tête. Sans `ROUTES_HORS_MENU`, éteindre le
-    // module les laissait parfaitement accessibles — `moduleDeLaRoute` ne
-    // parcourait que le menu, donc elle rendait `undefined`, c'est-à-dire
-    // « aucun module requis ».
-    expect(ROUTES_HORS_MENU).toEqual({ '/mon-depot': 'depot', '/depots-a-valider': 'depot' });
+  it('⚠ le circuit de DÉPÔT garde UN écran hors du menu, et il compte aussi', () => {
+    // `/mon-depot` appartient à l'étudiant et vit dans le MENU DE COMPTE : il
+    // n'est donc dans aucun onglet. Sans `ROUTES_HORS_MENU`, éteindre le module
+    // le laissait parfaitement accessible — `moduleDeLaRoute` ne parcourt que
+    // le menu métier, donc elle rendait `undefined`, c'est-à-dire « aucun
+    // module requis ».
+    expect(ROUTES_HORS_MENU).toEqual({ '/mon-depot': 'depot' });
     expect(moduleDeLaRoute('/mon-depot')).toBe('depot');
+  });
+
+  it('⚠ `/depots-a-valider` est gardée par le MENU, plus par la table', () => {
+    // Le 15 septembre 2026 elle est devenue une entrée de la barre métier. La
+    // garantie ne doit pas s'être perdue en chemin : c'est la même propriété,
+    // par un autre porteur. Une propriété qui change de porteur est exactement
+    // le moment où elle disparaît sans bruit.
+    expect(ROUTES_HORS_MENU['/depots-a-valider']).toBeUndefined();
     expect(moduleDeLaRoute('/depots-a-valider')).toBe('depot');
   });
 
@@ -104,20 +117,24 @@ describe('⚠ un module éteint retire son entrée', () => {
     expect(hrefs(actifs)).toContain('/admin/catalogue');
   });
 
-  it('tout éteint : les quatre disparaissent, le noyau reste entier', () => {
+  it('tout éteint : les cinq du dépôt et des modules disparaissent, le noyau reste entier', () => {
     const restant = hrefs([]);
     for (const href of [
       '/admin/rappels',
       '/admin/interoperabilite',
       '/admin/depots-soumis',
       '/admin/depots-a-cataloguer',
+      // ⚠ Depuis le 15 septembre 2026, la file du directeur est une entrée de
+      // la barre : elle doit disparaître comme les deux autres du circuit.
+      '/depots-a-valider',
     ]) {
       expect(restant).not.toContain(href);
     }
     expect(restant).not.toContain('/admin/moissonnage');
-    // Témoin de COMPTE : le noyau n'a pas bougé.
+    // Témoin de COMPTE : le noyau n'a pas bougé. Huit entrées portent un
+    // module, huit s'en vont.
     expect(restant.length).toBe(
-      NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).length - 7,
+      NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).length - 8,
     );
   });
 });

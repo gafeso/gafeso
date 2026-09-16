@@ -52,6 +52,17 @@ export interface EntreeNav {
   /** Sous-groupe dans la barre latérale (les « § » de la maquette). */
   groupe?: string;
   /**
+   * Ce que l'écran permet de faire, en une phrase — pour une PAGE DE
+   * RUBRIQUES, où un lien nu ne suffit pas.
+   *
+   * ⚠ Elle décrit l'EFFET, jamais le contenu de l'écran : « Allumer ou éteindre
+   * les fonctions de l'école » plutôt que « Liste des modules ». C'est la
+   * forme retenue par Koha sur sa page d'administration, et elle a une raison
+   * — un paramétrage se cherche par ce qu'on veut obtenir, pas par le nom que
+   * le logiciel a donné à son écran.
+   */
+  description?: string;
+  /**
    * Module porteur prévu par la cible. PUREMENT DOCUMENTAIRE : aucun effet à
    * l'exécution tant que le registre de modules n'existe pas. On ne câble pas
    * une condition qui vaudrait « absent » par défaut — elle masquerait des
@@ -64,6 +75,26 @@ export interface OngletNav {
   id: string;
   libelle: string;
   entrees: EntreeNav[];
+  /**
+   * PAGE D'INDEX de l'onglet, quand ses écrans se présentent en RUBRIQUES
+   * plutôt qu'en barre latérale.
+   *
+   * ⚠ POURQUOI « Administration » en porte une. Le titre de la barre latérale
+   * reprenait le libellé de l'onglet actif : « Administration » s'affichait
+   * donc deux fois, l'une sous l'autre. Si un sous-menu répète le nom de son
+   * parent, il y a un niveau de trop (Jean, 15 septembre 2026).
+   *
+   * ⚠ Et le paramétrage est le cas où une barre latérale sert le moins : sept
+   * entrées muettes qu'on parcourt en devinant. Koha, vérifié dans son gabarit
+   * source `admin-home.tt`, en fait une page à deux colonnes, sans barre
+   * latérale, avec un titre par rubrique et des liens DÉCRITS.
+   *
+   * ⚠ CE QU'ON NE SUIT PAS DE KOHA : chez lui, Administration n'est même pas
+   * un onglet de premier niveau (on y arrive par « More »). Sortir le
+   * paramétrage de la barre de travail irait plus loin que ce qui a été
+   * décidé — l'onglet reste.
+   */
+  pageDeRubriques?: string;
 }
 
 /**
@@ -93,16 +124,39 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // ⚠ AVANT « à cataloguer » dans l'ordre du travail : ce qui ATTEND une
       // décision précède ce qui attend une notice. Même fonction, aucune porte
       // nouvelle — `catalogue.gerer` ouvre déjà les quatre entrées ci-dessus.
+      // ⚠ TROIS FILES DE TRAVAIL, GROUPÉES — et la première vient de l'en-tête.
+      //
+      // « Dépôts à valider » était un lien de la barre du haut, à côté de « Mes
+      // prêts » et « Mon compte ». Le critère qui l'en sort, posé le 15
+      // septembre 2026 : si le titre commence par « Mon » ou « Mes », c'est la
+      // personne ; si c'est une FILE D'ATTENTE, c'est le métier. Un directeur
+      // n'y consulte pas SON dépôt, il traite ceux des autres — exactement
+      // comme un bibliothécaire traite des retours.
+      //
+      // ⚠ ELLE N'OUVRE AUCUN DROIT NOUVEAU : `depot.valider` est la fonction
+      // qu'elle exigeait déjà dans l'en-tête. Ce qui change est l'ENDROIT, pas
+      // qui y accède. Un enseignant sans `catalogue.gerer` voit donc l'onglet
+      // « Catalogue » avec cette seule entrée, et c'est correct : la barre
+      // montre ce à quoi on a droit, jamais une carte du logiciel entier.
+      {
+        href: '/depots-a-valider',
+        libelle: 'Dépôts à valider',
+        fonctions: ['depot.valider'],
+        groupe: 'Dépôts',
+        module: 'depot',
+      },
       {
         href: '/admin/depots-soumis',
         libelle: 'Dépôts en attente',
         fonctions: ['catalogue.gerer'],
+        groupe: 'Dépôts',
         module: 'depot',
       },
       {
         href: '/admin/depots-a-cataloguer',
         libelle: 'Dépôts à cataloguer',
         fonctions: ['catalogue.gerer'],
+        groupe: 'Dépôts',
         module: 'depot',
       },
     ],
@@ -209,6 +263,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
   {
     id: 'administration',
     libelle: 'Administration',
+    pageDeRubriques: '/admin/administration',
     entrees: [
       // ⚠ DEUX ENTRÉES DEPUIS LE 11 SEPTEMBRE 2026, une par métier. L'ancienne
       // « Identité et réglages » en réclamait DEUX (`etablissement.apparence`
@@ -223,30 +278,35 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // écrans montrent — c'est le réglage qui commande les réglages.
       {
         href: '/admin/modules',
+        description: 'Allumer ou éteindre les fonctions de l’école.',
         libelle: 'Modules',
         fonctions: ['modules.gerer'],
         groupe: 'Établissement',
       },
       {
         href: '/admin/etablissement',
+        description: 'Nom, logo, couleurs et coordonnées de l’établissement.',
         libelle: 'Identité',
         fonctions: ['etablissement.apparence'],
         groupe: 'Établissement',
       },
       {
         href: '/admin/regles-de-pret',
+        description: 'Durées de prêt, quotas, renouvellements.',
         libelle: 'Règles de prêt',
         fonctions: ['etablissement.regles'],
         groupe: 'Établissement',
       },
       {
         href: '/admin/accueil',
+        description: 'Textes et images de la page publique.',
         libelle: 'Page d’accueil',
         fonctions: ['etablissement.apparence'],
         groupe: 'Établissement',
       },
       {
         href: '/admin/interoperabilite',
+        description: 'Ce que l’extérieur peut moissonner de votre catalogue.',
         libelle: 'Interopérabilité',
         fonctions: ['diffusion.gerer'],
         groupe: 'Diffusion',
@@ -254,12 +314,14 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/roles',
+        description: 'Qui a le droit de faire quoi.',
         libelle: 'Rôles',
         fonctions: ['securite.roles'],
         groupe: 'Sécurité',
       },
       {
         href: '/admin/journal',
+        description: 'Qui a fait quoi, et quand.',
         libelle: 'Journal d’audit',
         fonctions: ['securite.audit'],
         groupe: 'Sécurité',
@@ -363,7 +425,12 @@ export function ongletsVisibles(
  */
 export const ROUTES_HORS_MENU: Readonly<Record<string, string>> = {
   '/mon-depot': 'depot',
-  '/depots-a-valider': 'depot',
+  // ⚠ `/depots-a-valider` N'EST PLUS ICI, et ce n'est pas un oubli : depuis le
+  // 15 septembre 2026 elle est une ENTRÉE de la barre métier (onglet
+  // Catalogue, groupe « Dépôts »), donc `moduleDeLaRoute` la trouve par le
+  // menu, avec son `module: 'depot'`. La laisser aux deux endroits ferait deux
+  // vérités à tenir — et c'est exactement ce que ce fichier reproche aux
+  // vocabulaires recopiés.
 };
 
 export function moduleDeLaRoute(pathname: string): string | undefined {
@@ -385,6 +452,14 @@ export function moduleDeLaRoute(pathname: string): string | undefined {
 
 /** L'onglet auquel appartient une route, pour marquer l'onglet courant. */
 export function ongletDe(pathname: string): OngletNav | undefined {
+  // ⚠ LA PAGE DE RUBRIQUES D'ABORD. Elle n'est pas une entrée — elle est
+  // l'index de l'onglet. Sans ce passage, `/admin/administration` n'aurait
+  // appartenu à aucun onglet : la coque du personnel ne se serait pas rendue,
+  // et l'écran serait apparu nu, sans barre ni onglet actif.
+  for (const onglet of NAVIGATION_PERSONNEL) {
+    if (onglet.pageDeRubriques && pathname === onglet.pageDeRubriques) return onglet;
+  }
+
   // Le plus long href gagne : /admin/catalogue ne doit pas rafler
   // /admin/catalogue/xxx au détriment d'une route plus précise.
   let gagnant: { onglet: OngletNav; longueur: number } | undefined;
@@ -401,10 +476,24 @@ export function ongletDe(pathname: string): OngletNav | undefined {
 }
 
 /**
+ * Où mène le clic sur un onglet : sa page de RUBRIQUES quand il en a une, sa
+ * première entrée sinon.
+ *
+ * ⚠ Une seule fonction pour les deux cas, délibérément : la barre d'onglets et
+ * la porte d'entrée `/admin` doivent envoyer au MÊME endroit. Les laisser
+ * décider chacune de son côté, c'est deux vérités à tenir — et l'une des deux
+ * finira par envoyer quelqu'un sur un écran qu'il n'a pas choisi.
+ */
+export function destinationOnglet(onglet: OngletNav): string {
+  return onglet.pageDeRubriques ?? onglet.entrees[0].href;
+}
+
+/**
  * Première entrée atteignable — destination de /admin.
  * `null` si l'utilisateur n'a aucune entrée : à l'appelant de décider
  * (aujourd'hui, retour à l'accueil public).
  */
 export function premiereEntreeAccessible(fonctions: string[]): string | null {
-  return ongletsVisibles(fonctions)[0]?.entrees[0]?.href ?? null;
+  const premier = ongletsVisibles(fonctions)[0];
+  return premier ? destinationOnglet(premier) : null;
 }

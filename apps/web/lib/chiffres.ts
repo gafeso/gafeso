@@ -50,3 +50,24 @@ export function tuilesSignificatives(chiffres: ChiffresDuFonds | null): Tuile[] 
 export function formaterNombre(n: number): string {
   return new Intl.NumberFormat('fr-FR').format(n);
 }
+
+/**
+ * Un nombre À VIRGULE, en français.
+ *
+ * ⚠ `toFixed` rend TOUJOURS un point décimal — c'est la syntaxe JavaScript
+ * d'un nombre, pas l'écriture d'une langue. Dans le rapport annuel, le taux de
+ * rotation s'affichait « 0.11 » au milieu de vingt nombres formatés en
+ * français : le SEUL qui échappait à la locale, sur un document remis à une
+ * université.
+ *
+ * ⚠ Il reste un usage légitime de `toFixed` : les coordonnées d'un tracé SVG,
+ * où le point est la syntaxe attendue par le navigateur et où une virgule
+ * casserait le chemin. `formats-des-nombres.spec.ts` OBLIGE à ranger chaque
+ * occurrence dans l'une des deux familles.
+ */
+export function formaterDecimal(n: number, decimales = 2): string {
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  }).format(n);
+}

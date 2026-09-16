@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { Alert, Button, Card, Select } from '@/components/ui';
 import { LIBELLES } from '@/lib/libelles';
+import { formaterDecimal, formaterNombre } from '@/lib/chiffres';
 
 const T = LIBELLES.rapportAnnuel;
 
@@ -54,7 +55,7 @@ interface RapportAnnuel {
   diffusion: Bloc<never>;
 }
 
-const nombre = (n: number) => n.toLocaleString('fr-FR');
+const nombre = (n: number) => formaterNombre(n);
 
 
 /**
@@ -187,6 +188,15 @@ export default function RapportAnnuelPage() {
     void charger(annee);
   }, [charger, annee]);
 
+  /**
+   * ⚠ L'ANNÉE DU RAPPORT REÇU, pas celle du sélecteur — le rapport affiché est
+   * celui qui est arrivé, et pendant un changement d'année les deux diffèrent.
+   * Deux choses en dépendent : l'avertissement de période partielle, et le
+   * refus de publier un retard « au 31 décembre » que l'on ne peut pas encore
+   * constater.
+   */
+  const anneeEnCours = rapport?.annee === new Date().getUTCFullYear();
+
   // ⚠ PAS DE `<main>` ICI : la coque du personnel en fournit un, avec la cible
   // du lien d'évitement. En ajouter un second donnait DEUX repères principaux —
   // le garde des invariants l'a dit avant moi, et c'est ce pour quoi il existe.
@@ -242,7 +252,7 @@ export default function RapportAnnuelPage() {
             que ce document peut produire sans qu'aucun de ses blocs soit en
             cause, dans une page qui sert à demander un budget.
           */}
-          {rapport.annee === new Date().getUTCFullYear() && (
+          {anneeEnCours && (
             <p className="mt-4 rounded-md border border-line bg-paper px-4 py-3 text-sm font-semibold">
               {/*
                 ⚠ LA DATE DU JOUR, PAS `periode.fin`. Première écriture : elle
@@ -307,7 +317,21 @@ export default function RapportAnnuelPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Chiffre libelle={T.champs.prets} valeur={nombre(v.prets)} />
                 <Chiffre libelle={T.champs.retours} valeur={nombre(v.retours)} />
-                <Chiffre libelle={T.champs.pretsEnRetardAuTerme} valeur={nombre(v.pretsEnRetardAuTerme)} />
+                {/*
+                  ⚠ UNE PRÉDICTION NE SE PUBLIE PAS COMME UNE MESURE. Sur
+                  l'année en COURS, le terme de la période est dans le futur :
+                  le compte de l'API inclut des prêts qui ne sont pas en retard,
+                  seulement pas encore dus — 8 sur 55 le 15 septembre 2026. Le
+                  rapport le DIT, comme il dit tout ce qu'il ne peut pas
+                  calculer ; il ne publie pas un nombre qu'il faudrait corriger
+                  de tête.
+                */}
+                <Chiffre
+                  libelle={T.champs.pretsEnRetardAuTerme}
+                  valeur={
+                    anneeEnCours ? T.retardsNonArretes : nombre(v.pretsEnRetardAuTerme)
+                  }
+                />
                 {/*
                   ⚠ `null` N'EST PAS ZÉRO. Un taux de rotation nul se lirait
                   « personne n'emprunte » ; ici il veut dire « aucun exemplaire,
@@ -315,7 +339,11 @@ export default function RapportAnnuelPage() {
                 */}
                 <Chiffre
                   libelle={T.champs.tauxDeRotation}
-                  valeur={v.tauxDeRotation === null ? T.tauxIndisponible : v.tauxDeRotation.toFixed(2)}
+                  valeur={
+                    v.tauxDeRotation === null
+                      ? T.tauxIndisponible
+                      : formaterDecimal(v.tauxDeRotation, 2)
+                  }
                 />
               </div>
             )}

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { MoissonnageService } from './moissonnage.service';
+import { ModulesService } from '../modules/modules.service';
 
 /**
  * LA PÉRIODICITÉ DES SOURCES — un passage par jour, à 04:00 Ouagadougou.
@@ -10,8 +11,11 @@ import { MoissonnageService } from './moissonnage.service';
  * longs à la même minute se disputeraient la base d'une école le jour où les
  * deux ont du travail.
  *
- * ⚠ IL N'ÉMET RIEN TANT QUE PERSONNE N'A DÉCLARÉ DE SOURCE, et c'est ce qui
- * rend ce planificateur sans danger à l'installation. La règle « un défaut
+ * ⚠ IL N'ÉMET RIEN TANT QUE PERSONNE N'A DÉCLARÉ DE SOURCE, et il respecte
+ * l'extinction du module (voir le garde dans `parcourirLesEcoles`). Les deux
+ * conditions sont nécessaires : la première rend l'installation sans danger,
+ * la seconde rend l'extinction obéie. Ce texte n'affirmait que la première, et
+ * il a servi de justification à l'absence de la seconde pendant deux jours. La règle « un défaut
  * d'activation ne se pose jamais sur un comportement qui ÉMET vers
  * l'extérieur » vise une migration qui ALLUME quelque chose pour tout le
  * monde ; ici les tables naissent vides, et la première requête sortante suit
@@ -36,6 +40,7 @@ export class MoissonnageScheduler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly moissonnage: MoissonnageService,
+    private readonly modules: ModulesService,
   ) {}
 
   @Cron(QUOTIDIEN_A_4H, { name: 'moissonnage-periodique', timeZone: 'Africa/Ouagadougou' })
@@ -62,12 +67,35 @@ export class MoissonnageScheduler {
   }
 
   private async parcourirLesEcoles(maintenant: Date): Promise<void> {
-    const ecoles = await this.prisma.tenant.findMany({ select: { slug: true } });
+    const ecoles = await this.prisma.tenant.findMany({ select: { id: true, slug: true } });
     let lancees = 0;
     let ignorees = 0;
+    let eteintes = 0;
     const echecs: string[] = [];
 
-    for (const { slug } of ecoles) {
+    for (const { id, slug } of ecoles) {
+      // ⚠ LE GARDE DE MODULE VIT ICI, ET PAS SEULEMENT SUR LA ROUTE.
+      //
+      // Le contrôleur porte `@ModuleRequis('moissonnage')`, ce qui suffisait
+      // tant que la route était le seul chemin. Ce planificateur est un SECOND
+      // appelant, et il n'en savait rien : une école ayant éteint Moissonnage
+      // voyait quand même, chaque jour à 4 h, des requêtes partir en son nom
+      // vers des serveurs OAI tiers et des notices entrer dans son catalogue.
+      //
+      // ⚠ C'est la famille de `rappels`, à l'identique et deux jours plus tard :
+      // « une propriété défendue au SEUL niveau HTTP gagne une porte dès qu'un
+      // appelant apparaît ». Le critère qui tranche est déjà écrit dans
+      // CLAUDE.md — si ce geste est faux, est-ce que quelqu'un d'EXTÉRIEUR
+      // l'apprend ? Ici oui : le serveur tiers voit les requêtes.
+      //
+      // ⚠ Le défaut était LATENT quand il a été trouvé (aucune source déclarée
+      // nulle part), et c'est exactement pourquoi il fallait le fermer
+      // maintenant : il attendait qu'une école déclare une source puis éteigne
+      // le module, c'est-à-dire le jour où personne ne le chercherait.
+      if (!(await this.modules.estActif(id, 'moissonnage'))) {
+        eteintes += 1;
+        continue;
+      }
       // ⚠ `forTenant` EST DANS LE `try`, ET CE N'ÉTAIT PAS LE CAS — un test l'a
       // trouvé. Il construit un client Prisma et peut lever ; hors du filet, la
       // première école en panne faisait remonter l'exception jusqu'au filet
@@ -116,6 +144,7 @@ export class MoissonnageScheduler {
 
     const morceaux = [`${lancees} moissonnage(s) lancé(s)`];
     if (ignorees) morceaux.push(`${ignorees} pas encore dû(s)`);
+    if (eteintes) morceaux.push(`${eteintes} école(s) module éteint`);
     // ⚠ Ne mentionner que ce qui existe : « 0 échec » à chaque nuit est du
     // bruit, et le bruit use ce qui doit être lu le jour où il compte.
     if (echecs.length) morceaux.push(`⚠ ${echecs.length} échec(s) : ${echecs.join(' ; ')}`);

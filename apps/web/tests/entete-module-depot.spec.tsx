@@ -20,11 +20,12 @@
  * doublure indiscernable d'un défaut du produit.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
 import { fermerSession, ouvrirSession } from './aide-session';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
+import { oublierEtablissement } from '@/lib/etablissement';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/',
@@ -52,6 +53,13 @@ function brancher(modules: string[] | null) {
       if (String(url).includes('/functions')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ functions: FONCTIONS }) } as Response);
       }
+      // Le menu de compte affiche le nom de l'école ; il vient d'ici.
+      if (String(url).includes('/tenancy/current')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ name: 'Université d’Exemple', slug: 'zinda' }),
+        } as Response);
+      }
       // ⚠ JAMAIS de repli silencieux : un oubli de doublure doit se voir.
       return Promise.reject(new Error(`requête non couverte — ${url}`));
     }),
@@ -59,23 +67,49 @@ function brancher(modules: string[] | null) {
 }
 
 const repos = () => new Promise((r) => setTimeout(r, 40));
+/**
+ * ⚠ LES ÉCRANS DE LA PERSONNE VIVENT DANS LE MENU DE COMPTE depuis la refonte
+ * du 15 septembre 2026 : sur grand écran ils ne sont dans le DOM que MENU
+ * OUVERT. Lire les liens sans l'ouvrir rendrait une liste vide, et tous les
+ * cas de ce fichier passeraient sans rien mesurer.
+ */
+function ouvrirLeMenuDeCompte() {
+  const bouton = document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+  expect(bouton, 'le bouton de compte n’est pas rendu : rien ne sera mesuré').not.toBeNull();
+  // ⚠ `fireEvent`, pas `bouton.click()` : le clic natif atteint bien le
+  // gestionnaire React, mais le rendu qui suit n'est pas VIDÉ avant la ligne
+  // suivante. On lisait donc le DOM d'avant l'ouverture — un menu qui marche,
+  // mesuré fermé.
+  fireEvent.click(bouton!);
+  expect(
+    bouton!.getAttribute('aria-expanded'),
+    'le menu ne s’est pas ouvert : la mesure qui suit ne vaut rien',
+  ).toBe('true');
+}
+
 const entrees = () => [...document.querySelectorAll('a')].map((a) => a.getAttribute('href'));
 
-beforeEach(() => invaliderModulesActifs());
+beforeEach(() => {
+  invaliderModulesActifs();
+  // ⚠ Le chargement de l'école est MÉMORISÉ pour ne partir qu'une fois par
+  // page. Sans cet oubli, la réponse du premier cas servirait tous les autres.
+  oublierEtablissement();
+});
 afterEach(() => {
   fermerSession();
   vi.unstubAllGlobals();
 });
 
 describe('L’en-tête et le module `depot`', () => {
-  it('⚠ module ÉTEINT : les trois entrées du circuit disparaissent', async () => {
+  it('⚠ module ÉTEINT : « Mon dépôt » disparaît du menu de compte', async () => {
     brancher(['amendes']); // le dépôt n'y est pas
     render(<Header fonctions={FONCTIONS} />);
     await repos();
+    ouvrirLeMenuDeCompte();
 
-    for (const href of ['/mon-depot', '/depots-a-valider']) {
-      expect(entrees(), `${href} reste visible dans une école sans dépôt`).not.toContain(href);
-    }
+    expect(entrees(), '/mon-depot reste visible dans une école sans dépôt').not.toContain(
+      '/mon-depot',
+    );
     // ⚠ ET `/mes-encadrements` RESTE, délibérément. Il lit le CATALOGUE —
     // `recordContributor` joint aux notices —, pas les dépôts : une thèse
     // cataloguée il y a trois ans reste dirigée par son directeur. Éteindre le
@@ -92,13 +126,30 @@ describe('L’en-tête et le module `depot`', () => {
     expect(entrees()).toContain('/profil');
   });
 
-  it('module ALLUMÉ : les trois entrées sont là', async () => {
+  it('module ALLUMÉ : les deux entrées de personne sont là', async () => {
     brancher(['depot']);
     render(<Header fonctions={FONCTIONS} />);
     await repos();
-    for (const href of ['/mon-depot', '/depots-a-valider', '/mes-encadrements']) {
+    ouvrirLeMenuDeCompte();
+    for (const href of ['/mon-depot', '/mes-encadrements']) {
       expect(entrees(), href).toContain(href);
     }
+  });
+
+  it('⚠ « Dépôts à valider » N’EST PLUS dans l’en-tête — c’est une file de travail', async () => {
+    // Déménagée dans la barre métier le 15 septembre 2026. Le critère : si le
+    // titre commence par « Mon » ou « Mes », c'est la personne ; si c'est une
+    // FILE D'ATTENTE, c'est le métier. Un directeur n'y consulte pas SON dépôt,
+    // il traite ceux des autres.
+    //
+    // ⚠ Ce cas garde le DÉMÉNAGEMENT lui-même. Sans lui, remettre le lien dans
+    // l'en-tête « parce qu'il y était » ne ferait rien tomber, et la barre
+    // recommencerait à mélanger les deux logiques.
+    brancher(['depot']);
+    render(<Header fonctions={FONCTIONS} />);
+    await repos();
+    ouvrirLeMenuDeCompte();
+    expect(entrees()).not.toContain('/depots-a-valider');
   });
 
   it('⚠ état INCONNU : on ne masque rien — l’API refusera si besoin', async () => {
@@ -107,6 +158,7 @@ describe('L’en-tête et le module `depot`', () => {
     brancher(null);
     render(<Header fonctions={FONCTIONS} />);
     await repos();
+    ouvrirLeMenuDeCompte();
     expect(entrees()).toContain('/mon-depot');
   });
 
@@ -116,6 +168,7 @@ describe('L’en-tête et le module `depot`', () => {
     brancher(['depot']);
     render(<Header fonctions={[]} />);
     await repos();
+    ouvrirLeMenuDeCompte();
     expect(entrees()).not.toContain('/mon-depot');
     expect(LIBELLES.monDepot.titre.length).toBeGreaterThan(0); // le libellé existe bien
   });

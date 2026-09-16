@@ -177,6 +177,39 @@ describe('⚠ 4. L’année EN COURS se signale comme partielle', () => {
     expect(screen.getByText(/Année en cours/)).toBeTruthy();
   });
 
+  it('⚠ sur l’année en cours, le retard « au 31 décembre » n’est PAS publié', async () => {
+    // Mesuré en base le 15 septembre 2026 : l'API annonçait 55 prêts « en
+    // retard au 31 décembre » quand 47 l'étaient réellement — **8 prêts à
+    // l'heure comptés comme des retards**, parce que le terme de la période
+    // est dans le FUTUR et que le compte prend tout ce qui est dû avant lui.
+    //
+    // ⚠ Et la ligne contredisait l'avertissement placé au-dessus, qui dit
+    // « chiffres arrêtés au 15 septembre » : celle-ci regardait jusqu'au
+    // 31 décembre. Une prédiction ne se publie pas comme une mesure.
+    await monter({
+      ...RAPPORT,
+      annee: ANNEE_EN_COURS,
+      periode: {
+        debut: `${ANNEE_EN_COURS}-01-01`,
+        fin: `${ANNEE_EN_COURS}-12-31`,
+        libelle: `du 1er janvier au 31 décembre ${ANNEE_EN_COURS}`,
+      },
+    });
+    const ligne = screen.getByText(T.champs.pretsEnRetardAuTerme).parentElement;
+    expect(ligne?.textContent).toContain(T.retardsNonArretes);
+    expect(ligne?.textContent, 'un compte publié comme s’il était constaté').not.toContain('7');
+  });
+
+  it('⚠ mais sur une année ÉCOULÉE, il est publié — c’est un état daté', async () => {
+    // Le témoin inversé, et il est indispensable : sans lui, masquer le chiffre
+    // POUR TOUT LE MONDE passerait le test ci-dessus, et le rapport perdrait
+    // une donnée qu'il est parfaitement en droit de donner.
+    await monter();
+    const ligne = screen.getByText(T.champs.pretsEnRetardAuTerme).parentElement;
+    expect(ligne?.textContent).toContain('7');
+    expect(ligne?.textContent).not.toContain(T.retardsNonArretes);
+  });
+
   it('⚠ et il porte la date DU JOUR, pas la fin de la période', async () => {
     // ⚠ PREMIÈRE ÉCRITURE FAUSSE, trouvée en recette : la phrase affichait
     // « chiffres arrêtés au 2026-12-31 » — la fin de la période demandée, donc
@@ -217,6 +250,19 @@ describe('⚠ 5. La période ne se dit pas deux fois', () => {
     await monter();
     const entete = screen.getByText('Université d’Exemple').nextElementSibling;
     expect(entete?.textContent).toBe(RAPPORT.periode.libelle);
+  });
+});
+
+describe('⚠ 6. Un document français n’écrit pas ses nombres en anglais', () => {
+  it('le taux de rotation porte une VIRGULE, comme les vingt autres nombres', async () => {
+    // Trouvé à l'écran le 15 septembre 2026, pas par un test : `toFixed(2)`
+    // rend TOUJOURS un point décimal — c'est la syntaxe JavaScript d'un
+    // nombre, pas l'écriture d'une langue. Sur un document imprimé et remis à
+    // une université, c'était le SEUL nombre à échapper à la locale.
+    await monter();
+    const taux = screen.getByText(T.champs.tauxDeRotation).parentElement;
+    expect(taux?.textContent).toContain('0,20');
+    expect(taux?.textContent, 'un point décimal dans un document français').not.toContain('0.20');
   });
 });
 

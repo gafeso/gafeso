@@ -31,6 +31,25 @@ export function catalogue(): Record<string, string> {
   );
 }
 
+/**
+ * TOUT le catalogue, c'est-à-dire ce que porte l'Administrateur.
+ *
+ * ⚠ `fonctionsDuRole('Administrateur')` REFUSE de répondre, délibérément : sa
+ * liste est `TOUTES_LES_FONCTIONS`, et rendre un tableau vide serait le pire
+ * des deux mondes — un test vert sur un rôle qui ne voit rien. On passe donc
+ * par ici, et on lit le catalogue.
+ */
+export function toutesLesFonctions(): string[] {
+  const tout = Object.values(catalogue());
+  if (tout.length < 20) {
+    throw new Error(
+      `Le catalogue de fonctions rend ${tout.length} entrées — la lecture de ` +
+        `apps/api/src/auth/functions.ts a probablement échoué.`,
+    );
+  }
+  return tout;
+}
+
 /** Les rôles système et leurs fonctions, résolus en identifiants. */
 export function rolesSysteme(): { nom: string; fonctions: string[] }[] {
   const fon = catalogue();

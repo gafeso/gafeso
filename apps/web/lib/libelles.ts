@@ -207,6 +207,25 @@ export const LIBELLES = {
     /** Le taux de rotation peut être nul faute de fonds : on le DIT. */
     tauxIndisponible: 'non calculable (aucun exemplaire)',
     /**
+     * ⚠ « EN RETARD AU 31 DÉCEMBRE » D'UNE ANNÉE QUI N'EST PAS FINIE EST UNE
+     * PRÉDICTION, PAS UNE MESURE.
+     *
+     * L'API compte les prêts dont l'échéance tombe avant le terme de la période
+     * et qui ne sont pas rendus à cette date-là. C'est juste pour une année
+     * ÉCOULÉE — un rapport annuel décrit un état daté. Pour l'année en cours,
+     * le terme est dans le FUTUR : le compte inclut alors des prêts qui ne sont
+     * pas en retard du tout, simplement pas encore dus.
+     *
+     * Mesuré le 15 septembre 2026 sur l'école de démonstration : 55 annoncés
+     * « en retard au 31 décembre », 47 réellement en retard ce jour-là, et
+     * **8 prêts parfaitement à l'heure comptés comme des retards**.
+     *
+     * ⚠ Et cette ligne contredisait l'avertissement placé quatre centimètres
+     * plus haut, qui dit « chiffres arrêtés au 15 septembre ». Celle-ci ne
+     * l'était pas : elle regardait jusqu'au 31 décembre.
+     */
+    retardsNonArretes: 'non arrêté (l’année n’est pas finie)',
+    /**
      * ⚠ L'ANNÉE EN COURS N'EST PAS FINIE, ET LE DOCUMENT NE LE DIT PAS TOUT SEUL.
      *
      * Le défaut porte sur l'année ÉCOULÉE — un rapport annuel se produit en
@@ -222,6 +241,57 @@ export const LIBELLES = {
       `Année en cours : chiffres arrêtés au ${jusquA}, et non sur douze mois. ` +
       `Ce n’est pas un bilan annuel.`,
     imprimer: 'Imprimer',
+  },
+
+  /**
+   * ⚠ CE QUI REMPLACE LE FAUX BOUTON DE LECTURE.
+   *
+   * *Trouvé en recette le 16 septembre 2026, avec la vraie session `awa@`.*
+   *
+   * Quand l'accès est refusé, la fiche rendait un `<p>` MAQUILLÉ EN BOUTON —
+   * mêmes formes, même taille, grisé, avec `aria-disabled="true"` — au-dessus
+   * de la phrase « Réservé aux étudiants de L1_INFO ». C'est exactement ce que
+   * ce produit a tranché trois jours plus tôt sur « Réserver ce document » :
+   * **pas un bouton grisé, il n'existe pas**. Un bouton désactivé se lit comme
+   * une panne.
+   *
+   * ⚠ Et l'`aria-disabled` sur un `<p>` ne dit rien à personne : un paragraphe
+   * n'est pas focalisable, donc il n'est jamais atteint au clavier. L'attribut
+   * rassurait celui qui l'a écrit, pas celui qui lit l'écran.
+   *
+   * Reste ce qui INFORME : le document existe, et on dit sous quelle forme.
+   */
+  lectureRefusee: {
+    formatExistant: (format: string) => `Une version ${format.toUpperCase()} existe.`,
+  },
+
+  /**
+   * LA FICHE PUBLIQUE D'UNE NOTICE — ce qui s'y réserve, et ce qui ne s'y
+   * réserve pas.
+   *
+   * ⚠ DÉCISION DE JEAN, 15 septembre 2026 : « Réserver » n'apparaît PAS sur une
+   * notice sans exemplaire. Trois motifs, et le troisième est le plus lourd :
+   *
+   * 1. Un document purement NUMÉRIQUE ne se réserve pas — il se lit ou il ne se
+   *    lit pas. Une file d'attente sur un fichier n'a aucun sens.
+   * 2. Une notice sans exemplaire n'est pas « en attente d'acquisition », c'est
+   *    une notice sans exemplaire. Nous n'avons AUCUN moyen de distinguer les
+   *    deux — la date d'acquisition n'est même pas enregistrée, c'est une
+   *    réserve écrite en tête du rapport annuel.
+   * 3. ⚠ Une file qui ne peut JAMAIS se vider est un faux dispositif : le
+   *    lecteur croit avoir une place dans une file, et il n'en a pas.
+   *
+   * Mesuré avant d'appliquer : 139 notices sur 480 sont sans exemplaire — 20
+   * avec une copie numérique (le cas « purement numérique »), 119 sans rien.
+   * La phrase convient aux deux : dans les deux cas, il n'y a pas d'exemplaire.
+   */
+  ficheNotice: {
+    /**
+     * ⚠ PAS UN BOUTON GRISÉ. Un bouton désactivé se lit comme une panne, et un
+     * lecteur d'écran n'annonce qu'« bouton, non disponible ». La phrase dit ce
+     * qui EST, et elle ne propose rien qu'on ne puisse pas tenir.
+     */
+    sansExemplaire: 'Aucun exemplaire physique n’est disponible pour ce document.',
   },
 
   titres: {
@@ -255,11 +325,59 @@ export const LIBELLES = {
   },
 
   /** Barre applicative, présente sur tous les écrans. */
+  /**
+   * LA PAGE D'ADMINISTRATION — un index à rubriques, pas une barre latérale.
+   *
+   * ⚠ Posée le 15 septembre 2026. Le titre de la barre latérale reprenait le
+   * libellé de l'onglet : « Administration » s'affichait deux fois, l'une sous
+   * l'autre. Si un sous-menu répète le nom de son parent, il y a un niveau de
+   * trop.
+   */
+  administration: {
+    titre: 'Administration',
+    intro:
+      'Le paramétrage de l’établissement. Chaque réglage dit ce qu’il change ; ' +
+      'rien ici ne se voit des lecteurs tant que vous ne l’avez pas enregistré.',
+    /**
+     * ⚠ CE QUE CETTE PHRASE DOIT DIRE, et un test le vérifie : que l'absence
+     * vient des DROITS ou d'un module éteint, jamais d'une panne. Un
+     * « aucun réglage disponible » nu se lirait comme un logiciel cassé.
+     */
+    aucuneRubrique:
+      'Aucun réglage ne vous est ouvert ici. C’est une question de droits ou de ' +
+      'modules activés — demandez à un administrateur de votre établissement.',
+  },
+
   entete: {
     /** Porte d'entrée vers l'espace du personnel, depuis les pages publiques. */
     espaceProfessionnel: 'Espace professionnel',
     /** Bouton d'ouverture du menu replié (sous md). Annoncé, donc traduisible. */
     menu: 'Menu',
+
+    /**
+     * LE MENU DE COMPTE — les écrans de la PERSONNE, sortis de la barre de
+     * travail le 15 septembre 2026.
+     *
+     * ⚠ Le bouton porte le PRÉNOM, jamais une icône muette. Deux recettes ont
+     * produit un faux défaut parce que la session ouverte n'était pas celle
+     * qu'on croyait — « Mon dépôt est vide » alors qu'on était `admin@` et non
+     * `awa@`. Un prénom affiché coûte trois mots et supprime cette famille
+     * entière, pour tout le monde et le jour de la présentation comprise.
+     *
+     * ⚠ Le nom de l'ÉTABLISSEMENT l'accompagne quand on le connaît : sur une
+     * installation multi-établissements, savoir OÙ l'on est compte autant que
+     * savoir QUI l'on est. Tant qu'on ne le sait pas, on n'écrit rien — une
+     * donnée pas encore chargée ne s'affiche pas comme un fait.
+     */
+    compte: {
+      /** Nom accessible du bouton : « Compte de Rasmata ». */
+      bouton: (prenom: string) => `Compte de ${prenom}`,
+      /** Nom accessible du panneau déroulé. */
+      panneau: 'Mon compte et mes écrans',
+      seDeconnecter: 'Se déconnecter',
+      /** Titre du groupe des écrans personnels dans le panneau replié (mobile). */
+      groupeMobile: 'Mon compte',
+    },
   },
 
   /**
@@ -932,6 +1050,37 @@ export const LIBELLES = {
     nonPrevenuRetente:
       'Ce lecteur n’a PAS encore été prévenu : l’envoi a échoué et sera retenté. ' +
       'Si vous le voyez passer, dites-le-lui — le délai de retrait court déjà.',
+    /**
+     * ⚠ LE CÔTÉ LECTEUR, resté muet jusqu'au 15 septembre 2026.
+     *
+     * Le guichet a été corrigé le 14 : il dit désormais quand un réservataire
+     * n'a pas pu être prévenu. L'écran du LECTEUR, lui, affichait « Un
+     * exemplaire vous est mis de côté : passez le retirer au comptoir » — sans
+     * l'échéance, et sans savoir si la confirmation était partie. L'API rend
+     * pourtant `pickupDays` ET `nonPrevenus` sur la pose de réservation ; le
+     * type du front ne déclarait ni l'un ni l'autre.
+     *
+     * ⚠ C'est « une moitié livrée n'est pas une correction » : le côté qui
+     * RAPPORTE attendait le côté qui LIT, et personne n'avait branché
+     * celui-ci. Et c'est aussi la chaîne complète des deux silences — le
+     * courriel qui échoue, l'écran qui ne dit pas l'échéance —, cette fois du
+     * point de vue de la seule personne qui perd quelque chose.
+     */
+    misDeCoteAvecDelai: (jours: number) =>
+      `Un exemplaire vous est mis de côté : vous avez ${jours} jour${jours > 1 ? 's' : ''} ` +
+      `pour venir le retirer au comptoir.`,
+    /** ⚠ Sans délai servi, on n'en invente pas — trois états, pas deux. */
+    misDeCoteSansDelai: 'Un exemplaire vous est mis de côté : passez le retirer au comptoir.',
+    /**
+     * ⚠ CE QUE CE TEXTE DOIT DIRE, et un test le vérifie : que la confirmation
+     * n'arrivera PAS, et que la personne doit donc retenir l'information
+     * elle-même. Sans ça, elle attend un courriel qui ne viendra jamais et
+     * laisse expirer le document qu'elle a réservé.
+     */
+    confirmationNonEnvoyee:
+      'Nous n’avons pas pu vous envoyer la confirmation par courriel : notez ce délai, ' +
+      'vous ne le retrouverez pas dans votre boîte. En cas de doute, demandez à la ' +
+      'bibliothèque.',
     aRetirerAvant: (date: string) => `À retirer avant le ${date}`,
     /** ⚠ Dit ce qui arrive si on ne vient pas — sinon la date n'est qu'un chiffre. */
     apresEcheance: 'Passé ce délai, le document repart à la personne suivante.',

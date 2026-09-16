@@ -7,8 +7,9 @@ import { api } from '@/lib/api';
 import { clearSession, getUser, SessionUser } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { ongletDe, premiereEntreeAccessible } from '@/lib/navigation';
-import { Button } from '@/components/ui';
 import { LIBELLES } from '@/lib/libelles';
+import { MenuCompte, type EntreeCompte } from '@/components/menu-compte';
+import { useNomEtablissement } from '@/lib/etablissement';
 import { useModulesActifs } from '@/lib/modules-actifs';
 
 // Barre publique : accueil et catalogue, pour tout le monde.
@@ -37,6 +38,8 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
   // une information qu'on n'a pas ferait disparaître un écran auquel la personne
   // a droit. La garantie reste l'API, comme pour le menu.
   const { modulesActifs } = useModulesActifs();
+  // `null` tant qu'on ne sait pas : le menu n'écrit alors aucune ligne d'école.
+  const etablissement = useNomEtablissement();
   const moduleEteint = (id: string) => modulesActifs !== null && !modulesActifs.includes(id);
 
   // Porte d'entrée vers l'espace professionnel. Conditionnée à « cette
@@ -76,31 +79,32 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
     // l'espace lui-même.
     ...(lienPro ? [{ href: '/admin', label: LIBELLES.entete.espaceProfessionnel }] : []),
   ];
-  const compte = user
+  // ⚠ LES ÉCRANS DE LA PERSONNE, ET EUX SEULS. Le critère est celui de Jean :
+  // si le titre commence par « Mon » ou « Mes », c'est la personne ; si c'est
+  // une FILE D'ATTENTE, c'est le métier. « Dépôts à valider » est donc parti
+  // dans la barre métier (onglet Catalogue, groupe « Dépôts ») — un directeur
+  // n'y consulte pas SON dépôt, il traite ceux des autres, exactement comme un
+  // bibliothécaire traite des retours.
+  const compte: EntreeCompte[] = user
     ? [
+        { href: '/profil', label: 'Mon compte', title: 'Mon compte (informations, mot de passe, sécurité)' },
+        { href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' },
         // ⚠ « Mon dépôt » N'APPARAÎT QUE POUR QUI DÉTIENT LA FONCTION. Un
         // étudiant d'une école qui n'ouvre pas le dépôt ne doit pas voir une
-        // entrée qui le refusera — c'est la règle du dépôt : pas d'entrée sans
-        // écran, pas d'écran sans droit.
+        // entrée qui le refusera — pas d'entrée sans écran, pas d'écran sans
+        // droit.
         ...(effectives?.includes('depot.deposer') && !moduleEteint('depot')
-          ? [{ href: '/mon-depot', label: LIBELLES.monDepot.titre, title: 'Déposer un mémoire ou une thèse, et suivre son avancement' }]
-          : []),
-        // Même règle pour « Mes encadrements » : l'entrée n'existe que pour qui
-        // détient `encadrements.voir`. Un enseignant d'une école qui n'ouvre
-        // pas ce suivi ne doit pas voir une porte qui lui refusera l'entrée.
-        // Le directeur : sa file de décisions. Même règle que les deux
-        // au-dessus — l'entrée n'existe que pour qui détient la fonction.
-        ...(effectives?.includes('depot.valider') && !moduleEteint('depot')
           ? [
               {
-                href: '/depots-a-valider',
-                label: LIBELLES.depotsAValider.titre,
-                title: 'Les dépôts que je dirige et qui attendent ma décision',
+                href: '/mon-depot',
+                label: LIBELLES.monDepot.titre,
+                title: 'Déposer un mémoire ou une thèse, et suivre son avancement',
+                separeAvant: true,
               },
             ]
           : []),
         // ⚠ PAS DE CONDITION DE MODULE ICI, ET C'EST MESURÉ. J'ai failli en
-        // poser une « par symétrie » avec les deux liens au-dessus. Le service
+        // poser une « par symétrie » avec l'entrée au-dessus. Le service
         // interroge `recordContributor` joint au CATALOGUE, pas les dépôts :
         // une thèse cataloguée il y a trois ans reste dirigée par son
         // directeur. Éteindre le dépôt ferme le circuit ; il n'efface pas ce
@@ -112,16 +116,18 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
                 href: '/mes-encadrements',
                 label: LIBELLES.mesEncadrements.titre,
                 title: 'Les mémoires et thèses que j’ai dirigés',
+                separeAvant: !effectives?.includes('depot.deposer'),
               },
             ]
           : []),
-        { href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' },
-        { href: '/profil', label: 'Mon compte', title: 'Mon compte (informations, mot de passe, sécurité)' },
       ]
-    : [
-        { href: '/login', label: 'Se connecter' },
-        { href: '/inscription', label: 'Créer un compte', accent: true },
-      ];
+    : [];
+
+  /** Les deux entrées publiques quand personne n'est connecté. */
+  const sansSession = [
+    { href: '/login', label: 'Se connecter' },
+    { href: '/inscription', label: 'Créer un compte', accent: true },
+  ];
 
   // `min-h-11` = 44 px : la cible tactile minimale recommandée. Les entrées
   // faisaient 32 px, ce qui se rate au doigt — mesuré à 375 px.
@@ -147,8 +153,15 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
     </Link>
   );
 
+  // ⚠ NE S'IMPRIME PAS. Mesuré le 15 septembre 2026 en recettant le rapport
+  // annuel : à l'impression, la page emportait DEUX barres de navigation, deux
+  // en-têtes, dix liens et le bouton du menu. Ce n'est pas un document qu'une
+  // directrice remet à son université — c'est une capture d'écran de logiciel.
+  //
+  // La règle est générale et pas propre au rapport : imprimer un écran, c'est
+  // vouloir son CONTENU. Aucun écran n'a besoin de ses menus sur le papier.
   return (
-    <header className="border-b-2 border-ink bg-white">
+    <header className="border-b-2 border-ink bg-white print:hidden">
       {/* Une SEULE ligne à toutes les largeurs. Le repli en `flex-wrap` tenait
           la barre dans l'écran mais l'étalait sur trois lignes à 375 px, soit
           110 px avant même le contenu. Sous `md`, tout passe dans un panneau. */}
@@ -170,11 +183,21 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
         </nav>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          {compte.map((i) => lien(i))}
-          {user && (
-            <Button variant="ghost" className="min-h-11" onClick={logout}>
-              Se déconnecter
-            </Button>
+          {/* ⚠ UN SEUL REPÈRE À LA PLACE DE SIX. Les écrans de la personne
+              vivent derrière le prénom ; la barre ne porte plus que le métier.
+              Sur les pages publiques sans session, les deux portes d'entrée
+              restent en clair — les replier derrière un menu cacherait
+              précisément ce qu'un visiteur cherche. */}
+          {user ? (
+            <MenuCompte
+              prenom={user.firstName}
+              nom={user.lastName}
+              etablissement={etablissement}
+              entrees={compte}
+              onDeconnexion={logout}
+            />
+          ) : (
+            sansSession.map((i) => lien(i))
           )}
         </div>
 
@@ -197,7 +220,20 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
           className="flex flex-col gap-1 border-t border-line px-4 py-2 md:hidden"
         >
           {principales.map((i) => lien(i, true))}
-          {compte.map((i) => lien(i, true))}
+          {/* ⚠ SOUS `md`, PAS DE MENU DANS UN MENU. Le panneau replié EST déjà
+              le menu ; y nicher un second niveau ajouterait un geste pour rien
+              sur l'écran où la place manque le plus. Les entrées de personne y
+              restent donc à plat, sous un intertitre qui dit à qui elles
+              appartiennent. */}
+          {user && (
+            <>
+              <p className="mt-2 border-t border-line px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                {user.firstName} {user.lastName}
+              </p>
+              {compte.map((i) => lien(i, true))}
+            </>
+          )}
+          {!user && sansSession.map((i) => lien(i, true))}
           {user && (
             // Bouton nu plutôt que <Button> : la classe `justify-center` de
             // components/ui.tsx gagnait sur un `justify-start` passé en prop
