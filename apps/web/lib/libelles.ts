@@ -348,6 +348,81 @@ export const LIBELLES = {
       'modules activés — demandez à un administrateur de votre établissement.',
   },
 
+  /**
+   * LE RÉCOLEMENT — annuler un scan pointé par erreur.
+   *
+   * ⚠ POURQUOI CETTE PORTE EXISTE, et c'est l'API qui l'écrit : « sans elle,
+   * une erreur de scan DÉFAIT SILENCIEUSEMENT le récolement — l'exemplaire est
+   * marqué vu pour toujours, "marquer les manquants" ne le signale pas, et un
+   * exemplaire réellement absent reste disponible au catalogue ».
+   *
+   * ⚠ Et le rapport ne rend PAS la liste des « vus », seulement leur compte :
+   * un exemplaire pointé par erreur n'est donc visible NULLE PART dans
+   * l'écran. C'est ce qui décide de la forme — on annule par CODE-BARRES, pas
+   * en cliquant une ligne qu'on ne peut pas voir.
+   */
+  recolement: {
+    annulerScan: 'Annuler un scan',
+    annulerCeScan: 'Annuler',
+    /**
+     * ⚠ NOM ACCESSIBLE DE L'ANNULATION DANS LE JOURNAL — et il est distinct
+     * exprès. Les deux portes portent le même mot visible, « Annuler » : sur
+     * la ligne, le code-barres est juste à côté et le répéter alourdirait.
+     * Mais au clavier et au lecteur d'écran, deux boutons nommés « Annuler »
+     * sur le même écran ne se distinguent PAS — c'est la règle déjà posée sur
+     * les barres de la coque : un nom par repère, sinon le repère ne repère
+     * rien. Trouvé par un test qui ne savait pas lequel cliquer.
+     */
+    annulerLeScanDe: (codeBarres: string) => `Annuler le scan ${codeBarres}`,
+    codeBarresAAnnuler: 'Code-barres pointé par erreur',
+    /**
+     * ⚠ CE QUE CE TEXTE DOIT DIRE, et un test le vérifie : ce qu'annuler
+     * CHANGE. « Annuler un scan » seul laisse croire à une commodité
+     * d'affichage ; c'est le compte du récolement qui bouge.
+     */
+    aQuoiCaSert:
+      'Un code-barres pointé par erreur reste « vu » jusqu’à la clôture, et le ' +
+      'rapport ne le signale pas. L’annuler le retire du récolement.',
+    annule: (codeBarres: string) => `Scan « ${codeBarres} » annulé — il ne compte plus comme vu.`,
+    /** ⚠ La ligne du journal RESTE, barrée : on voit ce qu'on vient de défaire. */
+    ligneAnnulee: 'Annulé',
+
+    /**
+     * ROUVRIR UNE SESSION CLÔTURÉE PAR ERREUR — la deuxième porte manquante.
+     *
+     * ⚠ CE QUE SON ABSENCE COÛTAIT, et c'est l'API qui l'écrit : « un clic
+     * coûtait le récolement entier — `scan` refuse sur une session close en
+     * disant "rouvrez-en une NOUVELLE", c'est-à-dire recommencer sur plusieurs
+     * milliers d'exemplaires ».
+     *
+     * ⚠ TROIS ÉTATS, PAS DEUX. L'écran n'en connaissait que deux — ouverte ou
+     * « clôturée ». La base en porte trois, et le troisième existe
+     * PRÉCISÉMENT pour que « rouvrir » puisse refuser : une session dont on a
+     * marqué les manquants a CHANGÉ LE CATALOGUE. La rouvrir produirait un
+     * second marquage sur un fonds déjà modifié.
+     */
+    rouvrir: 'Rouvrir la session',
+    /** ⚠ Dit ce que rouvrir REND, pas ce que le bouton fait. */
+    rouvrirPourquoi:
+      'Une session clôturée refuse les scans. La rouvrir reprend le récolement ' +
+      'là où il s’est arrêté — sans elle, il faut tout rescanner.',
+    rouverte: 'Session rouverte — vous pouvez reprendre les scans.',
+    /**
+     * ⚠ CE TEXTE PREND LA PLACE DU BOUTON, il ne l'accompagne pas. Offrir
+     * « rouvrir » sur une session appliquée serait un bouton dont la seule
+     * issue est un refus — et l'écran doit dire POURQUOI, à l'endroit exact
+     * où l'on cherchait le geste.
+     */
+    dejaAppliquee:
+      'Les manquants de cette session ont été marqués : le catalogue a changé. ' +
+      'Elle ne se rouvre plus — ouvrez une nouvelle session, un second marquage ' +
+      'porterait sur un fonds déjà modifié.',
+    /** Les trois états, nommés. « Clôturée » ne suffisait plus. */
+    etatEnCours: 'En cours',
+    etatCloturee: 'Clôturée',
+    etatAppliquee: 'Clôturée — manquants marqués',
+  },
+
   entete: {
     /** Porte d'entrée vers l'espace du personnel, depuis les pages publiques. */
     espaceProfessionnel: 'Espace professionnel',

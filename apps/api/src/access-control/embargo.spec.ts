@@ -156,25 +156,42 @@ describe('⚠ LA LICENCE HORS-LIGNE — la surface qui ne se rattrape pas', () =
       {} as never,
       {} as never,
     );
-    // `hasAccess` est privée : on l'atteint par son nom, c'est elle qu'on éprouve.
+    // `droitHorsLigne` est privée : on l'atteint par son nom, c'est elle qu'on
+    // éprouve. ⚠ ELLE RENDAIT UN BOOLÉEN jusqu'au 16 septembre 2026 — d'où le
+    // défaut qu'on corrige : embargo et droit manquant étaient indiscernables.
     return (svc as unknown as {
-      hasAccess: (db: unknown, t: unknown, u: string, r: string) => Promise<boolean>;
-    }).hasAccess(db, { id: 't1' }, 'u1', 'rec-1');
+      droitHorsLigne: (db: unknown, t: unknown, u: string, r: string) => Promise<
+        { accorde: true } | { accorde: false; motif: 'droit' | 'embargo' }
+      >;
+    }).droitHorsLigne(db, { id: 't1' }, 'u1', 'rec-1');
   }
 
   it('⚠ le PERSONNEL n’emporte pas une thèse sous embargo hors ligne', async () => {
-    expect(await droit(LEVEE, true)).toBe(false);
+    const d = await droit(LEVEE, true);
+    expect(d.accorde).toBe(false);
+    // ⚠ ET LE MOTIF EST NOMMÉ. Sans cette ligne, le test resterait vert le jour
+    // où le refus redeviendrait indistinct — c'est exactement ce qui s'était
+    // produit : la propriété « il refuse » était tenue, « il dit pourquoi » ne
+    // l'était par rien.
+    expect(d.accorde === false && d.motif).toBe('embargo');
   });
 
   it('sans embargo, le personnel garde son accès hors ligne', async () => {
-    expect(await droit(null, true)).toBe(true);
+    expect((await droit(null, true)).accorde).toBe(true);
   });
 
   it('un étudiant non plus, évidemment', async () => {
-    expect(await droit(LEVEE, false)).toBe(false);
+    const d = await droit(LEVEE, false);
+    expect(d.accorde).toBe(false);
+    // ⚠ POUR L'ÉTUDIANT, LE MOTIF EST `droit` ET C'EST VOULU : il est arrêté
+    // par `getRecordAccessStatus`, qui décide l'embargo AVANT les règles et
+    // rend déjà le message d'embargo. Le motif dit d'où vient le refus, pas ce
+    // que le lecteur lira — et ici la doublure accorde, donc on éprouve bien
+    // la branche d'embargo qui suit.
+    expect(d.accorde === false && d.motif).toBe('embargo');
   });
 
   it('embargo levé : tout le monde retrouve son droit', async () => {
-    expect(await droit(new Date('2020-01-01'), true)).toBe(true);
+    expect((await droit(new Date('2020-01-01'), true)).accorde).toBe(true);
   });
 });

@@ -77,7 +77,14 @@ const EXCEPTIONS: Exception[] = [
  * `PATCH /depots/:id/directeur` par la désignation du directeur — le compte a
  * fait son travail dès son premier lot, et deux fois le jour même.
  */
-const NOMBRE_D_APPELS = 139;
+// ⚠ 140 depuis le 16 septembre 2026 : l'annulation d'un scan de récolement,
+// `DELETE /inventory/sessions/:id/scans/:barcode`. La route existait, gardée et
+// testée côté API ; aucun écran n'y menait. Le compte a fait son office — il a
+// convoqué quelqu'un devant l'appel neuf, et la route est bien connue de l'API.
+// ⚠ 141 le même jour : la réouverture d'une session de récolement,
+// `POST /inventory/sessions/:id/reopen` — la deuxième des trois routes qui
+// existaient sans qu'aucun écran n'y mène.
+const NOMBRE_D_APPELS = 141;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
@@ -89,7 +96,7 @@ const NOMBRE_D_APPELS = 139;
 // la vitrine, elle, n'offrait pas de déconnexion du tout : elle offrait un lien
 // au prénom qui menait au guichet. Le compte a fait ce qu'on attend de lui, il
 // a convoqué quelqu'un devant l'appel neuf.
-const NOMBRE_D_ECRITURES = 82;
+const NOMBRE_D_ECRITURES = 84;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {

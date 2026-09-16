@@ -115,6 +115,16 @@ function base(options: { embargoUntil: Date | null; deviceUserId?: string; revoq
         encSegSize: 16384,
         encAlgo: 'aead-seg-gcm-16k/v1',
       })),
+      // ⚠ L'ÉTAGÈRE lit `findMany` : une copie PRÊTE, pour que le seul
+      // filtre restant soit la décision d'accès — c'est elle qu'on éprouve.
+      findMany: vi.fn(async () => [
+        {
+          recordId: 'rec-1',
+          fileFormat: 'PDF',
+          encStatus: 'ready',
+          record: { id: 'rec-1', title: 'Thèse sous embargo' },
+        },
+      ]),
     },
     offlineLicense: {
       upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => ({
@@ -135,6 +145,72 @@ const DEVICE = {
   privee: paire.privateKey,
 };
 
+describe('⚠ « PAS ENCORE PRÉPARÉ » NE SE DIT PAS À UN ÉCHEC DÉFINITIF', () => {
+  /**
+   * Une seule phrase couvrait QUATRE états de préparation : « Document pas
+   * encore préparé pour la lecture hors-ligne. »
+   *
+   * Pour `failed`, « pas encore » est FAUX — l'ingestion a échoué, et aucune
+   * attente n'y changera rien. Le lecteur était invité à revenir demain sur un
+   * document qui ne serait jamais prêt sans intervention : un message qui fait
+   * AGIR DANS LA MAUVAISE DIRECTION, comme le refus d'accès qu'on vient de
+   * dédoubler.
+   *
+   * ⚠ ET LE QUATRIÈME ÉTAT EST LE PLUS FRÉQUENT : la colonne est NULLABLE et
+   * vaut `null` quand l'ingestion n'a jamais été tentée — 154 des 155 copies
+   * de l'école de démonstration au 16 septembre 2026.
+   */
+  const refus = async (encStatus: string | null, fileFormat = 'PDF') => {
+    const db = base({ embargoUntil: null });
+    // ⚠ `base()` est typée par inférence et le doublage se fait ici : on nomme
+    // la forme qu'on atteint, plutôt que de la faire passer par `never`.
+    const copies = (db as unknown as {
+      digitalCopy: { findUnique: ReturnType<typeof vi.fn> };
+    }).digitalCopy;
+    copies.findUnique.mockResolvedValue({
+      recordId: 'rec-1', encObjectKey: 'k/enc.gafs', encWrappedCek: CEK_ENVELOPPEE,
+      encSegSize: 16384, encAlgo: 'aead-seg-gcm-16k/v1', encStatus, fileFormat,
+    });
+    try {
+      await service(db, true).issue(db, TENANT, USER, undefined, {
+        docId: 'rec-1', deviceId: 'd1',
+      } as never);
+      return '';
+    } catch (e) {
+      return (e as { message: string }).message;
+    }
+  };
+
+  it('⚠ `failed` fait SIGNALER, pas attendre', async () => {
+    const m = await refus('failed');
+    expect(m, 'il doit dire que la préparation a ÉCHOUÉ').toMatch(/échou/i);
+    expect(m, 'et à qui s’adresser — sans destinataire, un échec est une impasse').toMatch(/bibliothèque/i);
+    expect(m, 'il ne doit plus faire patienter').not.toMatch(/pas encore|réessayez|en cours/i);
+  });
+
+  it('`pending` fait ATTENDRE — c’est le seul état où c’est vrai', async () => {
+    const m = await refus('pending');
+    expect(m).toMatch(/en cours|réessayez/i);
+    expect(m, 'rien n’a échoué : ne pas envoyer signaler').not.toMatch(/échou/i);
+  });
+
+  it('⚠ `null` sur un PDF : jamais TENTÉ — attendre n’y changera rien non plus', async () => {
+    const m = await refus(null);
+    expect(m).toMatch(/bibliothèque/i);
+    expect(m, 'ni « en cours », ni « a échoué » : rien n’a été tenté').not.toMatch(/en cours|réessayez|échou/i);
+  });
+
+  it('⚠ `null` sur un EPUB : ce n’est pas un défaut, c’est le format', async () => {
+    // Le hors-ligne ne couvre que le PDF — le lecteur natif est PDFium.
+    // Envoyer quelqu'un « signaler à la bibliothèque » un état NORMAL serait
+    // la même faute dans l'autre sens. (Backlog n° 37.)
+    const m = await refus(null, 'EPUB');
+    expect(m).toMatch(/EPUB/);
+    expect(m, 'il doit dire ce qui RESTE possible').toMatch(/en ligne/i);
+    expect(m, 'rien à signaler : cet état est normal').not.toMatch(/échou|signalez/i);
+  });
+});
+
 describe('⚠ L’EMBARGO REFUSE LA LICENCE — même à qui peut lire en ligne', () => {
   it('un document sous embargo ne sort PAS sur un appareil', async () => {
     // ⚠ C'est le cas irrattrapable : le téléphone garderait le blob ET la clé
@@ -148,6 +224,81 @@ describe('⚠ L’EMBARGO REFUSE LA LICENCE — même à qui peut lire en ligne'
         deviceId: 'd1',
       } as never),
     ).rejects.toThrow();
+  });
+
+  it('⚠ LE REFUS NOMME L’EMBARGO ET SA DATE — pas « vous n’avez pas accès »', async () => {
+    // ⚠ CE QUE CE TEST DÉFEND, et pourquoi il ne suffit pas de refuser.
+    //
+    // `hasAccess` rendait un BOOLÉEN : un embargo et un droit manquant
+    // sortaient tous deux `false`, et l'appelant levait « Vous n'avez pas
+    // accès à ce document ». Le serveur confondait les deux, donc AUCUN client
+    // ne pouvait les séparer — le mobile affichait « vous n'avez pas (ou plus)
+    // accès », ce qui affirme un RETRAIT qui n'a pas eu lieu.
+    //
+    // La formule qui dit l'enjeu : un lecteur sous embargo n'a rien à
+    // demander, seulement à attendre — et on lui disait le contraire. Il
+    // allait réclamer un droit qu'il avait déjà.
+    const demain = new Date(Date.now() + 24 * 3600_000);
+    const db = base({ embargoUntil: demain });
+    let message = '';
+    try {
+      await service(db, true).issue(db, TENANT, USER, undefined, {
+        docId: 'rec-1', deviceId: 'd1',
+      } as never);
+    } catch (e) {
+      message = (e as { message: string }).message;
+    }
+
+    // ⚠ ON ÉPROUVE LA PROPRIÉTÉ, PAS LA CONSTANTE. Comparer le message à
+    // lui-même le suivrait dans n'importe quelle dégradation : un refus doit
+    // NOMMER l'embargo et DATER sa levée, quelle que soit sa rédaction.
+    expect(message, 'le refus doit nommer l’embargo').toMatch(/embargo/i);
+    expect(message, 'il doit DATER la levée : sans date, « attendez » n’est pas actionnable')
+      .toContain(demain.toLocaleDateString('fr-FR'));
+    expect(message, 'il ne doit plus être le refus générique de droit')
+      .not.toMatch(/n’avez pas accès|n'avez pas accès/i);
+  });
+
+  it('⚠ AU PERSONNEL, il ne PROMET PAS ce qui lui est déjà ouvert', async () => {
+    // Un étudiant sous embargo n'a pas accès en ligne non plus : le message de
+    // la lecture en ligne (« sa description reste consultable ») s'applique
+    // tel quel, et il est RÉUTILISÉ. Un bibliothécaire, lui, PEUT lire en
+    // ligne — lui servir la même phrase serait un nouveau faux, plus petit
+    // mais de même nature que celui qu'on corrige.
+    const demain = new Date(Date.now() + 24 * 3600_000);
+    const db = base({ embargoUntil: demain });
+    let message = '';
+    try {
+      await service(db, /* document.lire */ true).issue(db, TENANT, USER, undefined, {
+        docId: 'rec-1', deviceId: 'd1',
+      } as never);
+    } catch (e) {
+      message = (e as { message: string }).message;
+    }
+    expect(message, 'le personnel doit s’entendre dire que l’EN LIGNE reste ouvert')
+      .toMatch(/en ligne/i);
+    expect(message, 'et surtout PAS qu’il devra se contenter de la description')
+      .not.toMatch(/description reste consultable/i);
+  });
+
+  it('⚠ L’ÉTAGÈRE NE LISTE PAS CE QUE LE TÉLÉCHARGEMENT REFUSE (embargo)', async () => {
+    // ⚠ `myDocuments` RÉIMPLÉMENTAIT la décision — la même que `issue` à un
+    // contrôle près : l'embargo. Une notice sous embargo apparaissait donc
+    // dans l'étagère AVEC son bouton, et le téléchargement échouait un écran
+    // plus loin. C'est la promesse non tenue que le mobile venait de retirer
+    // de la fiche, reproduite côté SERVEUR — donc incorrigible par un client.
+    const demain = new Date(Date.now() + 24 * 3600_000);
+    const db = base({ embargoUntil: demain });
+    const etagere = await service(db, /* document.lire */ true).myDocuments(db, TENANT, USER);
+    expect(etagere, 'sous embargo, l’étagère doit être VIDE').toEqual([]);
+  });
+
+  it('⚠ TÉMOIN D’ABSENCE de l’étagère : embargo levé, le document est listé', async () => {
+    // Sans lui, une étagère qui rend TOUJOURS vide serait indiscernable d'une
+    // étagère juste — et plus rassurante, puisqu'elle ne promettrait rien.
+    const db = base({ embargoUntil: null });
+    const etagere = await service(db, true).myDocuments(db, TENANT, USER);
+    expect(etagere.length, 'sans embargo, le document doit être listé').toBe(1);
   });
 
   it('⚠ TÉMOIN D’ABSENCE : le MÊME appel, embargo levé, passe', async () => {

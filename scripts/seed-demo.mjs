@@ -26,6 +26,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { loadEnvIfPresent } from './lib/load-env.mjs';
 import { assurerLesInscriptions } from './lib/inscriptions.mjs';
+import { assurerLesDocumentsNumeriques } from './lib/documents-numeriques.mjs';
 
 loadEnvIfPresent();
 
@@ -934,9 +935,22 @@ async function seedTenant(db) {
   // « lire » donnerait une erreur devant le client — pire que pas de document
   // numérique du tout.
   //
-  // ⚠ Ces copies n'ont pas d'ingestion offline (encStatus null) : elles se
-  // lisent EN LIGNE, pas hors connexion. Le chiffrement AEAD est fait par
-  // DigitalCopyService.upload, que ce raccourci contourne délibérément.
+  // ⚠ ELLES PASSENT PAR LA ROUTE DU PRODUIT DEPUIS LE 16 SEPTEMBRE 2026, et
+  // ce paragraphe disait l'inverse. Le raccourci `digitalCopy.createMany` était
+  // ASSUMÉ et ÉCRIT — « le chiffrement AEAD est fait par
+  // DigitalCopyService.upload, que ce raccourci contourne délibérément ». Il
+  // n'était donc pas une négligence. Mais son effet, lui, n'avait jamais été
+  // mesuré : sur 155 documents, **UN SEUL** était prêt pour le hors-ligne, et
+  // l'étagère mobile (`myDocuments` filtre `encStatus: 'ready'`) n'en aurait
+  // montré qu'un — pendant que la fiche en promettait 155.
+  //
+  // ⚠ Ce que le raccourci économisait, mesuré avant de le retirer : 4,8 ms de
+  // réparation xref + 0,6 ms de chiffrement + 6,5 ms de dépôt MinIO, soit
+  // ~12 ms par document et **~2 s pour les 155**. Le coût invoqué n'existait
+  // pas ; il n'avait simplement jamais été chiffré.
+  //
+  // La session vient du CHEMIN NORMAL — `/auth/login` avec le mot de passe que
+  // ce seed vient de poser. Jamais un jeton fabriqué.
   const cle = await deposerPdfDExemple();
   if (cle) {
     // ⚠ La CIBLE est un quart du catalogue, pas « un quart de ce qui n'en a
@@ -957,18 +971,35 @@ async function seedTenant(db) {
             take: manquants,
           });
     const cibles = sansFichier;
-    if (cibles.length > 0) {
-      await db.digitalCopy.createMany({
-        data: cibles.map((r) => ({
-          recordId: r.id,
-          objectKey: cle,
-          fileFormat: 'PDF',
-          fileSizeBytes: PDF_EXEMPLE.length,
-          originalName: 'document-d-exemple.pdf',
-        })),
+    // ⚠ ON VISE UN ÉTAT, PAS UN COMPTE : toute copie qui n'est pas `ready`
+    // est (re)téléversée, y compris celles qu'une version antérieure de ce
+    // seed a écrites directement. Relancer RÉPARE, et ne duplique rien — la
+    // route remplace l'exemplaire numérique existant.
+    const pasPretes = await db.digitalCopy.findMany({
+      where: { OR: [{ encStatus: null }, { encStatus: { not: 'ready' } }] },
+      select: { recordId: true },
+    });
+    const aTeleverser = [...cibles.map((r) => r.id), ...pasPretes.map((c) => c.recordId)];
+
+    const token = await sessionBibliothecaire();
+    if (!token) {
+      log('⚠ fichiers numériques IGNORÉS — API injoignable ou connexion refusée');
+    } else {
+      const r = await assurerLesDocumentsNumeriques({
+        db, api: API, token, pdf: PDF_EXEMPLE,
+        nomFichier: 'document-d-exemple.pdf',
+        cibler: async () => [...new Set(aTeleverser)],
       });
+      for (const e of r.echecs.slice(0, 3)) log(`  ⚠ ${e}`);
+      const prets = await db.digitalCopy.count({ where: { encStatus: 'ready' } });
+      const total = await db.digitalCopy.count();
+      // ⚠ LE CONTRÔLE EST UNE ARITHMÉTIQUE, pas une impression de réussite.
+      log(
+        `${total} fichiers numériques, ${prets} prêts pour le hors-ligne ` +
+          `(${r.televerses} téléversé(s) par la route du produit)`,
+      );
+      if (prets !== total) log(`  ⚠ ${total - prets} document(s) NON prêt(s) hors-ligne — voir les échecs ci-dessus`);
     }
-    log(`${deja + cibles.length} fichiers numériques (${cibles.length} ajoutés — un même PDF d'exemple, lisible en ligne)`);
   } else {
     log('fichiers numériques IGNORÉS — dépôt MinIO indisponible');
   }
@@ -1536,18 +1567,35 @@ async function seedActivite(db) {
   );
 }
 
+/**
+ * Session de bibliothécaire par le CHEMIN NORMAL, mise en cache pour la durée
+ * du seed. Jamais un jeton fabriqué depuis un secret d'environnement — c'est
+ * l'interdit de `CLAUDE.md`, et il ne souffre pas d'exception « ponctuelle ».
+ * Rend `null` si l'API est injoignable : l'appelant le DIT, il ne devine pas.
+ */
+let _session;
+async function sessionBibliothecaire() {
+  if (_session !== undefined) return _session;
+  try {
+    const login = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Host: 'localhost' },
+      body: JSON.stringify({ email: 'bib@exemple.bf', password: PASSWORD }),
+    });
+    _session = login.ok ? ((await login.json()).accessToken ?? null) : null;
+  } catch {
+    _session = null;
+  }
+  return _session;
+}
+
 // ── Réindexation Meilisearch (via l'API) ───────────────────
 async function reindex() {
-  const login = await fetch(`${API}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost' },
-    body: JSON.stringify({ email: 'bib@exemple.bf', password: PASSWORD }),
-  });
-  if (!login.ok) {
+  const accessToken = await sessionBibliothecaire();
+  if (!accessToken) {
     log('réindexation ignorée (login bibliothécaire indisponible)');
     return;
   }
-  const { accessToken } = await login.json();
   await fetch(`${API}/cataloging/reindex`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, Host: 'localhost' },

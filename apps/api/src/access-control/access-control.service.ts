@@ -24,7 +24,15 @@ export type RecordAccessStatus =
   | { granted: true }
   | ({ granted: false; message: string } & AccessDenialReason);
 
-function denialMessage(reason: AccessDenialReason): string {
+/**
+ * Message d'un refus d'accès, prêt à afficher.
+ *
+ * ⚠ EXPORTÉ DEPUIS LE 16 SEPTEMBRE 2026 pour que l'émission de licence
+ * hors-ligne le RÉUTILISE au lieu de le recopier. Deux formulations d'un même
+ * refus divergent le jour où l'une change, et c'est le lecteur qui paie la
+ * différence.
+ */
+export function denialMessage(reason: AccessDenialReason): string {
   switch (reason.code) {
     case 'CLASS_MISMATCH':
       return `Réservé aux étudiants de ${reason.requiredClassName}.`;

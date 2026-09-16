@@ -56,7 +56,17 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
   '/admin/collections/[id]': { pour: 'collections.gerer', quoi: 'une collection : son contenu et ses règles d’accès' },
   '/admin/moissonnage/[id]': { pour: 'outils.catalogue', quoi: 'un entrepôt moissonné et ses comptes rendus de récolte' },
   '/admin/recolement/[id]': { pour: 'outils.catalogue', quoi: 'une session de récolement en cours' },
-  '/admin/parametres': { pour: '⚠ AUCUNE ENTRÉE', quoi: '⚠ écran SANS PORTE depuis que « Identité » et « Règles de prêt » l’ont remplacé — à vérifier avant de l’ouvrir' },
+  // ⚠ CETTE LIGNE A ÉTÉ FAUSSE, et je l'ai signalée au backend comme un défaut
+  // avant de lire le fichier. Elle disait « écran SANS PORTE, à vérifier ».
+  // `/admin/parametres` ne se contente pas de n'avoir aucune entrée : il
+  // REDIRIGE, et son propre fichier dit pourquoi — l'adresse a circulé
+  // (signets, notes, peut-être un courriel à une école), et un 404 dirait au
+  // lecteur qu'il s'est trompé alors que c'est nous qui avons déplacé.
+  // « Pas d'entrée de menu » ne veut pas dire « pas de raison d'être ».
+  '/admin/parametres': {
+    pour: 'quiconque avait l’ancienne adresse',
+    quoi: 'redirige vers « Identité » — l’écran a été scindé en Identité et Règles de prêt, et l’ancienne adresse reste vivante exprès',
+  },
 };
 
 function ecransSurLeDisque(): string[] {
@@ -80,7 +90,10 @@ function carte(): string {
   l.push('# La carte des écrans');
   l.push('');
   l.push('> ⚠ **Document ENGENDRÉ — ne le corrigez pas à la main.**');
-  l.push('> `MAJ_CARTE=1 npx vitest run tests/carte-des-ecrans.spec.ts -w @gafeso/web`');
+  l.push('> Depuis `apps/web` : `MAJ_CARTE=1 npx vitest run tests/carte-des-ecrans.spec.ts`');
+  l.push('>');
+  l.push('> ⚠ *Sans `-w` : dans vitest, `-w` veut dire `--watch` — la commande');
+  l.push('> ne rendrait jamais la main au lieu de régénérer et de sortir.*');
   l.push('>');
   l.push('> Il est déduit du système de fichiers et de `lib/navigation.ts`. Un écran');
   l.push('> ajouté sans être classé fait échouer la suite : c’est une obligation, pas');
