@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { Alert, Button, Card, Input } from '@/components/ui';
+import { LIBELLES } from '@/lib/libelles';
+
+const T = LIBELLES.reglesDePret;
 
 interface Policy {
   onlineRenewalEnabled: boolean;
@@ -19,6 +22,12 @@ export function CirculationPolicySettings() {
   const [max, setMax] = useState(2);
   const [days, setDays] = useState(14);
   const [refuseOverdue, setRefuseOverdue] = useState(true);
+  // ⚠ SERVI DEPUIS TOUJOURS, ÉDITABLE NULLE PART jusqu'au 16 septembre 2026. Il
+  // était déclaré dans le type de ce composant et lu par personne — le miroir
+  // exact d'« une colonne servie que personne ne montre ». Ce qu'il gouverne
+  // n'est pas un détail : c'est le délai au bout duquel une réservation
+  // disponible repart à la personne suivante.
+  const [pickupDays, setPickupDays] = useState(7);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -31,6 +40,7 @@ export function CirculationPolicySettings() {
       setMax(p.onlineRenewalMax);
       setDays(p.onlineRenewalDays);
       setRefuseOverdue(p.onlineRenewalRefuseOverdue);
+      setPickupDays(p.holdPickupDays);
       setLoaded(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Chargement impossible.');
@@ -55,6 +65,7 @@ export function CirculationPolicySettings() {
             onlineRenewalMax: max,
             onlineRenewalDays: days,
             onlineRenewalRefuseOverdue: refuseOverdue,
+            holdPickupDays: pickupDays,
           }),
         },
         getToken(),
@@ -131,6 +142,19 @@ export function CirculationPolicySettings() {
             soit cette option.
           </span>
         </span>
+      </label>
+
+      <label className="mt-4 flex flex-col gap-1.5 text-sm font-medium">
+        {T.miseDeCoteTitre}
+        <Input
+          type="number"
+          min={1}
+          max={30}
+          value={pickupDays}
+          onChange={(e) => setPickupDays(Number(e.target.value))}
+          className="max-w-[8rem]"
+        />
+        <span className="font-normal text-muted">{T.miseDeCoteAide}</span>
       </label>
 
       <div className="mt-5">

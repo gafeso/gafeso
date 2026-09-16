@@ -1523,8 +1523,31 @@ export const LIBELLES = {
 
   reglesDePret: {
     titre: 'Règles de prêt',
+    /**
+     * ⚠ CE TEXTE A ÉTÉ FAUX, ET IL ANNONÇAIT PLUS QUE L'ÉCRAN NE PORTE.
+     *
+     * Il disait : « Durée d'un prêt, nombre de renouvellements, plafond
+     * d'emprunts et amende journalière, par catégorie d'adhérent et par type de
+     * document. » Mesuré le 16 septembre 2026 : **aucune** de ces grandeurs
+     * n'est éditable ici. Elles vivent sur `CirculationRule` (`loanPeriodDays`,
+     * `maxCheckouts`, `maxRenewals`, `finePerDay`), dont les quatre routes
+     * `/circulation/rules` ne sont appelées par AUCUN écran — backlog n° 46.
+     *
+     * ⚠ Et le piège qui rendait la phrase crédible : « nombre de
+     * renouvellements » EXISTE bien sur cet écran — mais c'est
+     * `onlineRenewalMax`, le plafond du renouvellement EN LIGNE par le lecteur,
+     * pas `maxRenewals`, le plafond de la règle appliqué au guichet. Deux
+     * plafonds voisins, deux noms presque identiques, et un seul est ici.
+     *
+     * Le texte ne décrit donc plus que ce que l'écran fait — et il ne promet
+     * pas ce qui viendra : « pas encore » date sa propre péremption.
+     */
     introduction:
-      'Durée d’un prêt, nombre de renouvellements, plafond d’emprunts et amende journalière, par catégorie d’adhérent et par type de document.',
+      'Renouvellement en ligne par le lecteur, et durée de mise de côté d’une réservation disponible.',
+    /** La durée de mise de côté : servie par l’API depuis toujours, éditable nulle part avant le 16 septembre 2026. */
+    miseDeCoteTitre: 'Durée de mise de côté d’une réservation (jours)',
+    miseDeCoteAide:
+      'Délai laissé au lecteur pour venir retirer un document réservé, une fois qu’il est disponible. Passé ce délai, le document repart à la personne suivante.',
   },
 
   adherents: {
@@ -2123,6 +2146,14 @@ export const LIBELLES = {
    * RECONNAÎTRE ce qui va partir, pas seulement de le compter. « 47 lignes
    * seront supprimées » ne se vérifie pas ; « Traoré Awa, Zongo Moussa… » se
    * reconnaît — ou ne se reconnaît pas, et c'est alors qu'on s'arrête.
+   *
+   * ⚠ ET L'ACCORD EN NOMBRE EST PORTÉ ICI, pas par l'API. Trouvé par la
+   * RECETTE À L'ÉCRAN le 16 septembre 2026, sur le seul cas que mes dix tests
+   * n'exerçaient pas : `n = 1`. Ils éprouvaient 12 et 9 — deux pluriels. La
+   * phrase lue à l'écran était « Supprimer aussi **ces 1 étudiant(s)
+   * attendu(s)** », et « 1 étudiant attendu **ne figurent** plus ». Un « (s) »
+   * paresseux se tolère ; un démonstratif pluriel sur UN élément se lit comme
+   * un produit inachevé — sur l'écran qui demande d'autoriser une suppression.
    * (Le motif est celui du commentaire de `apercuImportExpectedStudents`
    * côté API, qui rend `retraits.premiers` exactement pour ça.)
    */
@@ -2133,26 +2164,36 @@ export const LIBELLES = {
     rienEcrit: 'Rien n’a encore été écrit. Relisez ci-dessous, puis confirmez.',
     analyse: 'Lecture du fichier…',
     lignesAImporter: (n: number) =>
-      `${n} ligne(s) seront créées ou mises à jour.`,
+      n <= 1
+        ? `${n} ligne sera créée ou mise à jour.`
+        : `${n} lignes seront créées ou mises à jour.`,
     aucuneLigne:
       'Aucune ligne exploitable dans ce fichier : il n’y a rien à importer.',
     classesConcernees: 'Classes du fichier',
-    lignesEnErreur: (n: number) => `${n} ligne(s) seront ignorées (voir le détail).`,
+    lignesEnErreur: (n: number) =>
+      n <= 1
+        ? `${n} ligne sera ignorée (voir le détail).`
+        : `${n} lignes seront ignorées (voir le détail).`,
 
     /** Le bloc de suppression. Il ne s'affiche que si l'aperçu annonce au moins un retrait. */
     retraitsTitre: (n: number) =>
-      `${n} étudiant(s) attendu(s) ne figurent plus dans ce fichier`,
+      n <= 1
+        ? `${n} étudiant attendu ne figure plus dans ce fichier`
+        : `${n} étudiants attendus ne figurent plus dans ce fichier`,
     retraitsPortee:
       'La suppression ne touche que les classes présentes dans le fichier, et seulement les étudiants qui ne se sont pas encore inscrits. Les comptes déjà réclamés ne sont jamais retirés.',
-    retraitsEtAutres: (n: number) => `… et ${n} autre(s).`,
+    retraitsEtAutres: (n: number) => (n <= 1 ? `… et ${n} autre.` : `… et ${n} autres.`),
     /** ⚠ Case DÉCOCHÉE par défaut : la suppression est un second geste, jamais l'effet du premier. */
     caseSupprimer: (n: number) =>
-      `Supprimer aussi ces ${n} étudiant(s) attendu(s) de la liste`,
+      n <= 1
+        ? `Supprimer aussi cet étudiant attendu de la liste`
+        : `Supprimer aussi ces ${n} étudiants attendus de la liste`,
     conserverParDefaut:
       'Sans cette case, l’import ajoute et met à jour, et ne supprime rien.',
 
     importer: 'Importer',
-    importerEtSupprimer: (n: number) => `Importer et supprimer ${n} ligne(s)`,
+    importerEtSupprimer: (n: number) =>
+      n <= 1 ? `Importer et supprimer ${n} ligne` : `Importer et supprimer ${n} lignes`,
     changerDeFichier: 'Choisir un autre fichier',
     enCours: 'Import en cours…',
 
@@ -2168,8 +2209,23 @@ export const LIBELLES = {
       'La liste ou le fichier a changé depuis l’aperçu. Relancez-le pour voir ce qui partirait maintenant.',
     relancerApercu: 'Relancer l’aperçu',
 
+    /**
+     * Le compte rendu. ⚠ Sa première phrase était écrite dans le composant, en
+     * `(s)` — elle est sortie du code parce que ce LOT la modifie (il lui
+     * ajoute le sort des suppressions), pas pour reprendre l'écran.
+     */
+    importees: (n: number) =>
+      n <= 1 ? `${n} étudiant importé` : `${n} étudiants importés`,
+    sansErreur: ' — aucune erreur.',
+    avecErreurs: (n: number) =>
+      n <= 1
+        ? `, ${n} ligne en erreur (voir ci-dessous).`
+        : `, ${n} lignes en erreur (voir ci-dessous).`,
     /** Compte rendu : `retires` est servi par l'API depuis le premier jour — il s'affiche. */
-    retiresFaits: (n: number) => `${n} ligne(s) supprimée(s) de la liste.`,
+    retiresFaits: (n: number) =>
+      n <= 1
+        ? `${n} ligne supprimée de la liste.`
+        : `${n} lignes supprimées de la liste.`,
     aucunRetrait: 'Aucune suppression.',
   },
 } as const;

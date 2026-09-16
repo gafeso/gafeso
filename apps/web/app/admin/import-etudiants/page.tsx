@@ -351,10 +351,10 @@ export default function ImportEtudiantsPage() {
       {result && (
         <div className="mt-4">
           <Alert tone={result.errors.length === 0 ? 'success' : 'error'}>
-            {result.imported} étudiant(s) importé(s)
+            {T.importees(result.imported)}
             {result.errors.length > 0
-              ? `, ${result.errors.length} ligne(s) en erreur (voir ci-dessous).`
-              : ' — aucune erreur.'}{' '}
+              ? T.avecErreurs(result.errors.length)
+              : T.sansErreur}{' '}
             {result.retires > 0 ? T.retiresFaits(result.retires) : T.aucunRetrait}
           </Alert>
 

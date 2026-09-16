@@ -193,7 +193,7 @@ describe('Import des étudiants attendus — l’aperçu avant l’écriture', (
     // Le bouton DIT ce qu'il va faire une fois la case cochée.
     fireEvent.click(screen.getByRole('button', { name: T.importerEtSupprimer(12) }));
 
-    const bandeau = await screen.findByText(/3 étudiant\(s\) importé\(s\)/);
+    const bandeau = await screen.findByText(new RegExp(T.importees(3)));
     expect(bandeau.textContent).toContain(T.retiresFaits(12));
     const ecriture = envoisVers('/expected-students/import').find((e) => !e.url.includes('/apercu'))!;
     expect(champs(ecriture)).toEqual({ remplacer: 'true', confirmeRetraits: '12' });
@@ -254,9 +254,60 @@ describe('Import des étudiants attendus — l’aperçu avant l’écriture', (
     await screen.findByText(T.apercuTitre);
 
     fireEvent.click(screen.getByRole('button', { name: T.importer }));
-    const bandeau = await screen.findByText(/2 étudiant\(s\) importé\(s\)/);
+    const bandeau = await screen.findByText(new RegExp(T.importees(2)));
     expect(within(bandeau).queryByText(T.aucunRetrait) ?? bandeau.textContent).toBeTruthy();
     expect(bandeau.textContent).toContain(T.aucunRetrait);
+  });
+});
+
+describe('⚠ L’ACCORD EN NOMBRE — le cas que dix tests n’exerçaient pas', () => {
+  /**
+   * Trouvé par la RECETTE À L'ÉCRAN, pas par la suite. Mes dix cas éprouvaient
+   * 12 et 9 — deux pluriels. Sur `n = 1`, l'écran affichait « Supprimer aussi
+   * ces 1 étudiant(s) attendu(s) » et « 1 étudiant attendu ne figurent plus ».
+   *
+   * ⚠ Ce n'est pas le `(s)` paresseux du reste de l'écran : c'est un
+   * démonstratif PLURIEL et un verbe PLURIEL sur un seul élément. La leçon du
+   * dépôt tient ici littéralement — une recette voit ce qu'aucun test unitaire
+   * ne voit, parce qu'un test n'exerce que les nombres qu'on a choisis.
+   */
+  const AU_SINGULIER = [
+    T.retraitsTitre(1),
+    T.caseSupprimer(1),
+    T.lignesAImporter(1),
+    T.lignesEnErreur(1),
+    T.retraitsEtAutres(1),
+    T.importerEtSupprimer(1),
+    T.retiresFaits(1),
+  ];
+
+  it('aucun texte du singulier ne porte de marque de pluriel', () => {
+    for (const texte of AU_SINGULIER) {
+      expect(texte, `pluriel sur un seul élément : « ${texte} »`).not.toMatch(
+        /\(s\)|\bces\b|\bautres\b|\bfigurent\b|\bseront\b|\blignes\b|étudiants|attendus|supprimées|créées/,
+      );
+    }
+  });
+
+  it('et le pluriel, lui, est bien accordé', () => {
+    expect(T.retraitsTitre(12)).toMatch(/12 étudiants attendus ne figurent plus/);
+    expect(T.caseSupprimer(12)).toMatch(/ces 12 étudiants attendus/);
+    expect(T.lignesAImporter(3)).toMatch(/3 lignes seront créées/);
+    expect(T.retiresFaits(4)).toMatch(/4 lignes supprimées/);
+  });
+
+  it('l’écran rend bien la forme singulière', async () => {
+    poser('/expected-students/import/apercu', {
+      ...APERCU_AVEC_RETRAITS,
+      aImporter: 1,
+      retraits: { total: 1, premiers: [APERCU_AVEC_RETRAITS.retraits.premiers[0]] },
+    });
+    render(<ImportEtudiantsPage />);
+    deposerLeFichier();
+    await screen.findByText(T.apercuTitre);
+
+    expect(screen.getByRole('checkbox', { name: T.caseSupprimer(1) })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/ces 1 |1 étudiant\(s\)/);
   });
 });
 
