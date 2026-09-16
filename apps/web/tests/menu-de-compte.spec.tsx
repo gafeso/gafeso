@@ -65,6 +65,18 @@ function brancher({ ecole = 'Université d’Exemple' }: { ecole?: string | null
 const repos = () => new Promise((r) => setTimeout(r, 40));
 const bouton = () => document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
 const liens = () => [...document.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+/**
+ * ⚠ LES LIENS DU PANNEAU, PAS CEUX DE LA PAGE. « Dépôts à valider » peut
+ * apparaître AILLEURS dans l'en-tête — c'est la première entrée métier d'un
+ * directeur, donc la destination du lien « Espace professionnel ». Ce qu'on
+ * garde ici est qu'elle n'est pas dans le MENU DE COMPTE : une file de travail
+ * n'est pas un écran personnel.
+ */
+const liensDuMenu = () => {
+  const panneau = document.querySelector('[role=menu]');
+  expect(panneau, 'le menu n’est pas ouvert : la mesure ne vaut rien').not.toBeNull();
+  return [...panneau!.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+};
 
 async function monter(profil: Record<string, unknown> = {}) {
   ouvrirSession({ firstName: 'Rasmata', lastName: 'Nikiema', ...profil });
@@ -107,7 +119,7 @@ describe('ce que le menu contient', () => {
   it('les écrans de la personne y sont, et EUX SEULS', async () => {
     await monter();
     fireEvent.click(bouton()!);
-    const dans = liens();
+    const dans = liensDuMenu();
     for (const href of ['/profil', '/mes-prets', '/mon-depot', '/mes-encadrements']) {
       expect(dans, `${href} devrait être dans le menu de compte`).toContain(href);
     }
@@ -119,7 +131,7 @@ describe('ce que le menu contient', () => {
     // deux logiques.
     await monter();
     fireEvent.click(bouton()!);
-    expect(liens()).not.toContain('/depots-a-valider');
+    expect(liensDuMenu()).not.toContain('/depots-a-valider');
   });
 
   it('⚠ et elle est bien DANS la barre métier — pas perdue en route', async () => {

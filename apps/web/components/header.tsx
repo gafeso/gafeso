@@ -2,15 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
-import { clearSession, getUser, SessionUser } from '@/lib/session';
-import { useMyFunctions } from '@/lib/functions';
-import { ongletDe, premiereEntreeAccessible } from '@/lib/navigation';
+import { clearSession } from '@/lib/session';
+import { ongletDe } from '@/lib/navigation';
 import { LIBELLES } from '@/lib/libelles';
-import { MenuCompte, type EntreeCompte } from '@/components/menu-compte';
-import { useNomEtablissement } from '@/lib/etablissement';
-import { useModulesActifs } from '@/lib/modules-actifs';
+import { MenuCompte } from '@/components/menu-compte';
+import { useCompteCourant } from '@/lib/entrees-de-compte';
 
 // Barre publique : accueil et catalogue, pour tout le monde.
 const NAV = [
@@ -27,35 +25,31 @@ const NAV = [
 export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<SessionUser | null>(null);
   const [menuOuvert, setMenuOuvert] = useState(false);
-  const propres = useMyFunctions();
-  const effectives = fonctions !== undefined ? fonctions : propres.functions;
-  // ⚠ LE CIRCUIT DE DÉPÔT PASSE PAR ICI, pas par le menu du personnel : sans ce
-  // filtre, éteindre le module `depot` laissait « Mon dépôt » et « Dépôts à
-  // valider » affichés — donc des portes vers des routes que l'API refuse.
-  // `null` (on ne sait pas encore, ou page publique) laisse passer : masquer sur
-  // une information qu'on n'a pas ferait disparaître un écran auquel la personne
-  // a droit. La garantie reste l'API, comme pour le menu.
-  const { modulesActifs } = useModulesActifs();
-  // `null` tant qu'on ne sait pas : le menu n'écrit alors aucune ligne d'école.
-  const etablissement = useNomEtablissement();
-  const moduleEteint = (id: string) => modulesActifs !== null && !modulesActifs.includes(id);
 
-  // Porte d'entrée vers l'espace professionnel. Conditionnée à « cette
-  // personne a-t-elle au moins une entrée ? » plutôt qu'à une liste de rôles :
-  // c'est ce qui corrige l'ancienne incohérence, où un bibliothécaire avait
-  // accès à la coque d'administration sans jamais en voir le lien.
-  // …et masquée quand on y est déjà : la barre d'onglets est juste en dessous.
+  // ⚠ UNE SEULE SOURCE POUR LES DEUX EN-TÊTES. Ce composant et celui de la
+  // vitrine décrivaient séparément ce qu'un compte connecté offre — et ils ont
+  // divergé dès la première modification : le menu de compte est arrivé ici le
+  // 15 septembre, pendant que la vitrine gardait un lien portant le PRÉNOM et
+  // menant à `/guichet`, pour tout le monde, étudiants compris.
+  const { user, entrees: compte, lienPro: destinationPro, etablissement } =
+    useCompteCourant(fonctions);
+
+  // …et le lien est masqué quand on y est déjà : la barre d'onglets est juste
+  // en dessous.
   const dansEspacePro = pathname.startsWith('/admin') || ongletDe(pathname) !== undefined;
-  const lienPro =
-    !dansEspacePro && effectives ? premiereEntreeAccessible(effectives) !== null : false;
+  const lienPro = !dansEspacePro && destinationPro !== null;
 
-  useEffect(() => {
-    setUser(getUser());
-    // Le panneau ne doit pas rester ouvert par-dessus la page d'arrivée.
-    setMenuOuvert(false);
-  }, [pathname]);
+  // Une seule liste, rendue à deux endroits : en ligne sur grand écran, dans le
+  // panneau replié sur mobile. Dupliquer le balisage laisserait fatalement les
+  // deux versions diverger.
+  const principales = [
+    ...NAV,
+    // « Espace professionnel » et non « Administration » : depuis la refonte,
+    // Administration est une PIÈCE de cet espace (le paramétrage), pas
+    // l'espace lui-même.
+    ...(lienPro ? [{ href: destinationPro, label: LIBELLES.entete.espaceProfessionnel }] : []),
+  ];
 
   async function logout() {
     // Efface le cookie httpOnly côté serveur (le JS ne peut pas y toucher),
@@ -68,60 +62,6 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
     clearSession();
     router.push('/login');
   }
-
-  // Une seule liste, rendue à deux endroits : en ligne sur grand écran, dans le
-  // panneau replié sur mobile. Dupliquer le balisage laisserait fatalement les
-  // deux versions diverger.
-  const principales = [
-    ...NAV,
-    // « Espace professionnel » et non « Administration » : depuis la refonte,
-    // Administration est une PIÈCE de cet espace (le paramétrage), pas
-    // l'espace lui-même.
-    ...(lienPro ? [{ href: '/admin', label: LIBELLES.entete.espaceProfessionnel }] : []),
-  ];
-  // ⚠ LES ÉCRANS DE LA PERSONNE, ET EUX SEULS. Le critère est celui de Jean :
-  // si le titre commence par « Mon » ou « Mes », c'est la personne ; si c'est
-  // une FILE D'ATTENTE, c'est le métier. « Dépôts à valider » est donc parti
-  // dans la barre métier (onglet Catalogue, groupe « Dépôts ») — un directeur
-  // n'y consulte pas SON dépôt, il traite ceux des autres, exactement comme un
-  // bibliothécaire traite des retours.
-  const compte: EntreeCompte[] = user
-    ? [
-        { href: '/profil', label: 'Mon compte', title: 'Mon compte (informations, mot de passe, sécurité)' },
-        { href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' },
-        // ⚠ « Mon dépôt » N'APPARAÎT QUE POUR QUI DÉTIENT LA FONCTION. Un
-        // étudiant d'une école qui n'ouvre pas le dépôt ne doit pas voir une
-        // entrée qui le refusera — pas d'entrée sans écran, pas d'écran sans
-        // droit.
-        ...(effectives?.includes('depot.deposer') && !moduleEteint('depot')
-          ? [
-              {
-                href: '/mon-depot',
-                label: LIBELLES.monDepot.titre,
-                title: 'Déposer un mémoire ou une thèse, et suivre son avancement',
-                separeAvant: true,
-              },
-            ]
-          : []),
-        // ⚠ PAS DE CONDITION DE MODULE ICI, ET C'EST MESURÉ. J'ai failli en
-        // poser une « par symétrie » avec l'entrée au-dessus. Le service
-        // interroge `recordContributor` joint au CATALOGUE, pas les dépôts :
-        // une thèse cataloguée il y a trois ans reste dirigée par son
-        // directeur. Éteindre le dépôt ferme le circuit ; il n'efface pas ce
-        // qui en est sorti. Le témoin de `modules-filtrage-menu.spec.ts` existe
-        // précisément pour attraper cet ajout-là, et il m'a attrapé.
-        ...(effectives?.includes('encadrements.voir')
-          ? [
-              {
-                href: '/mes-encadrements',
-                label: LIBELLES.mesEncadrements.titre,
-                title: 'Les mémoires et thèses que j’ai dirigés',
-                separeAvant: !effectives?.includes('depot.deposer'),
-              },
-            ]
-          : []),
-      ]
-    : [];
 
   /** Les deux entrées publiques quand personne n'est connecté. */
   const sansSession = [

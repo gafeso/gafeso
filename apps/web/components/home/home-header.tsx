@@ -4,11 +4,27 @@
 // le menu mobile repliable et le lien d'authentification (dépend du cookie de
 // session, lu côté navigateur). Le reste de la page est rendu en SSR.
 //
+// ⚠ ET C'EST ICI QUE LA VITRINE CONNAÎT LES SESSIONS. Quand un cookie existe,
+// cet en-tête appelle `/auth/me/functions`, `/modules` et `/tenancy/current` —
+// pour savoir s'il doit rendre « Espace professionnel », « Mon dépôt », et le
+// nom de l'école. Sans session, aucun de ces appels ne part.
+//
+// Conséquence à connaître AVANT de vouloir mettre la vitrine en cache : le
+// CORPS de la page est identique pour tout le monde, son EN-TÊTE non. La
+// frontière est ici. Détail et alternative écartée (la séparation à deux
+// adresses de Koha) : docs/DEMARRER-FRONT.md, « La vitrine connaît les
+// sessions ».
+//
 // Les liens sont RELATIFS (/opac, /login, /inscription) : ils pointent
 // automatiquement vers le domaine du tenant courant — aucune URL en dur.
 
-import { useEffect, useState } from 'react';
-import { getUser } from '@/lib/session';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
+import { clearSession } from '@/lib/session';
+import { useCompteCourant } from '@/lib/entrees-de-compte';
+import { MenuCompte } from '@/components/menu-compte';
+import { LIBELLES } from '@/lib/libelles';
 import styles from '@/app/home.module.css';
 
 interface NavItem {
@@ -30,11 +46,21 @@ export function HomeHeader({
   navItems: NavItem[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [firstName, setFirstName] = useState<string | null>(null);
+  const router = useRouter();
+  // ⚠ LA MÊME SOURCE QUE L'AUTRE EN-TÊTE. Cette barre décrivait de son côté ce
+  // qu'un compte connecté offre, et les deux ont divergé à la première
+  // modification. Une seule source, ou elles divergeront encore.
+  const { user, entrees, lienPro, etablissement } = useCompteCourant();
 
-  useEffect(() => {
-    setFirstName(getUser()?.firstName ?? null);
-  }, []);
+  async function deconnexion() {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      /* déconnexion best-effort : on nettoie l'UI quoi qu'il arrive */
+    }
+    clearSession();
+    router.push('/login');
+  }
 
   return (
     <header className={styles.header}>
@@ -88,10 +114,31 @@ export function HomeHeader({
         )}
 
         <div className={styles.navActions}>
-          {firstName ? (
-            <a href="/guichet" className={`${styles.btn} ${styles.btnGhost}`}>
-              {firstName}
+          {/* ⚠ UN LIEN QUI DIT CE QU'IL OUVRE, À CÔTÉ DU COMPTE ET PAS DEDANS.
+              Jusqu'au 16 septembre 2026, cette place portait un lien nommé du
+              PRÉNOM et menant à `/guichet`. Deux défauts dans un seul contrôle :
+              un prénom se lit comme un menu de compte — personne n'y cherche
+              « Guichet » —, et le lien s'affichait pour TOUT connecté, si bien
+              qu'une étudiante cliquant son propre prénom lisait « cet espace est
+              réservé au personnel de la bibliothèque ».
+              Le premier geste après connexion doit être VISIBLE, pas découvert. */}
+          {lienPro && (
+            <a href={lienPro} className={`${styles.btn} ${styles.btnGhost}`}>
+              {LIBELLES.entete.espaceProfessionnel}
             </a>
+          )}
+          {user ? (
+            /* ⚠ LE MÊME COMPOSANT QUE L'AUTRE EN-TÊTE, et pour une raison de
+               fond : un bouton de compte doit avoir UN seul comportement
+               partout. Ici il naviguait, ailleurs il déroulait — le même
+               contrôle, deux gestes. */
+            <MenuCompte
+              prenom={user.firstName}
+              nom={user.lastName}
+              etablissement={etablissement}
+              entrees={entrees}
+              onDeconnexion={deconnexion}
+            />
           ) : (
             <a href="/login" className={`${styles.btn} ${styles.btnGhost}`}>
               Se connecter

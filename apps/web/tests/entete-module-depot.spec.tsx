@@ -149,7 +149,13 @@ describe('L’en-tête et le module `depot`', () => {
     render(<Header fonctions={FONCTIONS} />);
     await repos();
     ouvrirLeMenuDeCompte();
-    expect(entrees()).not.toContain('/depots-a-valider');
+    // ⚠ Dans le PANNEAU, pas dans la page : elle peut apparaître ailleurs dans
+    // l'en-tête, comme destination du lien « Espace professionnel » — c'est la
+    // première entrée métier d'un directeur. Ce qu'on garde est qu'elle n'est
+    // pas un écran PERSONNEL.
+    const panneau = document.querySelector('[role=menu]')!;
+    const dansLeMenu = [...panneau.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(dansLeMenu).not.toContain('/depots-a-valider');
   });
 
   it('⚠ état INCONNU : on ne masque rien — l’API refusera si besoin', async () => {

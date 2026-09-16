@@ -110,13 +110,33 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
     id: 'catalogue',
     libelle: 'Catalogue',
     entrees: [
-      { href: '/admin/catalogue', libelle: 'Notices', fonctions: ['catalogue.gerer'] },
-      { href: '/admin/auteurs', libelle: 'Auteurs', fonctions: ['catalogue.gerer'] },
+      {
+        href: '/admin/catalogue',
+        libelle: 'Notices',
+        fonctions: ['catalogue.gerer'],
+        description: 'Chercher, créer et corriger les notices du fonds.',
+      },
+      {
+        href: '/admin/auteurs',
+        libelle: 'Auteurs',
+        fonctions: ['catalogue.gerer'],
+        description: 'Le fichier d’autorité : fusionner les doublons, relier un compte à sa fiche.',
+      },
       // « Catégories » renommé « Domaines » : c'est le mot du métier, et c'est
       // déjà celui de l'API et du compte rendu d'import. La ROUTE ne bouge pas
       // (/admin/categories) — donc aucun lien en circulation ne casse.
-      { href: '/admin/categories', libelle: 'Domaines', fonctions: ['catalogue.gerer'] },
-      { href: '/admin/collections', libelle: 'Collections', fonctions: ['collections.gerer'] },
+      {
+        href: '/admin/categories',
+        libelle: 'Domaines',
+        fonctions: ['catalogue.gerer'],
+        description: 'Les domaines qui classent le fonds et alimentent les facettes publiques.',
+      },
+      {
+        href: '/admin/collections',
+        libelle: 'Collections',
+        fonctions: ['collections.gerer'],
+        description: 'Regrouper des documents et décider QUI y accède, par classe ou par abonnement.',
+      },
       // ⚠ Le dernier maillon du circuit de dépôt. Sans cette entrée, un dépôt
       // validé par son directeur n'entre JAMAIS au catalogue : il reste dans
       // une table que rien n'expose. `catalogue.gerer` ouvre déjà les trois
@@ -140,6 +160,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // montre ce à quoi on a droit, jamais une carte du logiciel entier.
       {
         href: '/depots-a-valider',
+        description: 'La file d’un directeur : accepter ou refuser les dépôts qu’il dirige.',
         libelle: 'Dépôts à valider',
         fonctions: ['depot.valider'],
         groupe: 'Dépôts',
@@ -147,6 +168,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/depots-soumis',
+        description: 'Les dépôts validés par un directeur, en attente de catalogage.',
         libelle: 'Dépôts en attente',
         fonctions: ['catalogue.gerer'],
         groupe: 'Dépôts',
@@ -154,6 +176,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/depots-a-cataloguer',
+        description: 'Transformer un dépôt validé en notice du catalogue.',
         libelle: 'Dépôts à cataloguer',
         fonctions: ['catalogue.gerer'],
         groupe: 'Dépôts',
@@ -172,18 +195,39 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // inscriptions. Et c'est la SEULE entrée de tout le menu qu'une
       // bibliothécaire peut voir ici — sans elle, l'onglet Lecteurs lui restait
       // entièrement fermé alors qu'elle détient `adherents.gerer` (backlog n° 8).
-      { href: '/admin/adherents', libelle: 'Adhérents', fonctions: ['adherents.gerer'] },
-      { href: '/admin/comptes', libelle: 'Comptes', fonctions: ['lecteurs.voir'] },
-      { href: '/admin/classes', libelle: 'Classes', fonctions: ['lecteurs.gerer'] },
+      {
+        href: '/admin/adherents',
+        libelle: 'Adhérents',
+        fonctions: ['adherents.gerer'],
+        description: 'Les cartes de lecteur : créer, prolonger, consulter prêts et amendes.',
+      },
+      {
+        href: '/admin/comptes',
+        libelle: 'Comptes',
+        fonctions: ['lecteurs.voir'],
+        description: 'Les comptes de l’école : activer une inscription, poser un rôle.',
+      },
+      {
+        href: '/admin/classes',
+        libelle: 'Classes',
+        fonctions: ['lecteurs.gerer'],
+        description: 'Les classes et leurs inscrits — le nom technique sert aux règles d’accès.',
+      },
     ],
   },
   {
     id: 'guichet',
     libelle: 'Guichet',
     entrees: [
-      { href: '/guichet', libelle: 'Prêt et retour', fonctions: ['circulation.faire'] },
+      {
+        href: '/guichet',
+        libelle: 'Prêt et retour',
+        fonctions: ['circulation.faire'],
+        description: 'Prêter, rendre, encaisser une amende — au code-barres.',
+      },
       {
         href: '/admin/rappels',
+        description: 'Les courriels de retard déjà partis, et leur réglage.',
         libelle: 'Rappels envoyés',
         fonctions: ['circulation.retards'],
         module: 'rappels',
@@ -196,6 +240,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
     entrees: [
       {
         href: '/admin/outils/import-notices',
+        description: 'Importer un lot de notices MARC ou CSV, avec compte rendu ligne à ligne.',
         libelle: 'Import de notices',
         fonctions: ['outils.catalogue'],
         groupe: 'Catalogue',
@@ -206,6 +251,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       // une place que sa garde ne suit pas.
       {
         href: '/admin/moissonnage',
+        description: 'Récolter automatiquement des notices depuis des entrepôts OAI-PMH extérieurs.',
         libelle: 'Moissonnage',
         fonctions: ['outils.catalogue'],
         groupe: 'Catalogue',
@@ -217,12 +263,14 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/recolement',
+        description: 'L’inventaire au code-barres : ce qui manque, ce qui est mal rangé.',
         libelle: 'Récolement',
         fonctions: ['outils.catalogue'],
         groupe: 'Catalogue',
       },
       {
         href: '/admin/import-etudiants',
+        description: 'Charger la liste des étudiants attendus — matricule, courriel, classe.',
         libelle: 'Import des étudiants',
         fonctions: ['outils.lecteurs'],
         groupe: 'Lecteurs',
@@ -235,6 +283,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
     entrees: [
       {
         href: '/admin/statistiques',
+        description: 'Le tableau de bord d’activité : prêts, lectures, retards.',
         libelle: 'Statistiques',
         fonctions: ['statistiques.voir'],
         // ⚠ `modulePrevu` EST DEVENU `module` le 15 septembre 2026 (P8-1). La
@@ -254,6 +303,7 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         // Même fonction et même module que son voisin : c'est la même donnée,
         // lue autrement.
         href: '/admin/rapport-annuel',
+        description: 'Le bilan d’année remis à l’université, imprimable.',
         libelle: 'Rapport annuel',
         fonctions: ['statistiques.voir'],
         module: 'statistiques',

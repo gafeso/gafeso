@@ -84,7 +84,12 @@ const NOMBRE_D_APPELS = 139;
  * l'écart de six qui existait au premier jet a désigné deux angles morts de
  * l'extracteur, pas six appels légitimes.
  */
-const NOMBRE_D_ECRITURES = 81;
+// ⚠ 82 depuis le 16 septembre 2026 : l'en-tête de la VITRINE a gagné sa propre
+// déconnexion (`POST /auth/logout`). Elle n'existait que dans l'autre en-tête —
+// la vitrine, elle, n'offrait pas de déconnexion du tout : elle offrait un lien
+// au prénom qui menait au guichet. Le compte a fait ce qu'on attend de lui, il
+// a convoqué quelqu'un devant l'appel neuf.
+const NOMBRE_D_ECRITURES = 82;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {
