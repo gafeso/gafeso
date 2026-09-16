@@ -2114,4 +2114,62 @@ export const LIBELLES = {
     noticesImportees: (n: number) => `${n} notice(s) importée(s)`,
     ignoreesSansTitre: (n: number) => ` · ${n} ignorée(s), sans titre`,
   },
+
+  /**
+   * L'IMPORT DES ÉTUDIANTS ATTENDUS — l'aperçu, puis le remplacement.
+   *
+   * ⚠ Le remplacement SUPPRIME des lignes. Les textes de cet écran ont donc
+   * une contrainte que les autres n'ont pas : ils doivent permettre de
+   * RECONNAÎTRE ce qui va partir, pas seulement de le compter. « 47 lignes
+   * seront supprimées » ne se vérifie pas ; « Traoré Awa, Zongo Moussa… » se
+   * reconnaît — ou ne se reconnaît pas, et c'est alors qu'on s'arrête.
+   * (Le motif est celui du commentaire de `apercuImportExpectedStudents`
+   * côté API, qui rend `retraits.premiers` exactement pour ça.)
+   */
+  importEtudiants: {
+    /** L'aperçu ne s'affiche qu'après réponse — il n'affirme donc jamais un vide qu'il ne connaît pas. */
+    apercuTitre: 'Ce que cet import ferait',
+    /** ⚠ Condition d'affichage : l'aperçu a répondu et l'import n'a pas encore été lancé. */
+    rienEcrit: 'Rien n’a encore été écrit. Relisez ci-dessous, puis confirmez.',
+    analyse: 'Lecture du fichier…',
+    lignesAImporter: (n: number) =>
+      `${n} ligne(s) seront créées ou mises à jour.`,
+    aucuneLigne:
+      'Aucune ligne exploitable dans ce fichier : il n’y a rien à importer.',
+    classesConcernees: 'Classes du fichier',
+    lignesEnErreur: (n: number) => `${n} ligne(s) seront ignorées (voir le détail).`,
+
+    /** Le bloc de suppression. Il ne s'affiche que si l'aperçu annonce au moins un retrait. */
+    retraitsTitre: (n: number) =>
+      `${n} étudiant(s) attendu(s) ne figurent plus dans ce fichier`,
+    retraitsPortee:
+      'La suppression ne touche que les classes présentes dans le fichier, et seulement les étudiants qui ne se sont pas encore inscrits. Les comptes déjà réclamés ne sont jamais retirés.',
+    retraitsEtAutres: (n: number) => `… et ${n} autre(s).`,
+    /** ⚠ Case DÉCOCHÉE par défaut : la suppression est un second geste, jamais l'effet du premier. */
+    caseSupprimer: (n: number) =>
+      `Supprimer aussi ces ${n} étudiant(s) attendu(s) de la liste`,
+    conserverParDefaut:
+      'Sans cette case, l’import ajoute et met à jour, et ne supprime rien.',
+
+    importer: 'Importer',
+    importerEtSupprimer: (n: number) => `Importer et supprimer ${n} ligne(s)`,
+    changerDeFichier: 'Choisir un autre fichier',
+    enCours: 'Import en cours…',
+
+    /**
+     * LE DÉSACCORD DE NOMBRE. L'API refuse le remplacement si le nombre lu à
+     * l'aperçu ne correspond plus. ⚠ Ce n'est PAS une panne : c'est la garde
+     * qui fonctionne, et la seule suite utile est de relire l'aperçu. Le texte
+     * dit donc ce qui s'est passé ET ce qui n'a pas eu lieu — sans quoi on
+     * ignore si une partie a été écrite.
+     */
+    desaccordTitre: 'Rien n’a été importé, et rien n’a été supprimé',
+    desaccordSuite:
+      'La liste ou le fichier a changé depuis l’aperçu. Relancez-le pour voir ce qui partirait maintenant.',
+    relancerApercu: 'Relancer l’aperçu',
+
+    /** Compte rendu : `retires` est servi par l'API depuis le premier jour — il s'affiche. */
+    retiresFaits: (n: number) => `${n} ligne(s) supprimée(s) de la liste.`,
+    aucunRetrait: 'Aucune suppression.',
+  },
 } as const;

@@ -190,10 +190,20 @@ describe('⚠ un texte qui promet est éprouvé sur sa propriété', () => {
   });
 
   /**
-   * ⚠ TÉMOIN QUI COMPTE, sur un cas dont je connais la réponse : le relevé de
-   * forme trouve huit textes à l'allure d'une promesse, et le registre en
-   * déclare huit. Le jour où quelqu'un ajoute un neuvième texte de cette forme
-   * sans le déclarer, ce compte tombe.
+   * ⚠ TÉMOIN QUI COMPTE. Le relevé de forme trouve les textes à l'allure d'une
+   * promesse, et chacun doit être déclaré — c'est l'assertion `oublies` qui
+   * convoque quelqu'un le jour où il en naît un de plus.
+   *
+   * ⚠ ET IL LUI MANQUAIT SA MOITIÉ, jusqu'au 16 septembre 2026 : rien
+   * n'affirmait que le relevé TROUVE ENCORE QUELQUE CHOSE. Si
+   * `libellesDeLaSource` rendait une liste vide — un reformatage du fichier de
+   * libellés, une clé écrite autrement, un outil qui recompose les
+   * concaténations —, `oublies` serait vide lui aussi et ce témoin passerait au
+   * VERT en ne mesurant plus rien. Le test d'en dessous ferme ce sens-là.
+   *
+   * ⚠ La prose de ce commentaire annonçait « huit textes, huit déclarés ».
+   * C'était vrai le 12 septembre ; ils sont 21 aujourd'hui. Un compte écrit en
+   * COMMENTAIRE n'est pas un témoin : il vieillit sans que rien ne le dise.
    */
   it('témoin — le registre couvre tous les textes de cette forme', () => {
     const source = readFileSync(join(process.cwd(), 'lib', 'libelles.ts'), 'utf8');
@@ -215,6 +225,42 @@ describe('⚠ un texte qui promet est éprouvé sur sa propriété', () => {
         'ou une réassurance — et ne sont pas déclarés dans ' +
         'lib/textes-qui-promettent.ts. Déclarez-les en "promet" (et écrivez ' +
         'l’assertion de propriété) ou en "ressemblance" avec la raison.',
+    ).toEqual([]);
+  });
+
+  it('⚠ témoin — le relevé LIT ENCORE, et il sait dire non', () => {
+    const source = readFileSync(join(process.cwd(), 'lib', 'libelles.ts'), 'utf8');
+    const trouves = libellesDeLaSource(source);
+
+    // COMPTE : 622 libellés relevés le 16 septembre 2026. La borne est large
+    // exprès — ce témoin ne garde pas un nombre, il garde le fait qu'on LIT.
+    // Un relevé tombé à zéro rendrait le témoin de couverture vert sur rien.
+    expect(trouves.length).toBeGreaterThan(400);
+
+    // PRÉSENCE, sur un cas dont la réponse est connue : le recours du mot de
+    // passe est un texte que ce fichier déclare et éprouve par ailleurs.
+    expect(trouves.map((l) => l.nom)).toContain('recours');
+
+    // ⚠ LA CONFUSION PLAUSIBLE DE CE RELEVÉ-CI N'EST PAS UN FAUX POSITIF, C'EST
+    // UN FAUX NÉGATIF : le 12 septembre 2026, il exigeait la valeur sur la MÊME
+    // ligne que la clé, et un texte écrit en concaténation sur trois lignes lui
+    // était invisible. C'est cette forme-là qu'on lui soumet, en entrée
+    // fabriquée — et l'attendu est qu'il RECOLLE les morceaux.
+    const surTroisLignes = [
+      "  recoursLong:",
+      "    'Votre compte est en attente : ' +",
+      "    'contactez votre bibliothèque.',",
+      "  court: 'Bonjour',",
+    ].join('\n');
+    const releve = libellesDeLaSource(surTroisLignes);
+    expect(releve.map((l) => l.nom)).toEqual(['recoursLong', 'court']);
+    expect(releve[0].texte).toContain('contactez votre bibliothèque');
+
+    // ABSENCE : une ligne de COMMENTAIRE qui a l'allure d'une déclaration. Elle
+    // est écartée par son `*` de tête — c'est une propriété du relevé, pas une
+    // chance, et un témoin la rend visible le jour où quelqu'un l'élargit.
+    expect(
+      libellesDeLaSource("   * promesse: 'contactez votre bibliothèque',"),
     ).toEqual([]);
   });
 });

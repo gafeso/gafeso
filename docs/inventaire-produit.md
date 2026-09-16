@@ -12,7 +12,7 @@
 > et des limites qu'aucun extracteur ne sait lire — chaque affirmation y
 > nomme donc ce qui l'a mesurée, et la section 8 dit ce qui ne l'est pas.
 
-*Mesuré le 16 septembre 2026 sur le dépôt `gafeso-dev`, commit `5d4cb93`.*
+*Mesuré le 16 septembre 2026 sur le dépôt `gafeso-dev`, commit `669f58a`.*
 
 ## Ce que la mesure a compté
 

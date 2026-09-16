@@ -84,7 +84,14 @@ const EXCEPTIONS: Exception[] = [
 // ⚠ 141 le même jour : la réouverture d'une session de récolement,
 // `POST /inventory/sessions/:id/reopen` — la deuxième des trois routes qui
 // existaient sans qu'aucun écran n'y mène.
-const NOMBRE_D_APPELS = 141;
+// ⚠ 142 le 16 septembre 2026 : l'APERÇU de l'import des étudiants attendus,
+// `POST /accounts/expected-students/import/apercu` — la troisième et dernière
+// des routes qui existaient sans qu'aucun écran n'y mène. Celle-ci ne se
+// contentait pas d'être inaccessible : elle gardait un remplacement que
+// l'écran ne savait pas non plus demander. Tout l'appareil de sûreté du
+// backend — deux routes, `confirmeRetraits`, portée bornée — ne servait donc
+// personne.
+const NOMBRE_D_APPELS = 142;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
@@ -96,7 +103,11 @@ const NOMBRE_D_APPELS = 141;
 // la vitrine, elle, n'offrait pas de déconnexion du tout : elle offrait un lien
 // au prénom qui menait au guichet. Le compte a fait ce qu'on attend de lui, il
 // a convoqué quelqu'un devant l'appel neuf.
-const NOMBRE_D_ECRITURES = 84;
+// ⚠ 85 le 16 septembre 2026 : l'aperçu de l'import des étudiants attendus. Il
+// LIT sans rien écrire, et c'est pourtant un POST — un corps multipart ne
+// s'envoie pas autrement. Le compte des « écritures » compte des verbes, pas
+// des effets ; la distinction est dans le nom des deux routes, pas ici.
+const NOMBRE_D_ECRITURES = 85;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {
@@ -262,18 +273,46 @@ function liensVersLApi(): Appel[] {
  * pas de la plomberie. Il construit ses URL par `${apiUrl()}${path}` où `path`
  * arrive d'un helper interne : l'extraction par site d'appel ne le voit pas.
  *
- * Six chemins, mesurés une fois et nommés ici. C'est une borne FERMÉE à la
- * main plutôt que déclarée : le compte exact force à revenir le jour où un
- * septième apparaît.
+ * ⚠ CETTE LISTE A ÉTÉ UNE BORNE FERMÉE À LA MAIN, ET ELLE AVAIT DÉRIVÉ.
+ * Mesuré le 16 septembre 2026 : elle nommait `GET /opac/search`, que ce
+ * fichier n'appelle PAS (il est atteint par le client ordinaire, donc déjà
+ * relevé), et elle ignorait `GET /opac/authors/*`, qu'il appelle depuis la
+ * fiche d'auteur publique. Six d'un côté, six de l'autre — **le compte exact
+ * concordait, et le contenu était faux**. Un compte ne vérifie rien du
+ * contenu : il amène devant la porte, c'est une autre assertion qui regarde
+ * derrière (leçon du 12 septembre), et celle-là n'existait pas.
+ *
+ * Elle est donc désormais CONFRONTÉE à ce que le fichier atteint réellement,
+ * dans les deux sens. La borne coûtait quinze lignes ; elle n'était pas
+ * infermable, elle n'avait pas été essayée.
  */
 const CHEMINS_DU_RENDU_SERVEUR = [
+  'GET /opac/authors/*',
   'GET /opac/chiffres',
   'GET /opac/constellation',
   'GET /opac/nouveautes',
-  'GET /opac/search',
   'GET /opac/records/*',
   'GET /tenancy/home',
 ] as const;
+
+/**
+ * Ce que `lib/server-api.ts` atteint VRAIMENT — les trois formes qu'il emploie :
+ * un gabarit `${apiUrl()}/chemin/${…}`, un appel `fetchTenant('/chemin', …)`,
+ * et une constante exportée `ROUTE_X = '/chemin'`.
+ */
+export function cheminsAtteints(src: string): string[] {
+  const hors = (ligne: string) => ligne.trimStart().startsWith('*') || ligne.trimStart().startsWith('//');
+  const code = src.split('\n').filter((l) => !hors(l)).join('\n');
+  const trouves = new Set<string>();
+  for (const m of code.matchAll(/\$\{apiUrl\(\)\}(\/[^`?]*)/g)) trouves.add(m[1]);
+  for (const m of code.matchAll(/fetchTenant<[^>]*>\(\s*'(\/[^']+)'/g)) trouves.add(m[1]);
+  for (const m of code.matchAll(/^export const ROUTE_[A-Z_]+ = '(\/[^']+)'/gm)) trouves.add(m[1]);
+  return [...trouves].map((c) => `GET ${normaliser(c)}`).sort();
+}
+
+function cheminsDuRenduServeur(): string[] {
+  return cheminsAtteints(readFileSync(resolve(process.cwd(), 'lib', 'server-api.ts'), 'utf-8'));
+}
 
 /** Une exception dont la route EXISTE désormais : elle ne dit plus le vrai. */
 function exceptionsPerimees(liste: Exception[], routes: Set<string>): string[] {
@@ -349,6 +388,34 @@ describe('l’instrument, avant ce qu’il mesure', () => {
 });
 
 describe('les appels du front', () => {
+  it('témoin SYNTHÉTIQUE — un appel MIS EN COMMENTAIRE ne compte pas', () => {
+    // ⚠ Le filtre des commentaires est la seule pièce du relevé que le fichier
+    // réel n'exerce pas : mesuré par contrôle négatif, le retirer ne fait
+    // tomber aucun test, parce qu'aucune prose de `server-api.ts` n'a la FORME
+    // d'un appel. Une pièce qu'on ne peut pas exercer est un faux dispositif en
+    // attente — on lui donne donc une entrée fabriquée, qui ne vient pas du
+    // code mesuré et dont la réponse est connue par construction.
+    const vivant = "const url = `${apiUrl()}/opac/vivant/${id}`;";
+    const mort = "  // const url = `${apiUrl()}/opac/mort/${id}`;";
+    expect(cheminsAtteints(`${vivant}\n${mort}\n`)).toEqual(['GET /opac/vivant/*']);
+  });
+
+  it('témoin — le relevé du rendu serveur voit, et il sait dire NON', () => {
+    const chemins = cheminsDuRenduServeur();
+    // PRÉSENCE : un chemin que ce fichier atteint par gabarit, et un qu'il
+    // atteint par constante exportée. Deux formes différentes, exprès.
+    expect(chemins).toContain('GET /opac/authors/*');
+    expect(chemins).toContain('GET /opac/nouveautes');
+    // ABSENCE, et sur la confusion PLAUSIBLE : `/opac/search` est cité DANS un
+    // commentaire de ce fichier (« ne pas se rabattre sur /opac/search ») et
+    // n'y est jamais appelé. C'est exactement le faux que le relevé risque —
+    // et c'est celui qui avait pollué la liste tenue à la main.
+    expect(chemins).not.toContain('GET /opac/search');
+    // COMPTE : six, et un septième convoque quelqu'un.
+    expect(chemins).toHaveLength(6);
+  });
+
+
   it('⚠ les LIENS et le rendu serveur atteignent eux aussi de vraies routes', () => {
     // Deux canaux que l'extraction par site d'appel ne voit pas. Sans eux, le
     // garde déclare « sans porte » des routes que le front atteint — il l'a
@@ -356,6 +423,10 @@ describe('les appels du front', () => {
     const routes = routesDeLApi();
     const liens = liensVersLApi();
     expect(liens.length).toBeGreaterThan(10); // témoin : le relevé a bien vu
+    // ⚠ LA DÉCLARATION EST CONFRONTÉE À LA SOURCE, dans les deux sens. Sans ce
+    // face-à-face la liste dérive en silence — elle l'avait fait, et son compte
+    // exact concordait quand même (16 septembre 2026).
+    expect(cheminsDuRenduServeur()).toEqual([...CHEMINS_DU_RENDU_SERVEUR].sort());
     const inconnus = [
       ...new Set([...liens.map((l) => l.appel), ...CHEMINS_DU_RENDU_SERVEUR]),
     ].filter((a) => !routes.has(a));

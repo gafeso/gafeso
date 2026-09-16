@@ -223,4 +223,17 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
       'peut-être déjà — sans quoi il se lit « vous n’avez rien dirigé », sur ' +
       'l’écran qui sert à monter un dossier de promotion.',
   },
+  {
+    cle: 'importEtudiants.desaccordTitre',
+    nature: 'promet',
+    raison:
+      'C’est une affirmation sur l’ÉTAT DE LA BASE, faite au moment où ' +
+      'quelqu’un vient de demander une suppression : « rien n’a été importé, ' +
+      'et rien n’a été supprimé ». Elle est vraie parce que l’API compare ' +
+      '`confirmeRetraits` AVANT le `deleteMany` et avant les `upsert` — la ' +
+      'garde joue sur un chemin où aucune écriture n’a encore eu lieu. Le ' +
+      'texte doit continuer de nommer les DEUX absences : sans la seconde, on ' +
+      'ignore si la liste a été amputée, et c’est précisément la question ' +
+      'qu’on se pose devant un refus.',
+  },
 ];
