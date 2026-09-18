@@ -342,7 +342,14 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/regles-de-pret',
-        description: 'Durées de prêt, quotas, renouvellements.',
+        // ⚠ DISAIT « Durées de prêt, quotas, renouvellements. » — les trois
+        // sont FAUX : ils vivent sur `CirculationRule`, dont aucun écran
+        // n'appelle les routes (dette front n° 15). Corrigé le 16 septembre
+        // 2026 en RECETTANT LE PARCOURS : l'introduction de l'écran avait été
+        // reprise le matin même, et cette ligne-ci répétait la promesse deux
+        // clics plus tôt. Une phrase fausse vit souvent à DEUX endroits — le
+        // titre qui y mène, et l'écran qui l'accueille.
+        description: 'Renouvellement en ligne et mise de côté des réservations.',
         libelle: 'Règles de prêt',
         fonctions: ['etablissement.regles'],
         groupe: 'Établissement',

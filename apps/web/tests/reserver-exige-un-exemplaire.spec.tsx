@@ -131,3 +131,53 @@ describe('Ce que le texte DOIT dire', () => {
     expect(LIBELLES.ficheNotice.sansExemplaire).not.toMatch(/bientôt|plus tard|attente/i);
   });
 });
+
+/**
+ * ⚠ LE BADGE CONNAISSAIT DEUX ÉTATS LÀ OÙ LA FICHE EN DISTINGUE TROIS.
+ *
+ * Trouvé le 16 septembre 2026 en recettant LE PARCOURS du 21 — pas l'écran. Sur
+ * la notice du MOMENT 3 (purement numérique), le badge en tête disait
+ * « Indisponible » pendant que le bloc de lecture en ligne s'affichait vingt
+ * lignes plus bas. Deux phrases de la même page qui se contredisent.
+ *
+ * ⭐ La distinction existait DÉJÀ dans le corps de la fiche — `totalItems === 0`
+ * d'un côté, « des exemplaires mais aucun libre » de l'autre. C'est le badge
+ * qui collapsait les deux, en tête, là où on lit en premier.
+ */
+describe('⚠ le badge de disponibilité porte les TROIS états, comme le corps de la fiche', () => {
+  const badge = () =>
+    [LIBELLES.ficheNotice.badgeDisponible, LIBELLES.ficheNotice.badgeIndisponible, LIBELLES.ficheNotice.badgeSansExemplaire]
+      .filter((t) => screen.queryAllByText(t).length > 0);
+
+  it('aucun exemplaire : « sans exemplaire », jamais « indisponible »', () => {
+    monter({ totalItems: 0, available: 0, borrowable: false });
+    expect(badge()).toEqual([LIBELLES.ficheNotice.badgeSansExemplaire]);
+  });
+
+  it('des exemplaires, aucun libre : « indisponible » — et c’est vrai', () => {
+    monter({ totalItems: 3, available: 0, borrowable: false });
+    expect(badge()).toEqual([LIBELLES.ficheNotice.badgeIndisponible]);
+  });
+
+  it('un exemplaire libre : « disponible »', () => {
+    monter({ totalItems: 3, available: 1, borrowable: true });
+    expect(badge()).toEqual([LIBELLES.ficheNotice.badgeDisponible]);
+  });
+
+  it('⚠ et le badge ne contredit plus la phrase du dessous', () => {
+    // La contradiction mesurée à l'écran : « Indisponible » en tête, « aucun
+    // exemplaire physique » plus bas, et la lecture en ligne offerte.
+    monter({ totalItems: 0, available: 0, borrowable: false });
+    expect(screen.getByText(LIBELLES.ficheNotice.sansExemplaire)).toBeTruthy();
+    expect(screen.queryByText(LIBELLES.ficheNotice.badgeIndisponible)).toBeNull();
+  });
+
+  it('témoin — les trois libellés sont DISTINCTS, sinon ce test ne mesure rien', () => {
+    const trois = [
+      LIBELLES.ficheNotice.badgeDisponible,
+      LIBELLES.ficheNotice.badgeIndisponible,
+      LIBELLES.ficheNotice.badgeSansExemplaire,
+    ];
+    expect(new Set(trois).size).toBe(3);
+  });
+});

@@ -12,7 +12,7 @@
 > et des limites qu'aucun extracteur ne sait lire — chaque affirmation y
 > nomme donc ce qui l'a mesurée, et la section 8 dit ce qui ne l'est pas.
 
-*Mesuré le 16 septembre 2026 sur le dépôt `gafeso-dev`, commit `669f58a`.*
+*Mesuré le 18 septembre 2026 sur le dépôt `gafeso-dev`, commit `0b99fe2`.*
 
 ## Ce que la mesure a compté
 
@@ -24,7 +24,7 @@
 | Routes d'API | **208** dans 27 domaines |
 | Écrans (`page.tsx`) | **47** |
 | Entrées de navigation | **25** |
-| Entrées de backlog ouvertes | **27** |
+| Entrées de backlog ouvertes | **29** |
 
 ---
 

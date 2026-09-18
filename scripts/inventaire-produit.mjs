@@ -137,7 +137,13 @@ const MESURE_LE = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:
 const COMMIT = execSync('git rev-parse --short HEAD').toString().trim();
 const { writeFileSync } = await import('node:fs');
 const d = { modules, routesParModule, fonctions, roles, reservees, routes, ecrans, nav };
-const bl = lire('docs/backlog-backend.md');
+// ⚠ LE BACKLOG EST UN DOCUMENT INTERNE, ET CE SCRIPT EST PUBLIÉ. Le lire sans
+// garde faisait échouer le générateur en ENOENT chez quiconque clone le dépôt —
+// trouvé le 17 septembre 2026, en même temps que la CI publique rouge.
+//
+// ⚠ ON NE SE TAIT PAS : le compte devient « non mesurable ici », jamais zéro.
+// Un zéro se lirait « aucune dette ouverte », ce qui est l'inverse du vrai.
+const bl = existsSafe('docs/backlog-backend.md') ? lire('docs/backlog-backend.md') : null;
 const L = [];
 const p = (...x) => L.push(...x);
 const esc = (s) => (s ?? '').replace(/\|/g, '\\|');
@@ -168,7 +174,11 @@ p(`| Rôles système | **${d.roles.length}** |`);
 p(`| Routes d'API | **${d.routes.length}** dans ${new Set(d.routes.map(r=>r.domaine)).size} domaines |`);
 p(`| Écrans (\`page.tsx\`) | **${d.ecrans.length}** |`);
 p(`| Entrées de navigation | **${d.nav.length}** |`);
-p(`| Entrées de backlog ouvertes | **${[...bl.matchAll(/^## (\d+) · (.+)$/gm)].filter(m=>!/✅|CLOS|LIVRÉ|RETIRÉ/.test(m[2])).length}** |`);
+p(
+  bl
+    ? `| Entrées de backlog ouvertes | **${[...bl.matchAll(/^## (\d+) · (.+)$/gm)].filter(m=>!/✅|CLOS|LIVRÉ|RETIRÉ/.test(m[2])).length}** |`
+    : '| Entrées de backlog ouvertes | *non mesurable ici — `docs/backlog-backend.md` est un document interne, non publié* |',
+);
 p('');
 
 // ─────────────────────────────────────────────────────────── MODULES

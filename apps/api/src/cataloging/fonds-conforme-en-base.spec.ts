@@ -178,6 +178,64 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     ).toEqual([]);
   }, 60_000);
 
+  it('⚠ UNE NOTICE RÉSERVÉE N’EST PAS AUSSI DANS LE FONDS OUVERT', async () => {
+    // ⚠ LES RÈGLES D'ACCÈS SONT UN **OU** : la plus LARGE gagne, et c'est la
+    // plus discrète. Une notice qui appartient à la fois à une collection
+    // réservée à une classe et au fonds par défaut (ouvert à tous) est LISIBLE
+    // PAR TOUS — pendant que la règle restrictive reste affichée, intacte et
+    // rassurante.
+    //
+    // Mesuré le 16/09/2026 sur l'école de démonstration : 155 documents
+    // numériques sur 155 dans le fonds ouvert, dont 28 aussi réservés. AUCUNE
+    // restriction de classe n'avait d'effet sur la lecture.
+    //
+    // La cause était `DigitalCopyService.upload`, qui rattachait TOUT document
+    // téléversé au fonds par défaut. Il épargne désormais ce qui est déjà
+    // réservé — et cette règle-ci mesure l'ÉTAT, là où le test du service
+    // mesure la DÉCISION.
+    expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
+    const fautifs: string[] = [];
+    let examinees = 0;
+    for (const slug of ecoles) {
+      const lignes = await prisma.$queryRawUnsafe<{ titre: string; reservee: string }[]>(
+        `SELECT r.title AS titre, cr.name AS reservee
+         FROM public.collection_titles ouvert
+         JOIN public.collections socle ON socle.id = ouvert.collection_id AND socle.is_default
+         JOIN public.tenants t ON t.id = socle.tenant_id AND t.slug = $1
+         JOIN public.collection_titles res ON res.record_id = ouvert.record_id
+         JOIN public.collections cr ON cr.id = res.collection_id
+              AND cr.tenant_id = t.id AND NOT cr.is_default
+         JOIN public.access_rules ar ON ar.collection_id = cr.id AND ar.tenant_id = t.id
+              AND (ar.class_name IS NOT NULL OR ar.subscription_tier IS NOT NULL)
+         JOIN "tenant_${slug}".biblio_records r ON r.id = ouvert.record_id
+         GROUP BY r.title, cr.name`,
+        slug,
+      );
+      const [n] = await prisma.$queryRawUnsafe<{ total: number }[]>(
+        `SELECT count(*)::int AS total FROM public.collection_titles ct
+         JOIN public.collections c ON c.id = ct.collection_id AND c.is_default
+         JOIN public.tenants t ON t.id = c.tenant_id AND t.slug = $1`,
+        slug,
+      );
+      examinees += n.total;
+      fautifs.push(...lignes.map((l) => `${slug} · « ${l.titre} » réservée par « ${l.reservee} »`));
+    }
+    expect(examinees, 'aucune notice dans un fonds par défaut : le tamis ne mesure rien ici').toBeGreaterThan(0);
+    expect(
+      fautifs.slice(0, 10),
+      `Des notices RÉSERVÉES sont aussi dans le fonds ouvert (${fautifs.length} au total) :\n` +
+        fautifs.slice(0, 10).map((f) => `  · ${f}`).join('\n') +
+        '\n\n⚠ Les règles d’accès sont un OU : la plus large gagne. La règle ' +
+        'restrictive reste AFFICHÉE et n’interdit plus rien — personne n’a de ' +
+        'raison de la relire.\n' +
+        '⚠ LA CORRECTION FAUTIVE que ce défaut appelle : retirer la RÈGLE du ' +
+        'fonds ouvert. Elle couvre les centaines d’autres notices qui doivent ' +
+        'rester lisibles par tous — la supprimer fermerait le fonds entier au ' +
+        'lieu d’en réserver quelques-unes. C’est le rattachement qu’on retire, ' +
+        'pas la règle.',
+    ).toEqual([]);
+  }, 60_000);
+
   it('⚠ UNE RÈGLE D’ACCÈS NOMME UNE CLASSE QUI EXISTE', async () => {
     // `AccessControlService` REFUSE une règle dont la classe est inconnue, et
     // son message le dit : « cette règle ne correspondrait à aucun étudiant ».

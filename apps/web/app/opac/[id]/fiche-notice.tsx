@@ -171,9 +171,18 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         {record.membersOnly ? (
           <MemberLock hint="Disponibilité réservée aux membres" />
         ) : record.availability?.borrowable ? (
-          <Badge tone="green">Disponible</Badge>
+          <Badge tone="green">{LIBELLES.ficheNotice.badgeDisponible}</Badge>
+        ) : record.availability?.totalItems === 0 ? (
+          /*
+            ⚠ TROISIÈME ÉTAT, et il n'est pas cosmétique. « Indisponible » sur
+            une notice purement numérique CONTREDIT le bloc de lecture en ligne
+            qui s'affiche vingt lignes plus bas. Le corps de la fiche distingue
+            déjà les deux cas — `totalItems === 0` d'un côté, « tous sortis » de
+            l'autre — et le badge les collapsait.
+          */
+          <Badge>{LIBELLES.ficheNotice.badgeSansExemplaire}</Badge>
         ) : (
-          <Badge>Indisponible</Badge>
+          <Badge>{LIBELLES.ficheNotice.badgeIndisponible}</Badge>
         )}
       </div>
 

@@ -33,6 +33,46 @@ function normaliser(v: string | null | undefined): string {
   return (v ?? '').trim().toLocaleLowerCase('fr');
 }
 
+/**
+ * Le nom à AFFICHER pour un adhérent — la fiche d'abord, le compte en repli.
+ *
+ * ⚠ TROIS SITES LE COMPOSAIENT DEPUIS LE COMPTE SEUL (`circulation.service`,
+ * `holds.service`, `reminders.service`), et c'était l'inverse de la règle.
+ * Celle-ci est écrite dans `PatronsService.createPatron` et motivée par une
+ * PERMISSION : corriger un COMPTE exige `comptes.gerer`, réservé à
+ * l'Administrateur ; corriger une FICHE exige `adherents.gerer`, que la
+ * bibliothécaire porte. **La fiche fait donc autorité** — sans quoi un nom mal
+ * orthographié serait incorrigible au comptoir.
+ *
+ * Ce que le défaut coûtait, mesuré le 16 septembre 2026 : l'onglet
+ * Réservations affichait « — » pour **4 réservataires sur 6**, ceux qui n'ont
+ * pas de compte. Et une correction faite par la bibliothécaire n'apparaissait
+ * nulle part, ce qui contredisait la dette n° 10 du 11 septembre.
+ *
+ * ⚠ LE REPLI SUR LE COMPTE RESTE NÉCESSAIRE : le DTO exige « un nom OU un
+ * compte lié », donc un adhérent peut n'avoir aucun nom propre. Le repli n'est
+ * pas une tolérance, c'est la seconde moitié de la règle.
+ *
+ * @returns le nom, ou `null` si ni la fiche ni le compte n'en portent.
+ */
+export function nomDeLAdherent(patron: AvecNomEtCompte): string | null {
+  // ⚠ Un adhérent peut porter SEULEMENT un prénom, ou seulement un nom : on
+  // assemble ce qui existe plutôt que d'exiger les deux.
+  const propre = [patron.firstName, patron.lastName]
+    .map((v) => (v ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
+  if (propre) return propre;
+
+  const compte = patron.user
+    ? [patron.user.firstName, patron.user.lastName]
+        .map((v) => (v ?? '').trim())
+        .filter(Boolean)
+        .join(' ')
+    : '';
+  return compte || null;
+}
+
 export function nomsDivergents(patron: AvecNomEtCompte): boolean {
   // Pas de compte lié : rien à comparer, donc aucun désaccord.
   if (!patron.user) return false;

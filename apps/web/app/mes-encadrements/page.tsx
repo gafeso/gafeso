@@ -16,6 +16,7 @@
 //      tronquée sans le dire serait un faux dans un dossier de promotion.
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
@@ -177,9 +178,19 @@ export default function MesEncadrementsPage() {
                         <td className="py-2 pr-3 tabular-nums">{e.annee ?? T.nonRenseigne}</td>
                         <td className="py-2 pr-3">{e.etudiant ?? T.nonRenseigne}</td>
                         <td className="py-2 pr-3 font-medium text-ink">
-                          <a className="hover:underline" href={`/catalogue/${e.recordId}`}>
+                          {/*
+                            ⚠ `/opac/:id`, PAS `/catalogue/:id`. Cette adresse-là
+                            n'existe pas — `app/catalogue/` n'a jamais existé, et
+                            les quatre titres de cet écran rendaient un 404.
+                            Trouvé le 16 septembre 2026 en RECETTANT le moment 2
+                            bis de la démonstration : un enseignant qui clique le
+                            mémoire qu'il a dirigé tombait sur « page could not be
+                            found ». Aucun test ne pouvait le voir — un href est
+                            rendu, il n'est pas suivi.
+                          */}
+                          <Link className="hover:underline" href={`/opac/${e.recordId}`}>
                             {e.titre}
-                          </a>
+                          </Link>
                         </td>
                         <td className="py-2 pr-3">{TYPES[e.type] ?? e.type}</td>
                         <td className="py-2">{e.universiteDeSoutenance ?? T.nonRenseigne}</td>

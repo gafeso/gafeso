@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { LIBELLES } from '@/lib/libelles';
 import { saveSession, SessionUser } from '@/lib/session';
@@ -22,6 +22,12 @@ interface LoginResult {
 
 export default function LoginPage() {
   const router = useRouter();
+  /**
+   * ⚠ Posé par `header.tsx` quand `POST /auth/logout` n'a PAS abouti. L'écran
+   * doit alors dire que la session du serveur peut survivre — et donner le
+   * geste. Sans ça, « déconnecté » est une affirmation que rien ne soutient.
+   */
+  const deconnexionIncomplete = useSearchParams().get('deconnexion') === 'incomplete';
   const [step, setStep] = useState<'password' | 'twofactor' | 'enroll'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -137,6 +143,16 @@ export default function LoginPage() {
               'Connectez-vous avec le compte de votre établissement.'
             )}
           </p>
+
+          {deconnexionIncomplete && (
+            <div
+              role="alert"
+              className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+            >
+              <p className="font-semibold">{LIBELLES.connexion.deconnexionNonConfirmee}</p>
+              <p className="mt-0.5">{LIBELLES.connexion.deconnexionNonConfirmeeGeste}</p>
+            </div>
+          )}
 
           {step === 'password' && (
             <>

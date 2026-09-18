@@ -77,6 +77,55 @@ export class DigitalCopyService {
       });
       if (existing) return;
 
+      // ⚠ ON N'OUVRE PAS CE QUI EST DÉJÀ RÉSERVÉ — ajouté le 16 septembre 2026.
+      //
+      // Les règles d'accès sont un OU : la plus LARGE gagne. Rattacher au fonds
+      // par défaut, ouvert à tous, une notice qui appartient déjà à une
+      // collection réservée à une classe **annule cette réserve** — et la règle
+      // restrictive reste AFFICHÉE, donc personne n'a de raison de la relire.
+      // C'est « un élargissement qui laisse la restriction visible », et c'est
+      // pire qu'un élargissement qui la supprime.
+      //
+      // Mesuré sur l'école de démonstration : 155 documents numériques sur 155
+      // se retrouvaient dans le fonds ouvert, dont 28 aussi réservés à une
+      // classe. AUCUNE restriction de classe n'avait d'effet sur la lecture —
+      // sur le moment même que la démonstration présente comme la promesse
+      // centrale du produit.
+      //
+      // ⚠ LE GESTE ÉPARGNE, IL NE DÉCIDE PAS. On ne retire rien, on n'écrase
+      // rien : on s'abstient d'ajouter. Une bibliothécaire qui veut vraiment
+      // ouvrir ce document le rattache elle-même au fonds général, et c'est
+      // alors un second geste explicite — jamais un effet de bord du premier.
+      const dejaReservee = await this.prisma.collectionTitle.findFirst({
+        where: {
+          recordId,
+          collection: {
+            tenantId: tenant.id,
+            isDefault: false,
+            // Une règle qui NOMME une classe ou un palier restreint ; une règle
+            // sans les deux ouvre à tous et ne réserve donc rien.
+            accessRules: {
+              some: {
+                tenantId: tenant.id,
+                OR: [{ className: { not: null } }, { subscriptionTier: { not: null } }],
+              },
+            },
+          },
+        },
+        select: { collection: { select: { name: true } } },
+      });
+      if (dejaReservee) {
+        // ⚠ DIT, JAMAIS TU. Sans cette ligne, la bibliothécaire croirait son
+        // document accessible à tous alors qu'il ne l'est pas — et le silence
+        // serait de notre côté, pas du sien.
+        this.logger.log(
+          `Document ${recordId} NON rattaché au fonds par défaut de ${slug} : il appartient ` +
+            `déjà à « ${dejaReservee.collection.name} », qui le réserve. L'ouvrir à tous ` +
+            `annulerait cette réserve.`,
+        );
+        return;
+      }
+
       await this.prisma.collectionTitle.create({
         data: { collectionId: collection.id, recordId },
       });

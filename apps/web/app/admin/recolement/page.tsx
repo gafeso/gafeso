@@ -6,9 +6,10 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
+import { useMyFunctions } from '@/lib/functions';
 import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
-import { Button, Card, Input, Select } from '@/components/ui';
+import { Alert, Button, Card, Input, Select } from '@/components/ui';
 import { ITEM_LOCATIONS } from '@/lib/item-locations';
 
 interface Session {
@@ -23,6 +24,7 @@ interface Session {
 }
 
 export default function RecolementPage() {
+  const { functions } = useMyFunctions();
   // ⚠ `null` TANT QU'ON NE SAIT PAS, jamais `[]` — un tableau vide ne distingue
   // pas « pas encore chargé » de « il n'y en a aucun », et l'écran affirme
   // alors le vide avant d'avoir la réponse. Même correction que
@@ -73,6 +75,15 @@ export default function RecolementPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // ⚠ UN REFUS N'EST PAS UNE ATTENTE. Sans ce garde, un compte sans la fonction
+  // atteignait l'écran en TAPANT l'adresse, l'API répondait 403, et le tableau
+  // restait sur « Chargement… » indéfiniment — une invitation à patienter sur
+  // quelque chose qui n'arrivera jamais. Le menu cachait bien l'entrée : ce
+  // n'est pas la porte qui manquait, c'est la SORTIE.
+  if (functions && !functions.includes('outils.catalogue')) {
+    return <Alert tone="error">{LIBELLES.refusDeDroit.recolement}</Alert>;
   }
 
   return (
@@ -150,10 +161,17 @@ export default function RecolementPage() {
             </tr>
           </thead>
           <tbody>
-            {sessions === null && (
+            {sessions === null && !error && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-muted">
                   {LIBELLES.commun.chargement}
+                </td>
+              </tr>
+            )}
+            {sessions === null && error !== null && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-muted">
+                  {LIBELLES.commun.listeNonChargee}
                 </td>
               </tr>
             )}

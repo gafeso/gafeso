@@ -5,6 +5,7 @@ import { MailService } from '../accounts/mail/mail.service';
 import { CirculationService } from './circulation.service';
 import { HOLD_PICKUP_DAYS } from './circulation-rules';
 import { PatronsService } from '../patrons/patrons.service';
+import { nomDeLAdherent } from '../patrons/noms-divergents';
 
 export type TenantDb = PrismaClient;
 
@@ -146,7 +147,15 @@ export class HoldsService {
       where: { status: HoldStatus.AVAILABLE, notifiedAt: null },
       include: {
         record: { select: { title: true } },
-        patron: { select: { user: { select: { email: true, firstName: true, lastName: true } } } },
+        // ⚠ `firstName`/`lastName` de la FICHE : elle fait autorité sur le nom,
+        // le compte n'est qu'un repli (voir `nomDeLAdherent`).
+        patron: {
+          select: {
+            firstName: true,
+            lastName: true,
+            user: { select: { email: true, firstName: true, lastName: true } },
+          },
+        },
       },
     });
     let sent = 0;
@@ -187,7 +196,9 @@ export class HoldsService {
       }
       try {
         const resultat = await this.mail.sendHoldAvailable(email, {
-          name: user ? `${user.firstName} ${user.lastName}`.trim() : null,
+          // La fiche fait autorité : un nom corrigé par la bibliothécaire
+          // doit apparaître dans le courriel qu'on lui envoie.
+          name: nomDeLAdherent(hold.patron),
           title: hold.record.title,
           pickupDays,
           expiryDate: hold.expiryDate,

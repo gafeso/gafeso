@@ -56,6 +56,28 @@ export const LIBELLES = {
    */
   connexion: {
     /**
+     * ⚠ LA DÉCONNEXION QUI N'A PAS ABOUTI.
+     *
+     * `header.tsx` appelait `POST /auth/logout` dans un `try` dont le `catch`
+     * était vide — « déconnexion best-effort : on nettoie l'UI quoi qu'il
+     * arrive ». L'interface disait donc « déconnecté » que l'appel ait abouti
+     * ou non, pendant que le cookie de session du SERVEUR survivait 24 h.
+     *
+     * Mesuré le 16 septembre 2026 dans le volet de recette : `bc_user` effacé,
+     * `bc_token` toujours valide, `/api/auth/me` répondant 200. La route,
+     * elle, fonctionne (200 → 201 → 401 en l'appelant à la main) : ce qui
+     * manquait n'était pas le serveur, c'était de LIRE sa réponse.
+     *
+     * ⚠ On continue de nettoyer l'interface — la personne a demandé à partir,
+     * et la laisser connectée serait pire. Mais on le DIT, et on donne le
+     * geste : fermer le navigateur ferme la session côté navigateur, et
+     * réessayer ferme celle du serveur.
+     */
+    deconnexionNonConfirmee:
+      'Votre session n’a pas pu être fermée sur le serveur — elle peut rester ouverte jusqu’à demain.',
+    deconnexionNonConfirmeeGeste:
+      'Sur un ordinateur partagé, fermez complètement le navigateur, ou reconnectez-vous puis déconnectez-vous à nouveau.',
+    /**
      * ⚠ NE S'AFFICHE QUE SI L'API A DIT `sent: true`. Jamais sur un simple 200 :
      * c'est exactement la distinction qui manquait.
      */
@@ -292,6 +314,25 @@ export const LIBELLES = {
      * qui EST, et elle ne propose rien qu'on ne puisse pas tenir.
      */
     sansExemplaire: 'Aucun exemplaire physique n’est disponible pour ce document.',
+
+    /**
+     * ⚠ LE BADGE CONNAISSAIT DEUX ÉTATS LÀ OÙ LA FICHE EN DISTINGUE TROIS.
+     *
+     * Trouvé en recettant le PARCOURS du 21 septembre, sur la notice du
+     * MOMENT 3 : le badge affichait « Indisponible » en tête pendant que la
+     * page offrait « Lire en ligne » vingt lignes plus bas. L'état réel n'était
+     * pas « indisponible » mais « sans exemplaire physique » — ce que le corps
+     * de la fiche disait déjà, dans deux phrases distinctes selon que
+     * `totalItems` vaut zéro ou que tous les exemplaires sont sortis.
+     *
+     * Le badge collapsait les deux ; il les sépare désormais, et ses trois
+     * états sont exactement ceux des deux phrases du dessous.
+     */
+    badgeDisponible: 'Disponible',
+    /** Des exemplaires existent, aucun n'est libre. */
+    badgeIndisponible: 'Indisponible',
+    /** Il n'y en a aucun — ce qui ne dit RIEN de la lecture en ligne. */
+    badgeSansExemplaire: 'Sans exemplaire',
   },
 
   titres: {
@@ -321,6 +362,14 @@ export const LIBELLES = {
    * qu'en local : sur le réseau d'un campus, elle se lit.
    */
   commun: {
+    /**
+     * ⚠ CE QU'ON AFFICHE À LA PLACE DE « Chargement… » QUAND ÇA A ÉCHOUÉ.
+     *
+     * « Chargement… » invite à patienter sur quelque chose qui n'arrivera
+     * jamais. Le message d'erreur, lui, est déjà rendu au-dessus de la liste ;
+     * cette ligne-ci existe pour que la LISTE elle-même cesse de mentir.
+     */
+    listeNonChargee: 'La liste n’a pas pu être chargée.',
     chargement: 'Chargement…',
   },
 
@@ -722,6 +771,32 @@ export const LIBELLES = {
       'La vue des dépôts en attente n’est pas ouverte à votre compte (fonction « catalogue.gerer »).',
     moissonnage:
       'Le moissonnage n’est pas ouvert à votre compte (fonction « outils.catalogue »).',
+    /**
+     * ⚠ LES TROIS DERNIERS ÉCRANS SANS GARDE, ajoutés le 16 septembre 2026.
+     *
+     * Défaut mesuré par le backend en TAPANT l'adresse : `/admin/classes` avec
+     * un compte sans `lecteurs.gerer` rendait deux 403 et laissait le tableau
+     * sur « Chargement… » indéfiniment. Le menu cachait bien l'entrée — ce
+     * n'était pas le problème : **un refus s'affichait comme une ATTENTE**, et
+     * sans aucune sortie.
+     *
+     * Le balayage a trouvé deux écrans de la même structure (`auteurs`,
+     * `recolement`), et sept qui faisaient déjà bien — `!donnees && !error`.
+     * La forme de référence était `adherents/[id]` : garde de fonction, puis
+     * `error && !donnees` → message ET lien de retour.
+     */
+    classes:
+      'La gestion des classes n’est pas ouverte à votre compte (fonction « lecteurs.gerer »).',
+    /*
+     * ⚠ PAS DE CLÉ `auteurs` ICI, ET C'EST VOULU. `/admin/auteurs` porte déjà
+     * son refus, écrit dans l'écran avant la convention du 10 septembre. En
+     * ajouter un second ici ferait DEUX formulations du même refus, qui
+     * divergeraient le jour où l'une change — et c'est le lecteur qui paie la
+     * différence. L'écran n'avait pas besoin d'un refus : il lui manquait la
+     * distinction entre « je charge » et « ça a échoué ».
+     */
+    recolement:
+      'Le récolement n’est pas ouvert à votre compte (fonction « outils.catalogue »).',
   },
 
   /**

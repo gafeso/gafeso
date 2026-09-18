@@ -15,6 +15,7 @@ import {
 } from './reminder-templates';
 import { DATE_CORRECTIF_STATUT_ENVOI, statutFiable } from './fiabilite-du-statut';
 import { UpdateReminderSettingsDto } from './dto/update-reminder-settings.dto';
+import { nomDeLAdherent } from '../patrons/noms-divergents';
 
 /** Jeu de données d'exemple pour l'aperçu des modèles. */
 const SAMPLE_VARS: ReminderVars = {
@@ -378,7 +379,14 @@ export class RemindersService {
       id: string;
       dueDate: Date;
       item: { barcode: string; record: { title: string } };
-      patron: { user: { email: string; firstName: string; lastName: string } | null };
+      // ⚠ La FICHE fait autorité sur le nom : ses champs entrent dans le type,
+      // sans quoi `nomDeLAdherent` ne peut pas les voir. L'`include` les
+      // chargeait déjà — c'est le type qui les taisait.
+      patron: {
+        firstName: string | null;
+        lastName: string | null;
+        user: { email: string; firstName: string; lastName: string } | null;
+      };
     },
     plan: ReminderPlan,
     config: ReminderConfig,
@@ -398,7 +406,9 @@ export class RemindersService {
     const email = user?.email?.trim() ?? '';
     const snapshot = {
       tenantId,
-      recipientName: user ? `${user.firstName} ${user.lastName}`.trim() : null,
+      // ⚠ PERSISTÉ dans `reminderLog` et affiché en administration : un
+      // adhérent sans compte y figurait sans nom, alors que sa fiche en porte un.
+      recipientName: nomDeLAdherent(checkout.patron),
       itemBarcode: checkout.item.barcode,
       recordTitle: checkout.item.record.title,
       dueDate: checkout.dueDate,

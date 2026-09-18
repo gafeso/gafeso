@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { useMyFunctions } from '@/lib/functions';
 import { LIBELLES } from '@/lib/libelles';
 import { getToken } from '@/lib/session';
 import { Alert, Badge, Button, Card, Input, Select } from '@/components/ui';
@@ -35,6 +36,7 @@ interface ClassDetail {
 }
 
 export default function ClassesPage() {
+  const { functions } = useMyFunctions();
   // ⚠ `null` TANT QU'ON NE SAIT PAS, jamais `[]` — un tableau vide ne distingue
   // pas « pas encore chargé » de « il n'y en a aucun », et l'écran affirme
   // alors le vide avant d'avoir la réponse. Même correction que
@@ -257,6 +259,15 @@ export default function ClassesPage() {
     }
   }
 
+  // ⚠ UN REFUS N'EST PAS UNE ATTENTE. Sans ce garde, un compte sans la fonction
+  // atteignait l'écran en TAPANT l'adresse, l'API répondait 403, et le tableau
+  // restait sur « Chargement… » indéfiniment — une invitation à patienter sur
+  // quelque chose qui n'arrivera jamais. Le menu cachait bien l'entrée : ce
+  // n'est pas la porte qui manquait, c'est la SORTIE.
+  if (functions && !functions.includes('lecteurs.gerer')) {
+    return <Alert tone="error">{LIBELLES.refusDeDroit.classes}</Alert>;
+  }
+
   return (
     <div>
       <h1 className="font-serif text-3xl font-bold">Classes &amp; filières</h1>
@@ -368,10 +379,17 @@ export default function ClassesPage() {
             </tr>
           </thead>
           <tbody>
-            {classes === null && (
+            {classes === null && !error && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-muted">
                   {LIBELLES.commun.chargement}
+                </td>
+              </tr>
+            )}
+            {classes === null && error !== null && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-muted">
+                  {LIBELLES.commun.listeNonChargee}
                 </td>
               </tr>
             )}

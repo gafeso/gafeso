@@ -228,10 +228,17 @@ export default function AdminAuthorsPage() {
                   </td>
                 </tr>
               ))}
-              {authors === null && (
+              {authors === null && !error && (
                 <tr>
                   <td colSpan={3} className="py-6 text-center text-muted">
                     {LIBELLES.commun.chargement}
+                  </td>
+                </tr>
+              )}
+            {authors === null && error !== null && (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-muted">
+                    {LIBELLES.commun.listeNonChargee}
                   </td>
                 </tr>
               )}

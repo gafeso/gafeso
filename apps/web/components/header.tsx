@@ -54,13 +54,25 @@ export function Header({ fonctions }: { fonctions?: string[] | null } = {}) {
   async function logout() {
     // Efface le cookie httpOnly côté serveur (le JS ne peut pas y toucher),
     // puis le profil d'affichage local.
+    //
+    // ⚠ ON LIT L'ISSUE. Le `catch` était vide — « best-effort, on nettoie l'UI
+    // quoi qu'il arrive » — et l'interface disait « déconnecté » que l'appel
+    // ait abouti ou non, pendant que le cookie de session du serveur survivait
+    // 24 heures. Sur l'ordinateur partagé d'une salle de lecture, c'est la
+    // personne suivante qui hérite de la session.
+    //
+    // On nettoie toujours l'affichage — elle a demandé à partir —, mais
+    // l'écran de connexion DIT que la fermeture n'est pas confirmée, et donne
+    // le geste. C'est la règle du dépôt : quand on ne peut pas rendre la
+    // phrase vraie, on lui donne une SORTIE.
+    let confirmee = true;
     try {
       await api('/auth/logout', { method: 'POST' });
     } catch {
-      /* déconnexion best-effort : on nettoie l'UI quoi qu'il arrive */
+      confirmee = false;
     }
     clearSession();
-    router.push('/login');
+    router.push(confirmee ? '/login' : '/login?deconnexion=incomplete');
   }
 
   /** Les deux entrées publiques quand personne n'est connecté. */

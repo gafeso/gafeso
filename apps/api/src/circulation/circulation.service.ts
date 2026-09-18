@@ -19,6 +19,7 @@ import {
 import { CheckoutDto, CreateRuleDto, PlaceHoldDto, UpdateRuleDto } from './dto/circulation.dto';
 import { DEFAULT_DUE_TIME, DEFAULT_TIMEZONE, computeDueAt } from './due-time';
 import { nomsDivergents } from '../patrons/noms-divergents';
+import { nomDeLAdherent } from '../patrons/noms-divergents';
 
 /**
  * Réglages d'échéance de l'établissement. Passés par l'appelant, qui les lit
@@ -430,6 +431,11 @@ export class CirculationService {
         patron: {
           select: {
             barcode: true,
+            // ⚠ LE NOM DE LA FICHE N'ÉTAIT PAS SÉLECTIONNÉ — c'est là que le
+            // défaut naissait, pas dans la composition. Le compilateur l'a
+            // désigné dès que `nomDeLAdherent` a exigé le type complet.
+            firstName: true,
+            lastName: true,
             user: { select: { firstName: true, lastName: true } },
           },
         },
@@ -456,7 +462,6 @@ export class CirculationService {
     return holds.map((h) => {
       const n = (positionByRecord.get(h.recordId) ?? 0) + 1;
       positionByRecord.set(h.recordId, n);
-      const user = h.patron.user;
       return {
         holdId: h.id,
         recordId: h.record.id,
@@ -464,7 +469,10 @@ export class CirculationService {
         status: h.status,
         position: n,
         patronBarcode: h.patron.barcode,
-        patronName: user ? `${user.firstName} ${user.lastName}`.trim() : null,
+        // ⚠ LA FICHE FAIT AUTORITÉ, le compte n'est qu'un repli — voir
+        // `nomDeLAdherent`. Ce site composait depuis le COMPTE SEUL : quatre
+        // réservataires sur six s'affichaient « — », faute de compte lié.
+        patronName: nomDeLAdherent(h.patron),
         expiryDate: h.expiryDate,
         /** Un exemplaire peut-il encore servir cette file ? Voir l'en-tête. */
         servable: circulables.has(h.recordId),

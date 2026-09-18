@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CirculationPolicySettings } from '@/components/circulation-policy-settings';
 import { LIBELLES } from '@/lib/libelles';
+import { NAVIGATION_PERSONNEL } from '@/lib/navigation';
 import { fermerSession, ouvrirSession } from './aide-session';
 
 const T = LIBELLES.reglesDePret;
@@ -84,6 +85,37 @@ describe('Règles de prêt — la durée de mise de côté', () => {
   it('l’aide dit ce qui se passe quand le délai EXPIRE', async () => {
     render(<CirculationPolicySettings />);
     expect(await screen.findByText(T.miseDeCoteAide)).toBeTruthy();
+  });
+});
+
+describe('⚠ LES DEUX ENDROITS OÙ LA PROMESSE VIVAIT', () => {
+  /**
+   * Trouvé en RECETTANT LE PARCOURS, pas l'écran. L'introduction de
+   * `/admin/regles-de-pret` avait été corrigée le matin ; la page de rubriques
+   * `Administration` répétait la même promesse DEUX CLICS PLUS TÔT, dans la
+   * `description` de l'entrée qui y mène — « Durées de prêt, quotas,
+   * renouvellements. »
+   *
+   * ⭐ Une phrase fausse vit souvent à deux endroits : le titre qui MÈNE à
+   * l'écran, et l'écran qui l'accueille. Corriger l'un laisse l'autre, et c'est
+   * celui qu'on lit EN PREMIER qui reste faux.
+   *
+   * L'invariant porte donc sur les DEUX, pas sur l'un d'eux.
+   */
+  const entree = NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).find(
+    (e) => e.href === '/admin/regles-de-pret',
+  );
+
+  it('l’entrée de navigation existe et porte une description', () => {
+    expect(entree?.description, 'l’entrée a disparu — cet invariant ne mesure plus rien').toBeTruthy();
+  });
+
+  it('ni le chemin ni l’écran ne promettent ce qui vit sur CirculationRule', () => {
+    for (const texte of [entree!.description!, T.introduction]) {
+      expect(texte, `promesse non tenue : « ${texte} »`).not.toMatch(
+        /durées? de prêt|quotas?|plafonds?|amende/i,
+      );
+    }
   });
 });
 
