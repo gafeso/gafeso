@@ -20,7 +20,7 @@
  * |---|---|---|
  * | `POST /auth/login/2fa/email` | `{ sent: true }` | rien n'est parti, et c'est le REPLI de double authentification : quelqu'un qui a perdu son appareil TOTP est enfermé dehors par un faux « envoyé » |
  * | moteur de rappels | `reminderLog.status = 'SENT'` | rien n'est parti, et le mensonge est PERSISTÉ puis affiché dans les statistiques |
- * | notification de réservation | `sent += 1`, `notifiedAt` conservé | le lecteur n'est jamais prévenu que son document l'attend |
+ * | notification de réservation | `sent += 1`, `notificationTenteeA` conservé | le lecteur n'est jamais prévenu que son document l'attend |
  *
  * Le plus grave des trois est le premier, parce qu'il ferme la seule porte qui
  * reste à quelqu'un déjà enfermé dehors.

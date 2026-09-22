@@ -360,9 +360,19 @@ describe('registre — le motif de verrouillage est exploitable, pas seulement l
     const quoi = amendes.ecrans.map((e) => e.quoi).join(' ');
     expect(quoi).toContain('section');
     expect(quoi).toContain('le guichet, lui, reste');
+    // ⚠ TROISIÈME CHEMIN LE 22 SEPTEMBRE 2026, et c'est le premier écran ENTIER
+    // que ce module gouverne — les deux autres sont des SECTIONS dans des
+    // écrans du noyau. Ajouté par la session front avec son lot (dette n° 15),
+    // et signalé en passation : `/admin/regles-de-circulation` appelle les
+    // quatre routes `/circulation/rules`, toutes sous `@ModuleRequis('amendes')`.
+    //
+    // ⚠ Le couplage est discutable — une règle porte aussi la durée du prêt et
+    // les plafonds — et le jour où il tombe, cette ligne, la déclaration du
+    // registre et le `module` de l'entrée de menu changent ENSEMBLE.
     expect(amendes.ecrans.map((e) => e.chemin)).toEqual([
       'guichet',
       'admin/adherents/[id]',
+      'admin/regles-de-circulation',
     ]);
   });
 });

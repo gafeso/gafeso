@@ -45,7 +45,11 @@ const COLONNES: { table: string; colonne: string; enjeu: string }[] = [
   { table: 'expected_students', colonne: 'class_name', enjeu: 'la classe décide de l’accès' },
   { table: 'expected_students', colonne: 'last_name', enjeu: 'le nom identifie l’étudiant attendu' },
   { table: 'users', colonne: 'class_name', enjeu: 'la classe décide de l’accès' },
-  { table: 'authors', colonne: 'name', enjeu: 'la fiche d’autorité se dédouble' },
+  // ⚠ `display_name`, PAS `name` — la colonne `name` n'a jamais existé sur
+  // `authors`. La requête levait, le `catch` ci-dessous l'avalait, et ce
+  // garde rendait VERT en ayant examiné ZÉRO nom d'auteur : précisément
+  // l'enjeu pour lequel il avait été écrit. Corrigé le 22/09/2026.
+  { table: 'authors', colonne: 'display_name', enjeu: 'la fiche d’autorité se dédouble' },
   { table: 'biblio_records', colonne: 'title', enjeu: 'la recherche manque la notice' },
 ];
 
@@ -83,7 +87,15 @@ describe.runIf(process.env.PG_LIVE === '1')('Aucune forme décomposée en base',
     expect(ecoles.length, 'aucune école : ce garde n’a rien examiné').toBeGreaterThan(0);
 
     const fautives: string[] = [];
+    // ⚠ TÉMOIN DE COMPTE. « Aucune valeur décomposée » est VRAI sur
+    // l'ensemble vide : sans ce compte, un garde qui ne lit plus rien est
+    // indiscernable d'un garde qui trouve tout propre.
     let examinees = 0;
+    // ⚠ ET LE COMPTE GLOBAL NE SUFFIT PAS. Il était déjà là, à
+    // `> 20` — et il passait pendant qu'`authors` n'était pas lue du tout,
+    // parce que les cinq autres colonnes fournissaient les 20. Un témoin qui
+    // agrège masque exactement ce qu'il devrait désigner.
+    const luesAvecSucces = new Set<string>();
 
     for (const slug of ecoles) {
       for (const { table, colonne, enjeu } of COLONNES) {
@@ -92,11 +104,31 @@ describe.runIf(process.env.PG_LIVE === '1')('Aucune forme décomposée en base',
           valeurs = await prisma.$queryRawUnsafe<{ v: string | null }[]>(
             `SELECT DISTINCT ${colonne} AS v FROM "tenant_${slug}".${table} WHERE ${colonne} IS NOT NULL`,
           );
-        } catch {
+        } catch (e) {
+          // ⚠ CE `catch` DOIT DISCRIMINER, et il ne le faisait pas.
+          //
           // Une école à demi provisionnée (la recette de déprovision en
-          // fabrique une, en parallèle, sur cette même base) n'a pas la table.
-          continue;
+          // fabrique une, en parallèle, sur cette même base) n'a pas la TABLE :
+          // c'est le cas légitime, on passe.
+          //
+          // Une COLONNE absente est tout autre chose : c'est une faute dans la
+          // liste ci-dessus, et l'avaler rend le garde muet pour toujours sur
+          // cette colonne. C'est ce qui est arrivé à `authors.name` — le garde
+          // a passé vert pendant des semaines sans lire un seul nom d'auteur.
+          //
+          // 42P01 = undefined_table · 42703 = undefined_column
+          const code = (e as { meta?: { code?: string }; code?: string })?.meta?.code
+            ?? (e as { code?: string })?.code;
+          const texte = String((e as Error)?.message ?? e);
+          const tableAbsente = code === '42P01' || /does not exist/i.test(texte) && /relation/i.test(texte);
+          if (tableAbsente) continue;
+          throw new Error(
+            `Le garde ne peut pas lire ${table}.${colonne} sur « ${slug} ». ` +
+              `Si la COLONNE n'existe pas, corrigez la liste COLONNES — un garde ` +
+              `qui saute une colonne en silence ne garde rien.\n${texte}`,
+          );
         }
+        luesAvecSucces.add(`${table}.${colonne}`);
         for (const { v } of valeurs) {
           examinees++;
           if (estDecompose(v)) {
@@ -110,6 +142,18 @@ describe.runIf(process.env.PG_LIVE === '1')('Aucune forme décomposée en base',
     // toutes en échec, tables absentes — rendrait « aucune valeur fautive »,
     // et la ligne verte se lirait comme de la couverture.
     expect(examinees, 'le garde n’a examiné aucune valeur : il ne mesure rien').toBeGreaterThan(20);
+
+    // ⚠ CHAQUE COLONNE DÉCLARÉE A ÉTÉ LUE QUELQUE PART. C'est l'assertion
+    // qui manquait : une colonne dont le nom est faux n'est jamais lue, et
+    // son silence se confond avec « rien à signaler ». Une table vide reste
+    // acceptable — c'est la LECTURE qui doit avoir réussi, pas le contenu.
+    expect(
+      COLONNES.map((c) => `${c.table}.${c.colonne}`).filter((k) => !luesAvecSucces.has(k)),
+      'Colonne(s) déclarée(s) qu’aucune école n’a permis de lire. Soit le nom\n' +
+        'est faux (corrigez COLONNES), soit plus aucune école ne porte la table.\n' +
+        '⚠ Ne laissez pas la ligne : un garde qui saute une colonne en silence\n' +
+        '  ne garde rien — c’est ce qui est arrivé à `authors.name`.',
+    ).toEqual([]);
 
     // ⚠ ET LE CLASSEMENT LUI-MÊME EST ÉPROUVÉ, pas seulement le détecteur.
     // Ce garde est en lecture seule : il ne peut pas écrire du décomposé en

@@ -137,14 +137,14 @@ export class HoldsService {
 
   /**
    * Envoie l'email « réservation disponible » au premier de la file, de façon
-   * IDEMPOTENTE : la colonne `notifiedAt` est RÉSERVÉE (updateMany conditionnel)
+   * IDEMPOTENTE : la colonne `notificationTenteeA` est RÉSERVÉE (updateMany conditionnel)
    * avant l'envoi → jamais deux emails, même en concurrence / après redémarrage.
-   * Un échec SMTP réinitialise `notifiedAt` pour retenter au passage suivant.
+   * Un échec SMTP réinitialise `notificationTenteeA` pour retenter au passage suivant.
    */
   async notifyAvailable(db: TenantDb, tenantId: string, now: Date = new Date()) {
     const pickupDays = await this.holdPickupDays(tenantId);
     const ready = await db.hold.findMany({
-      where: { status: HoldStatus.AVAILABLE, notifiedAt: null },
+      where: { status: HoldStatus.AVAILABLE, notificationTenteeA: null },
       include: {
         record: { select: { title: true } },
         // ⚠ `firstName`/`lastName` de la FICHE : elle fait autorité sur le nom,
@@ -172,20 +172,20 @@ export class HoldsService {
     for (const hold of ready) {
       // Réservation atomique du droit d'envoi (anti-double-envoi).
       const claimed = await db.hold.updateMany({
-        where: { id: hold.id, notifiedAt: null },
-        data: { notifiedAt: now },
+        where: { id: hold.id, notificationTenteeA: null },
+        data: { notificationTenteeA: now },
       });
       if (claimed.count !== 1) continue;
 
       const user = hold.patron.user;
       const email = user?.email?.trim() ?? '';
       if (!email || !isValidEmail(email)) {
-        // Pas d'email exploitable : on garde `notifiedAt` posé (retrait au
+        // Pas d'email exploitable : on garde `notificationTenteeA` posé (retrait au
         // guichet), on ne rescanne pas indéfiniment.
         //
         // ⚠ MAIS ON LE DIT. C'est le cas le plus silencieux des trois : aucun
         // échec technique, aucune exception, et un lecteur qui ne sera JAMAIS
-        // prévenu — sans nouvelle tentative, puisqu'on garde `notifiedAt`. Le
+        // prévenu — sans nouvelle tentative, puisqu'on garde `notificationTenteeA`. Le
         // guichet doit le savoir au moment où il met le document de côté.
         nonPrevenus.push({
           holdId: hold.id,
@@ -205,12 +205,12 @@ export class HoldsService {
         });
         // ⚠ `sent += 1` COMPTAIT DES COURRIELS JAMAIS PARTIS. `MailService`
         // traitait « SMTP absent » comme un succès : le compteur enflait, et
-        // `notifiedAt` restait posé — donc le lecteur n'était jamais prévenu
+        // `notificationTenteeA` restait posé — donc le lecteur n'était jamais prévenu
         // que son document l'attendait, et le guichet croyait l'avoir averti.
         // Même traitement que l'échec SMTP juste en dessous : on relâche la
         // réservation pour retenter.
         if (!resultat.sent) {
-          await db.hold.updateMany({ where: { id: hold.id }, data: { notifiedAt: null } });
+          await db.hold.updateMany({ where: { id: hold.id }, data: { notificationTenteeA: null } });
           nonPrevenus.push({
             holdId: hold.id,
             titre: hold.record.title,
@@ -225,7 +225,7 @@ export class HoldsService {
         sent += 1;
       } catch (error) {
         // Échec SMTP : on relâche la réservation pour retenter plus tard.
-        await db.hold.updateMany({ where: { id: hold.id }, data: { notifiedAt: null } });
+        await db.hold.updateMany({ where: { id: hold.id }, data: { notificationTenteeA: null } });
         nonPrevenus.push({
           holdId: hold.id,
           titre: hold.record.title,
@@ -267,7 +267,7 @@ export class HoldsService {
             data: {
               status: HoldStatus.AVAILABLE,
               expiryDate: new Date(now.getTime() + pickupDays * DAY_MS),
-              notifiedAt: null,
+              notificationTenteeA: null,
             },
           });
         } else {

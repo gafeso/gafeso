@@ -121,7 +121,7 @@ export class CirculationController {
       await this.dueSettings(tenant),
     );
     // Si le retour a mis un exemplaire de côté pour une réservation, prévenir le
-    // premier de la file (email idempotent via holds.notifiedAt).
+    // premier de la file (email idempotent via holds.notificationTenteeA).
     // ⚠ L'ISSUE DE LA NOTIFICATION REMONTE AU GUICHET. Elle était mesurée et
     // journalisée — et jetée ici. Or personne ne lit le journal au comptoir :
     // la bibliothécaire met un document de côté, croit le lecteur prévenu, et

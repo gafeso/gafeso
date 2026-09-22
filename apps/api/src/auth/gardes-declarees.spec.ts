@@ -264,8 +264,22 @@ function routes(): Route[] {
         if (t.startsWith('@') || t.startsWith('*') || t.startsWith('/*') || t.startsWith('//') || t === '') debut--;
         else break;
       }
+      // ⚠ LA DESCENTE ACCEPTE LES COMMENTAIRES, COMME LA MONTÉE.
+      //
+      // Elle ne prenait que les lignes en `@`. Un commentaire glissé entre deux
+      // décorateurs coupait donc le bloc, et tout ce qui suivait devenait
+      // invisible : le 22/09/2026, un `@HttpCode` commenté au-dessus de
+      // `@RequiresFunctions` a fait déclarer NON GARDÉE une route qui l'était.
+      //
+      // ⚠ Un détecteur qui signale du code correct se fait désactiver — par une
+      // exception, par un « faux positif connu », ou simplement en cessant
+      // d'être lu. Et il ne sert plus le jour où il a raison.
       let fin = i;
-      while (fin + 1 < lignes.length && lignes[fin + 1].trim().startsWith('@')) fin++;
+      while (fin + 1 < lignes.length) {
+        const t = lignes[fin + 1].trim();
+        if (t.startsWith('@') || t.startsWith('//') || t.startsWith('*') || t.startsWith('/*') || t === '') fin++;
+        else break;
+      }
       const bloc = lignes.slice(debut, fin + 1).join('\n');
 
       trouvees.push({

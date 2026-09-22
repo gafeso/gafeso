@@ -733,7 +733,7 @@ describe('⚠ LA MISE À DISPOSITION QUI N’ARRIVE PAS — l’issue remonte au
 
   it('⚠ AUCUNE ADRESSE : le cas le plus silencieux des trois, et il remonte', async () => {
     // Aucun échec technique, aucune exception — et un lecteur qui ne sera
-    // JAMAIS prévenu, sans nouvelle tentative puisqu'on garde `notifiedAt`.
+    // JAMAIS prévenu, sans nouvelle tentative puisqu'on garde `notificationTenteeA`.
     const { svc, db, mail } = service({ sent: true }, null);
     const r = await svc.notifyAvailable(db, 't1');
     expect(mail.sendHoldAvailable).not.toHaveBeenCalled();
@@ -747,7 +747,7 @@ describe('⚠ LA MISE À DISPOSITION QUI N’ARRIVE PAS — l’issue remonte au
     await svc.notifyAvailable(db, 't1');
     // 1er appel : réservation du droit d'envoi. 2e : relâche.
     expect((updateMany.mock.calls[1] as unknown as [{ data: unknown }])[0].data).toEqual({
-      notifiedAt: null,
+      notificationTenteeA: null,
     });
   });
 });

@@ -155,6 +155,31 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
 
   // ── Guichet ──────────────────────────────────────────────────────────────
   '/guichet': { actuelle: ['circulation.faire'], cible: 'circulation.faire', nature: 'inchangee' },
+  /**
+   * ⚠ NI TRANSFERT NI ÉLARGISSEMENT : l'écran est NEUF (dette n° 15,
+   * 22 septembre 2026), et il reprend telle quelle la fonction que ses quatre
+   * routes exigent déjà — `circulation.faire`. Personne ne gagne un droit :
+   * ceux qui tiennent le guichet peuvent désormais ATTEINDRE ce que l'API leur
+   * accordait depuis toujours et qu'aucun écran ne demandait.
+   *
+   * ⚠ Et ce n'est PAS `etablissement.regles`, malgré le voisinage avec
+   * `/admin/regles-de-pret` : c'est l'API qui décide, et elle exige la fonction
+   * du guichet. L'écart est signalé en passation — mais on garde sur ce que la
+   * route demande, jamais sur ce qu'on trouverait plus logique.
+   */
+  '/admin/regles-de-circulation': {
+    actuelle: ['circulation.faire'],
+    cible: 'circulation.faire',
+    // ⚠ `inchangee`, et le mot est juste : la fonction que l'écran exige est
+    // EXACTEMENT celle que ses routes exigeaient déjà. Le vocabulaire ne
+    // connaît que deux natures — `inchangee` et `elargissement` — et c'est
+    // volontaire : tout ce qui n'élargit pas n'a pas à être soumis.
+    nature: 'inchangee',
+    // ⚠ PAS de `gagnants: []` — le garde exige l'ABSENCE de la clé quand rien
+    // n'est élargi, et il a raison : un tableau vide se lit comme « on a
+    // regardé et il n'y en a pas », alors qu'ici la question ne se pose pas.
+    note: "Écran neuf du 22 septembre 2026 (dette n° 15). Les quatre routes /circulation/rules exigent circulation.faire depuis leur écriture ; l'écran reprend la même fonction, sans l'élargir. Aucune école ne pouvait régler durée de prêt, plafonds ni amende autrement qu'en base.",
+  },
   '/admin/rappels': {
     actuelle: ['circulation.retards'],
     cible: 'circulation.retards',

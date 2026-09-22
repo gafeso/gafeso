@@ -27,7 +27,7 @@ import { AuthController } from '../../auth/auth.controller';
  * |---|---|
  * | `POST /auth/login/2fa/email` | `{ sent: true }` écrit en dur — et c'est le REPLI de double authentification |
  * | moteur de rappels | `reminderLog.status = 'SENT'`, PERSISTÉ puis affiché en statistiques |
- * | notification de réservation | `sent += 1` et `notifiedAt` conservé |
+ * | notification de réservation | `sent += 1` et `notificationTenteeA` conservé |
  * | notification des gestionnaires | un `return` nu quand l'école n'a AUCUN gestionnaire actif |
  *
  * Le premier est le plus grave : il ferme la seule porte qui reste à quelqu'un

@@ -17,7 +17,7 @@
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
-    "test:base": "PG_LIVE=1 dotenv -e ../../.env -- vitest run"
+    "test:base": "tsc --noEmit && PG_LIVE=1 dotenv -e ../../.env -- vitest run"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -17,6 +17,17 @@ export type TenantDb = PrismaClient;
 /** Classement immédiat d'un scan (feedback douchette). */
 export type ScanResult = 'SEEN' | 'ALREADY' | 'UNKNOWN' | 'OUT_OF_SCOPE' | 'ON_LOAN';
 
+/**
+ * Les quatre catégories d'un rapport de récolement.
+ *
+ * ⚠ Elles PARTITIONNENT le périmètre : `seen + missing + onLoan = expected`.
+ * `unexpected` est en dehors — ce sont les scans qui ne tombent dans aucun
+ * exemplaire du périmètre. C'est cette partition qui rend un compte
+ * vérifiable, et le test l'affirme plutôt que de la supposer.
+ */
+export const CATEGORIES_RECOLEMENT = ['seen', 'missing', 'onLoan', 'unexpected'] as const;
+export type CategorieRecolement = (typeof CATEGORIES_RECOLEMENT)[number];
+
 export interface ItemInfo {
   id: string;
   barcode: string;
@@ -227,7 +238,130 @@ export class InventoryService {
     return { result, barcode, item: item ? toInfo(item) : null };
   }
 
+  // ── Classement — la SEULE lecture qui parcourt tout le périmètre ──────────
+  //
+  // ⚠ Elle ne charge que `{ id, status }`, jamais `ITEM_SELECT`. Mesuré sur le
+  // fonds `horizon` (10 133 exemplaires) : 663 ko contre 2 611 ko, soit ×3,9.
+  // Et surtout, RIEN DE CECI NE TRAVERSE LE RÉSEAU — c'est ce qui fait tomber
+  // la réponse de `counts` de 2 Mo à quelques centaines d'octets.
+  //
+  // ⚠ POURQUOI PAS UN `groupBy` SQL, qui ne chargerait aucune ligne : il n'y a
+  // PAS de clé étrangère `Item → InventoryScan`, et c'est délibéré (voir le
+  // schéma : « un exemplaire supprimé ne doit pas effacer l'historique de
+  // scan »). Sans relation, aucun filtre Prisma ne peut exprimer « non scanné »,
+  // et l'écrire en SQL brut demanderait de qualifier le schéma du tenant à la
+  // main. Le compromis est mesuré, pas supposé.
+  //
+  // L'ORDRE est celui du rapport — `callNumber` puis `barcode`, qui départage
+  // (le code-barres est unique). C'est ce qui rend la pagination STABLE d'une
+  // page à l'autre.
+  private async classer(db: TenantDb, id: string) {
+    const session = await this.requireSession(db, id);
+    const where = this.scopeWhere(session);
+    const [scopeItems, scans] = await Promise.all([
+      db.item.findMany({
+        where,
+        select: { id: true, status: true },
+        orderBy: [{ callNumber: 'asc' }, { barcode: 'asc' }],
+      }),
+      db.inventoryScan.findMany({ where: { sessionId: id }, orderBy: { scannedAt: 'asc' } }),
+    ]);
+
+    const scannedItemIds = new Set(scans.map((s) => s.itemId).filter((v): v is string => !!v));
+    const scopeItemIds = new Set(scopeItems.map((i) => i.id));
+
+    const seen: string[] = [];
+    const missing: string[] = [];
+    const onLoan: string[] = [];
+    for (const it of scopeItems) {
+      if (scannedItemIds.has(it.id)) seen.push(it.id);
+      // En prêt = absent LÉGITIME (jamais compté manquant), s'il n'a pas été scanné.
+      else if (it.status === 'CHECKED_OUT') onLoan.push(it.id);
+      else missing.push(it.id);
+    }
+    const unexpected = scans
+      .filter((s) => !s.itemId || !scopeItemIds.has(s.itemId))
+      .map((s) => ({ barcode: s.barcode, result: s.result as ScanResult }));
+
+    return { session, attendus: scopeItems.length, seen, missing, onLoan, unexpected };
+  }
+
+  /**
+   * Les COMPTES seuls — aucune liste, donc une réponse de taille constante.
+   *
+   * ⚠ C'est ce que l'écran affiche, et c'est tout ce dont il a besoin pour
+   * l'afficher. La route `report` reste servie telle quelle : des écrans
+   * déployés la lisent, et une réponse ne retire pas de champ.
+   */
+  async counts(db: TenantDb, id: string) {
+    const c = await this.classer(db, id);
+    return {
+      session: c.session,
+      counts: {
+        seen: c.seen.length,
+        missing: c.missing.length,
+        onLoan: c.onLoan.length,
+        unexpected: c.unexpected.length,
+        expected: c.attendus,
+      },
+    };
+  }
+
+  /**
+   * UNE catégorie, PAGINÉE. Seule la page demandée est hydratée en
+   * `ITEM_SELECT` — au plus `limit` lignes, quel que soit le fonds.
+   *
+   * ⚠ La route rend `totalPages`, donc elle ACCEPTE `page` : un contrat qui
+   * annonce un parcours qu'il ne sert pas est un faux.
+   */
+  async categorie(
+    db: TenantDb,
+    id: string,
+    categorie: CategorieRecolement,
+    page: number,
+    limit: number,
+  ) {
+    const c = await this.classer(db, id);
+    const enveloppe = (total: number) => ({
+      categorie,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+
+    if (categorie === 'unexpected') {
+      const tout = c.unexpected;
+      return { ...enveloppe(tout.length), lignes: tout.slice((page - 1) * limit, page * limit) };
+    }
+
+    const ids = c[categorie];
+    const tranche = ids.slice((page - 1) * limit, page * limit);
+    const lignes = await this.hydrater(db, tranche);
+    return { ...enveloppe(ids.length), lignes };
+  }
+
+  /**
+   * Hydrate une TRANCHE d'identifiants en conservant SON ordre.
+   *
+   * ⚠ `where: { id: { in } }` ne garantit aucun ordre — le rendre tel quel
+   * ferait sauter des lignes d'une page à l'autre, sur un écran où l'on coche
+   * des exemplaires. On réordonne sur la tranche, qui porte l'ordre du rapport.
+   */
+  private async hydrater(db: TenantDb, ids: string[]): Promise<ItemInfo[]> {
+    if (ids.length === 0) return [];
+    const lignes = await db.item.findMany({ where: { id: { in: ids } }, select: ITEM_SELECT });
+    const parId = new Map(lignes.map((l) => [l.id, toInfo(l)]));
+    return ids.map((i) => parId.get(i)).filter((v): v is ItemInfo => !!v);
+  }
+
   // ── Rapport ───────────────────────────────────────────────────────────────
+  //
+  // ⚠ NON BORNÉ, ET C'EST VOULU. Deux appelants en ont besoin ENTIER : le CSV,
+  // dont c'est l'office, et les écrans déjà déployés qui lisent ses listes.
+  // Le chemin BORNÉ est `counts` + `categorie` ; celui-ci reste le chemin
+  // complet. Le borner par un `take` sans curseur serait un faux dispositif —
+  // voir `markMissing`, qui ne l'appelle plus précisément pour cette raison.
   async report(db: TenantDb, id: string) {
     const session = await this.requireSession(db, id);
     const where = this.scopeWhere(session);
@@ -312,8 +446,15 @@ export class InventoryService {
     if (session.status === 'APPLIED') {
       throw new ConflictException('Les manquants de cette session ont déjà été marqués.');
     }
-    const report = await this.report(db, id);
-    const ids = report.missing.map((m) => m.id);
+    // ⚠ CE GESTE NE PASSE PLUS PAR `report()`, ET C'EST LE POINT.
+    //
+    // `report()` est la route non bornée. Le jour où quelqu'un la bornera par
+    // un `take` — le geste que le problème « 2 Mo » appelle naturellement —,
+    // une troncature silencieuse marquerait ici une PARTIE des manquants en
+    // laissant croire que tout est fait, et la session passerait quand même à
+    // `APPLIED`. Le lien est coupé par construction : `classer()` rend TOUS
+    // les identifiants, sans pagination possible, et n'a pas d'autre usage.
+    const ids = (await this.classer(db, id)).missing;
     if (ids.length > 0) {
       // Garde-fou : ne jamais écraser un exemplaire redevenu CHECKED_OUT entre-temps.
       await db.item.updateMany({

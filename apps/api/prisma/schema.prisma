@@ -1065,7 +1065,11 @@ model Hold {
   expiryDate DateTime?    @map("expiry_date")
   // Idempotence de l'email « réservation disponible » : posé au moment de l'envoi.
   // NULLable (table tenant) → le rattrapage sync-schema l'ajoute sans défaut.
-  notifiedAt DateTime?    @map("notified_at")
+  /// ⚠ UN ÉVÉNEMENT, PAS UN ÉTAT. « la tentative de notification est SOLDÉE »
+  /// — posée même quand personne n'a pu être prévenu (aucune adresse
+  /// exploitable : retrait au guichet). Renommée depuis `notifiedAt` le
+  /// 22/09/2026 : le nom affirmait « a été notifié », et se relisait faux.
+  notificationTenteeA DateTime? @map("notification_tentee_a")
   createdAt  DateTime     @default(now()) @map("created_at")
   record     BiblioRecord @relation(fields: [recordId], references: [id])
   patron     Patron       @relation(fields: [patronId], references: [id])

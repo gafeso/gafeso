@@ -41,6 +41,7 @@ refuser la route par l’API.
 | Écran | Adresse | Fonction exigée | Module | Ce qu’on y fait |
 |---|---|---|---|---|
 | Prêt et retour | `/guichet` | `circulation.faire` | noyau | Prêter, rendre, encaisser une amende — au code-barres. |
+| Règles de prêt | `/admin/regles-de-circulation` | `circulation.faire` | `amendes` — **disparaît si éteint** | Durée du prêt, plafonds et amende, par catégorie et par type. |
 | Rappels envoyés | `/admin/rappels` | `circulation.retards` | `rappels` — **disparaît si éteint** | Les courriels de retard déjà partis, et leur réglage. |
 
 ### Onglet « Outils »

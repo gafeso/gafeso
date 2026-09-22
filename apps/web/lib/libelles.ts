@@ -457,6 +457,29 @@ export const LIBELLES = {
    * l'écran. C'est ce qui décide de la forme — on annule par CODE-BARRES, pas
    * en cliquant une ligne qu'on ne peut pas voir.
    */
+  /**
+   * LE RAPPORT DE RÉCOLEMENT — et la catégorie qu'on affichait pas.
+   *
+   * ⚠ « VUS » N'ÉTAIT AFFICHÉ NULLE PART. Le COMPTE l'était, dans la tuile
+   * verte ; la LISTE, que l'API sert et que le type du front déclarait
+   * (`seen: ItemInfo[]`), était jetée. Les trois autres catégories avaient leur
+   * table. Une bibliothécaire qui voulait vérifier qu'un exemplaire précis
+   * avait bien été scanné n'avait aucun moyen de le voir — elle ne pouvait que
+   * constater qu'il n'était pas dans « Manquants », ce qui n'est pas la même
+   * chose quand le périmètre est partiel.
+   *
+   * ⚠ ET ELLE NE COÛTE RIEN DE PLUS : la liste est DÉJÀ transportée par
+   * `GET /report`. L'afficher n'ajoute aucun octet — c'est le chemin PAGINÉ qui
+   * réduira la charge, et il attend que le backend pousse `counts` et
+   * `items/:categorie` (voir la passation du 22 septembre).
+   */
+  rapportRecolement: {
+    vus: 'Vus (scannés, dans le périmètre)',
+    manquants: 'Manquants (attendus, non scannés)',
+    enPret: 'En prêt (absents légitimes)',
+    inattendus: 'Inattendus (inconnus ou hors périmètre)',
+  },
+
   recolement: {
     annulerScan: 'Annuler un scan',
     annulerCeScan: 'Annuler',
@@ -844,6 +867,8 @@ export const LIBELLES = {
      */
     recolement:
       'Le récolement n’est pas ouvert à votre compte (fonction « outils.catalogue »).',
+    reglesDeCirculation:
+      'Les règles de prêt ne sont pas ouvertes à votre compte (fonction « circulation.faire »).',
   },
 
   /**
@@ -1641,6 +1666,64 @@ export const LIBELLES = {
   statistiques: {
     rappelsEteints:
       'Module Rappels éteint : plus aucun envoi. Les rappels ci-dessous ont été envoyés avant l’extinction.',
+  },
+
+  /**
+   * LES RÈGLES DE CIRCULATION — une COLLECTION, pas un réglage.
+   *
+   * ⚠ LA FORME FAUTIVE QUE CE LOT REFUSE, et elle était nommée dans la dette :
+   * ajouter quatre champs à la carte de `/admin/regles-de-pret`.
+   * `CirculationRule` est clé par (catégorie, type). Quatre champs auraient
+   * créé UNE règle globale et masqué la dimension par catégorie : l'écran
+   * afficherait « plafond : 5 » pendant que la base en porte cinq différents,
+   * et le premier enregistrement écraserait la nuance qu'une bibliothécaire
+   * avait posée. **Un singleton n'est pas une collection à un élément.**
+   */
+  reglesDeCirculation: {
+    titre: 'Règles de prêt',
+    introduction:
+      'Une règle par couple catégorie d’adhérent / type d’exemplaire. Le guichet applique la plus précise qui correspond au prêt.',
+    /** ⚠ Ce que « * » veut dire, écrit là où on le lit — pas dans une aide. */
+    toutesCategories: 'Toutes les catégories',
+    tousTypes: 'Tous les types',
+    joker: '*',
+
+    colCategorie: 'Catégorie d’adhérent',
+    colType: 'Type d’exemplaire',
+    colDuree: 'Durée du prêt',
+    colRenouvellements: 'Renouvellements',
+    colPlafond: 'Prêts simultanés',
+    colAmende: 'Amende / jour',
+    jours: (n: number) => `${n} jour(s)`,
+    fcfa: (n: number) => `${n} FCFA`,
+
+    ajouter: 'Ajouter une règle',
+    enregistrer: 'Enregistrer',
+    annuler: 'Annuler',
+    modifier: 'Modifier',
+    supprimer: 'Supprimer',
+    /** ⚠ La suppression se confirme : elle change ce que le guichet applique. */
+    supprimerConfirmer: (categorie: string, type: string) =>
+      `Supprimer la règle « ${categorie} / ${type} » ? Le guichet appliquera alors la règle la plus proche, ou ses valeurs par défaut.`,
+
+    /**
+     * ⚠ AUCUNE RÈGLE N'EST UN ÉTAT NORMAL, PAS UN VIDE À REMPLIR EN URGENCE.
+     * Le produit a des défauts semés ; une école qui n'a rien posé n'est pas
+     * en panne. Le texte le dit, sinon il pousse à créer des règles au hasard.
+     */
+    aucune:
+      'Aucune règle propre à cet établissement : le guichet applique ses valeurs par défaut.',
+    listeNonChargee: 'Les règles n’ont pas pu être chargées.',
+    /**
+     * ⚠ LES REPLIS AUSSI SONT DES TEXTES VISIBLES. Je les avais écrits en dur
+     * dans l'écran — « Enregistrement impossible. », « Suppression
+     * impossible. » — le jour même où j'avais versé deux leçons sur les textes
+     * sortis du code. Ils ne s'affichent que quand l'API ne rend pas de
+     * message, c'est-à-dire au pire moment, et c'est exactement pour ça qu'on
+     * ne les relit jamais.
+     */
+    enregistrementImpossible: 'Enregistrement impossible.',
+    suppressionImpossible: 'Suppression impossible.',
   },
 
   reglesDePret: {

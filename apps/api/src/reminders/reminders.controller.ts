@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
   Post,
   Query,
@@ -115,6 +117,9 @@ export class RemindersController {
   }
 
   @Post('preview')
+  // ⚠ 200, PAS 201 : cette route REND un gabarit interprété, elle n'écrit
+  // rien. Voir la même correction sur l'aperçu d'import des étudiants.
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Aperçu d’un modèle (rendu avec des données d’exemple)' })
   preview(@Body() dto: PreviewReminderDto) {
     return this.reminders.preview(dto.type, dto.subject, dto.body);

@@ -310,7 +310,14 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // directement. Sixième état issu de ce seul fichier.
     // `zinda` est PROPRE : ses trois files portent sur des notices dont aucun
     // exemplaire n'est disponible.
-    const DETTE_ATTENTE = 257;
+    // ✅ RÉSOLUE le 22/09/2026 : le seed suit `placeHoldForPatron` — file
+    // d'attente SEULEMENT si aucun exemplaire n'est libre, mise de côté
+    // immédiate sinon (avec échéance, et l'exemplaire qui passe à ON_HOLD).
+    //
+    // ⚠ 257 → 0, mais 114 conversions seulement : remettre les 820
+    // exemplaires prêtés en CHECKED_OUT a rendu LÉGITIMES les autres files.
+    // Deux dettes du même écrivain, dont l'une masquait l'ampleur de l'autre.
+    const DETTE_ATTENTE = 0;
     const compte = fautifs.length;
     expect(
       compte,
@@ -361,7 +368,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // regarder, pas parce que tout va bien. Le témoin ci-dessus compte les
     // mises de côté TOUTES statuts confondus, sans quoi il serait lui-même un
     // signal d'attente sur la grandeur mesurée.
-    const DETTE_ECHEANCES = ['horizon : 43 mise(s) de côté disponible(s) sur 43 sans échéance'];
+    // ✅ RÉSOLUE le 22/09/2026 : `seed-echelle.mjs` pose l'échéance comme le
+    // produit (`maintenant + HOLD_PICKUP_DAYS`), et conforme ce qu'il avait
+    // déjà écrit. 43 → 0.
+    const DETTE_ECHEANCES: string[] = [];
     expect(
       DETTE_ECHEANCES.filter((d) => !fautifs.includes(d)),
       'Une dette déclarée ne correspond plus à la base : retirez-la de ' +
@@ -509,7 +519,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // produit » dans CLAUDE.md.
     //
     // ⚠ `zinda` est PROPRE : 66 comptes actifs, 66 dates d'activation.
-    const DETTE_ACTIVATION = ['horizon : 412 compte(s) actif(s) sur 413 sans date d’activation'];
+    // ✅ RÉSOLUE le 22/09/2026 : le seed pose `activatedAt` avec `status`,
+    // comme `AccountsService.activate`. Les 412 existants ont reçu leur date
+    // de CRÉATION — la seule borne que la base connaisse avec certitude.
+    const DETTE_ACTIVATION: string[] = [];
     expect(
       DETTE_ACTIVATION.filter((d) => !fautifs.includes(d)),
       'Une dette déclarée ne correspond plus à la base : retirez-la de ' +
@@ -561,7 +574,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // l'échelle, et il n'est montré à personne.
     //
     // La ligne se refuse le jour où le compte change — résolu ou aggravé.
-    const DETTE_PRETS = ['horizon : 820 prêt(s) ouvert(s) sur exemplaire AVAILABLE'];
+    // ✅ RÉSOLUE le 22/09/2026 : le seed sort l'exemplaire du fonds
+    // disponible, comme `CirculationService.checkout` le fait dans la même
+    // transaction. 820 → 0.
+    const DETTE_PRETS: string[] = [];
     const resumePrets = ecoles
       .map((slug) => {
         const n = fautifs.filter((f) => f.startsWith(`${slug} ·`)).length;
@@ -723,9 +739,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // est réparé, l'exception ne correspond plus et ce test échoue en le
     // disant. Une dette qui ne se rappelle pas d'elle-même est un oubli en
     // attente.
-    const DETTE_CONNUE = [
-      'horizon : sur 3549 travaux académiques, 0 sans université et 3549 sans directeur',
-    ];
+    // ✅ RÉSOLUE le 22/09/2026 : le seed rattache un contributeur de rôle
+    // `DIRECTEUR_MEMOIRE` à chaque thèse et mémoire, comme
+    // `requireDefenseFields` l'exige. 3 549 → 0.
+    const DETTE_CONNUE: string[] = [];
     const restant = resume.filter((r) => !DETTE_CONNUE.includes(r));
     const perimees = DETTE_CONNUE.filter((d) => !resume.includes(d));
     expect(

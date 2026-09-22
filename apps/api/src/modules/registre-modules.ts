@@ -129,6 +129,28 @@ export const MODULES: readonly ModuleDeclare[] = [
     ecrans: [
       { chemin: 'guichet', quoi: 'la section Amendes (le guichet, lui, reste)' },
       { chemin: 'admin/adherents/[id]', quoi: 'la section Amendes de la fiche d’adhérent' },
+      /*
+       * ⚠ LE PREMIER ÉCRAN ENTIER QUE CE MODULE GOUVERNE — ajouté le
+       * 22 septembre 2026 par la session FRONT, dans un fichier qui n'est pas
+       * le sien, parce que son lot a rendu ce garde rouge et qu'un `main`
+       * rouge bloque tout le monde. Signalé en passation le même jour.
+       *
+       * `/admin/regles-de-circulation` (dette front n° 15) appelle les quatre
+       * routes `/circulation/rules`, qui portent toutes
+       * `@ModuleRequis('amendes')`. L'entrée de menu porte donc le module :
+       * sans ça, elle mènerait à un écran que l'API refuse.
+       *
+       * ⚠ ET LE COUPLAGE EST DISCUTABLE, c'est le fond de la passation :
+       * `CirculationRule` porte aussi `loanPeriodDays`, `maxCheckouts` et
+       * `maxRenewals`, qui n'ont rien à voir avec les amendes. Une école qui
+       * éteint ce module perd le réglage de ses DURÉES DE PRÊT. Le jour où les
+       * routes se découplent, cette ligne et le `module` de l'entrée changent
+       * ensemble.
+       */
+      {
+        chemin: 'admin/regles-de-circulation',
+        quoi: 'l’écran Règles de prêt (durées, plafonds et amende par catégorie)',
+      },
     ],
     motifEcrans: '\\bamendes?\\b',
   },

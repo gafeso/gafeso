@@ -33,12 +33,12 @@ describe('HoldsService — cancelHold (anti-IDOR)', () => {
 });
 
 describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)', () => {
-  /** DB simulée : une réservation AVAILABLE avec état `notifiedAt` mutable. */
-  function makeDb(notifiedAt: Date | null = null) {
+  /** DB simulée : une réservation AVAILABLE avec état `notificationTenteeA` mutable. */
+  function makeDb(notificationTenteeA: Date | null = null) {
     const row = {
       id: 'h-1',
       status: 'AVAILABLE',
-      notifiedAt,
+      notificationTenteeA,
       expiryDate: new Date('2026-07-25T00:00:00Z'),
       record: { title: 'Titre' },
       patron: { user: { email: 'b@exemple.bf', firstName: 'B', lastName: 'X' } },
@@ -46,11 +46,11 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
     return {
       row,
       hold: {
-        findMany: vi.fn(async () => (row.notifiedAt === null ? [row] : [])),
+        findMany: vi.fn(async () => (row.notificationTenteeA === null ? [row] : [])),
         updateMany: vi.fn(async ({ where, data }: any) => {
-          // Réservation conditionnelle sur notifiedAt: null.
-          if (where.notifiedAt === null && row.notifiedAt !== null) return { count: 0 };
-          row.notifiedAt = data.notifiedAt;
+          // Réservation conditionnelle sur notificationTenteeA: null.
+          if (where.notificationTenteeA === null && row.notificationTenteeA !== null) return { count: 0 };
+          row.notificationTenteeA = data.notificationTenteeA;
           return { count: 1 };
         }),
       },
@@ -62,12 +62,12 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
     mail = { sendHoldAvailable: vi.fn().mockResolvedValue({ sent: true }) };
   });
 
-  it('envoie une fois et pose notifiedAt', async () => {
+  it('envoie une fois et pose notificationTenteeA', async () => {
     const db = makeDb(null);
     const res = await makeService(mail).notifyAvailable(db, 't1', new Date('2026-07-18T00:00:00Z'));
     expect(res.sent).toBe(1);
     expect(mail.sendHoldAvailable).toHaveBeenCalledTimes(1);
-    expect(db.row.notifiedAt).not.toBeNull();
+    expect(db.row.notificationTenteeA).not.toBeNull();
   });
 
   it('deuxième passage : rien (déjà notifié)', async () => {
@@ -77,10 +77,10 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
     expect(mail.sendHoldAvailable).not.toHaveBeenCalled();
   });
 
-  it('⚠ SANS SMTP : notifiedAt RELÂCHÉ et rien n’est compté', async () => {
+  it('⚠ SANS SMTP : notificationTenteeA RELÂCHÉ et rien n’est compté', async () => {
     // LE défaut du 12 septembre 2026. `MailService` traitait « SMTP absent »
     // comme un succès : `sent += 1` comptait un courriel jamais parti, et
-    // `notifiedAt` restait posé — donc le lecteur n'était JAMAIS prévenu que
+    // `notificationTenteeA` restait posé — donc le lecteur n'était JAMAIS prévenu que
     // son document l'attendait, et le guichet croyait l'avoir averti. La
     // réservation expirait sans que personne ne vienne la chercher.
     const muet = { sendHoldAvailable: vi.fn().mockResolvedValue({ sent: false, reason: 'smtp_absent' }) };
@@ -90,14 +90,14 @@ describe('HoldsService — notifyAvailable (idempotence réserver-puis-envoyer)'
 
     expect(res.sent).toBe(0);
     // Relâché : le prochain passage retentera, comme pour une panne SMTP.
-    expect(db.row.notifiedAt).toBeNull();
+    expect(db.row.notificationTenteeA).toBeNull();
   });
 
-  it('échec SMTP : relâche notifiedAt pour retenter', async () => {
+  it('échec SMTP : relâche notificationTenteeA pour retenter', async () => {
     const db = makeDb(null);
     mail.sendHoldAvailable.mockRejectedValueOnce(new Error('SMTP down'));
     const res = await makeService(mail).notifyAvailable(db, 't1', new Date('2026-07-18T00:00:00Z'));
     expect(res.sent).toBe(0);
-    expect(db.row.notifiedAt).toBeNull(); // relâché → sera retenté
+    expect(db.row.notificationTenteeA).toBeNull(); // relâché → sera retenté
   });
 });

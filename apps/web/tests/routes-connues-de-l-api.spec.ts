@@ -91,7 +91,13 @@ const EXCEPTIONS: Exception[] = [
 // l'écran ne savait pas non plus demander. Tout l'appareil de sûreté du
 // backend — deux routes, `confirmeRetraits`, portée bornée — ne servait donc
 // personne.
-const NOMBRE_D_APPELS = 142;
+// ⚠ 146 le 22 septembre 2026 : les QUATRE routes des règles de circulation
+// (`GET/POST/PATCH/DELETE /circulation/rules`), dette n° 15. Elles existaient
+// depuis leur écriture et le front n'en appelait AUCUNE — les valeurs venaient
+// des défauts semés, et aucune école ne pouvait en changer autrement qu'en
+// base. Quatre appels d'un coup, c'est le signe d'une collection entière restée
+// sans porte, pas d'une route oubliée.
+const NOMBRE_D_APPELS = 146;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
@@ -107,7 +113,9 @@ const NOMBRE_D_APPELS = 142;
 // LIT sans rien écrire, et c'est pourtant un POST — un corps multipart ne
 // s'envoie pas autrement. Le compte des « écritures » compte des verbes, pas
 // des effets ; la distinction est dans le nom des deux routes, pas ici.
-const NOMBRE_D_ECRITURES = 85;
+// ⚠ 88 le 22 septembre 2026 : POST, PATCH et DELETE des règles de circulation.
+// Le GET de la même collection est compté plus haut, dans les appels.
+const NOMBRE_D_ECRITURES = 88;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {

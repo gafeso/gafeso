@@ -226,6 +226,34 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         description: 'Prêter, rendre, encaisser une amende — au code-barres.',
       },
       {
+        href: '/admin/regles-de-circulation',
+        libelle: 'Règles de prêt',
+        /**
+         * ⚠ SOUS GUICHET, ET PAS SOUS ADMINISTRATION — le précédent est écrit
+         * dans `/admin/regles-de-pret` lui-même : « le paramétrage des rappels
+         * vivait sur le même écran, mais son API exige une TROISIÈME
+         * permission ; le laisser ici aurait donné un bloc qui refuse à la
+         * personne même qui voit l'écran ».
+         *
+         * Les quatre routes `/circulation/rules` exigent `circulation.faire`,
+         * la fonction du guichet — pas `etablissement.regles`. Aujourd'hui
+         * l'Administrateur a les deux, donc l'écart ne se verrait pas : c'est
+         * un accord PAR COÏNCIDENCE, et il tombe au premier rôle personnalisé
+         * qui reçoit `etablissement.regles` sans `circulation.faire`.
+         */
+        fonctions: ['circulation.faire'],
+        /**
+         * ⚠ `amendes`, et ce n'est PAS un choix du front : les quatre routes
+         * portent `@ModuleRequis('amendes')`. Le couplage est discutable — une
+         * règle porte aussi la durée du prêt et le plafond d'emprunts, qui
+         * n'ont rien à voir avec les amendes — et il est signalé en passation.
+         * Tant qu'il tient, l'entrée doit disparaître avec le module, sans quoi
+         * elle mènerait à un écran que l'API refuse.
+         */
+        module: 'amendes',
+        description: 'Durée du prêt, plafonds et amende, par catégorie et par type.',
+      },
+      {
         href: '/admin/rappels',
         description: 'Les courriels de retard déjà partis, et leur réglage.',
         libelle: 'Rappels envoyés',

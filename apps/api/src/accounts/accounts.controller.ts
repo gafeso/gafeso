@@ -5,6 +5,8 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -113,6 +115,12 @@ export class AccountsController {
   }
 
   @Post('expected-students/import/apercu')
+  // ⚠ 200, PAS 201. `@Post` rend 201 « Created » par défaut, et cette route
+  // ne crée RIEN : elle lit un fichier et dit ce qui SE PASSERAIT. Un code
+  // qui annonce une création là où il n'y en a pas est un faux de la même
+  // famille qu'un libellé qui décrit un état que le code ne porte pas —
+  // sauf qu'il est lu par des machines, qui n'ont aucun moyen de recouper.
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, FunctionsGuard)
   @RequiresFunctions(FONCTIONS.OUTILS_LECTEURS)
   @ApiBearerAuth()

@@ -14,6 +14,7 @@ import { OpacSearchDto } from '../opac/dto/opac-search.dto';
 import { ReaderLoansQueryDto } from '../reader/dto/reader-loans-query.dto';
 import { MesEncadrementsDto } from '../encadrements/dto/mes-encadrements.dto';
 import { PaginationMoissonnageDto } from '../moissonnage/dto/source.dto';
+import { PaginationRecolementDto } from '../inventory/dto/inventory.dto';
 
 /**
  * UNE RÉPONSE QUI ANNONCE UN PARCOURS DOIT L'ACCEPTER.
@@ -72,6 +73,12 @@ const PARCOURS_ANNONCES: { service: string; dto: new () => object; parametre: st
   // DTO accepte bien `page`, c'est-à-dire que ces routes n'annoncent pas un
   // parcours qu'elles refuseraient, comme `/authors` l'a fait.
   { service: 'moissonnage/moissonnage.service.ts', dto: PaginationMoissonnageDto, parametre: 'page' },
+  // ⚠ PUIS 14 (dette 44) : le récolement. C'est la seule fonction du produit
+  // dont le périmètre nominal est le fonds ENTIER — `scope: ALL` sur 10 000
+  // exemplaires est l'usage NORMAL. Sa liste se parcourt donc catégorie par
+  // catégorie, et le témoin a fait son office : il a fallu revenir ici vérifier
+  // que le DTO accepte `page`.
+  { service: 'inventory/inventory.service.ts', dto: PaginationRecolementDto, parametre: 'page' },
 ];
 
 /**
@@ -157,7 +164,7 @@ describe("L'instrument : le relevé des parcours annoncés", () => {
     // parcours — les comptes rendus d'une source et ses collisions — servis par
     // un seul DTO, donc un seul fichier au relevé. Même office : il a fallu
     // revenir vérifier que ce DTO accepte `page`.
-    expect(trouves.length).toBe(13);
+    expect(trouves.length).toBe(14);
   });
 
   it('⚠ il ne compte PAS un `totalPages` cité dans un commentaire', () => {

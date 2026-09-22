@@ -154,7 +154,11 @@ describe('la carte des écrans', () => {
   it('⚠ témoin de COMPTE : la carte couvre bien tous les écrans', () => {
     // Un compte, pas une présence : il convoque quelqu'un le jour où un écran
     // s'ajoute, et c'est ce jour-là qu'on décide s'il a une porte.
-    expect(ecransSurLeDisque().length).toBe(47);
+    // ⚠ 48 depuis le 22 septembre 2026 : `/admin/regles-de-circulation`
+    // (dette n° 15). Il a une porte — onglet Guichet, fonction
+    // `circulation.faire`, module `amendes` — et c'est ce témoin qui a posé la
+    // question au bon moment.
+    expect(ecransSurLeDisque().length).toBe(48);
   });
 
   it('le document sur disque est à jour', () => {

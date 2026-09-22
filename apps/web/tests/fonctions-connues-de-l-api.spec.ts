@@ -109,7 +109,10 @@ describe('l’administrateur voit TOUT', () => {
     // métier. Elle n'est pas une entrée NEUVE — elle existait, ailleurs. Ce
     // compte mesure la barre, pas le produit : une entrée qui déménage le fait
     // bouger, et c'est ce qu'on veut qu'il signale.
-    expect(toutes.length).toBe(25);
+    // ⚠ 26 le 22 septembre 2026 : `/admin/regles-de-circulation` (dette
+    // n° 15). Entrée NEUVE, pas un déménagement — ses quatre routes existaient
+    // et aucun écran ne les appelait.
+    expect(toutes.length).toBe(26);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 

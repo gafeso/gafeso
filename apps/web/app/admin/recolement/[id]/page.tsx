@@ -455,13 +455,36 @@ export default function RecolementSessionPage() {
 
             {report.missing.length > 0 && (
               <ReportList
-                title="Manquants (attendus, non scannés)"
+                title={LIBELLES.rapportRecolement.manquants}
                 rows={report.missing.map((i) => [i.barcode, i.callNumber ?? '—', i.title, i.status])}
+              />
+            )}
+            {/*
+              ⚠ « VUS » MANQUAIT, et c'est la seule des quatre catégories que
+              l'écran ne montrait pas. Le COMPTE était là, dans la tuile verte ;
+              la LISTE — servie par l'API, déclarée dans le type juste
+              au-dessus — était jetée.
+
+              Ce n'est pas un choix d'affichage : une bibliothécaire qui veut
+              vérifier qu'un exemplaire précis a bien été scanné ne pouvait que
+              constater son absence de « Manquants », ce qui n'est pas la même
+              chose quand le périmètre est partiel (une session par salle ne
+              attend pas tout le fonds).
+
+              ⚠ Et elle ne coûte RIEN de plus : `GET /report` transporte déjà
+              les quatre listes. La réduction de charge viendra du chemin
+              PAGINÉ (`counts` + `items/:categorie`), qui attend que le backend
+              le pousse — voir la passation du 22 septembre.
+            */}
+            {report.seen.length > 0 && (
+              <ReportList
+                title={LIBELLES.rapportRecolement.vus}
+                rows={report.seen.map((i) => [i.barcode, i.callNumber ?? '—', i.title])}
               />
             )}
             {report.unexpected.length > 0 && (
               <ReportList
-                title="Inattendus (inconnus ou hors périmètre)"
+                title={LIBELLES.rapportRecolement.inattendus}
                 rows={report.unexpected.map((u) => [
                   u.barcode,
                   u.result === 'UNKNOWN' ? 'Code inconnu' : 'Hors périmètre',
@@ -470,7 +493,7 @@ export default function RecolementSessionPage() {
             )}
             {report.onLoan.length > 0 && (
               <ReportList
-                title="En prêt (absents légitimes)"
+                title={LIBELLES.rapportRecolement.enPret}
                 rows={report.onLoan.map((i) => [i.barcode, i.callNumber ?? '—', i.title])}
               />
             )}

@@ -152,7 +152,7 @@ export class MailService {
 
   /**
    * Réservation disponible : le document réservé est mis de côté au comptoir.
-   * PROPAGE l'erreur SMTP (l'appelant gère l'idempotence via holds.notifiedAt).
+   * PROPAGE l'erreur SMTP (l'appelant gère l'idempotence via holds.notificationTenteeA).
    */
   async sendHoldAvailable(
     email: string,
