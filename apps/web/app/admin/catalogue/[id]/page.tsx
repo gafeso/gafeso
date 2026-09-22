@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { dateLisible, lireEmbargo, pourChampDate } from '@/lib/embargo';
 import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -51,6 +52,14 @@ interface RecordDetail {
   defenseUniversity: string | null;
   defensePlace: string | null;
   summary: string | null;
+  /**
+   * ⚠ SERVI DEPUIS TOUJOURS, DÉCLARÉ AUJOURD'HUI. `getRecord` rend la ligne
+   * entière (`findUnique` + `include`, aucun `select`), donc cette colonne
+   * arrivait déjà — le type du front ne la nommait pas, donc personne ne
+   * pouvait la montrer. C'est « une colonne SERVIE que personne ne montre », et
+   * le moment de la voir est celui-ci : quand un écran consomme la route.
+   */
+  embargoUntil: string | null;
   keywords: string[];
   items: Item[];
 }
@@ -123,6 +132,7 @@ export default function AdminRecordPage() {
     defenseUniversity: '',
     defensePlace: '',
     summary: '',
+    embargoUntil: '',
   });
   const [contributors, setContributors] = useState<ContributorRow[]>(emptyContributors());
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -166,6 +176,10 @@ export default function AdminRecordPage() {
       titleComplement: record.titleComplement ?? '',
       isbn: record.isbn ?? '',
       publishYear: record.publishYear?.toString() ?? '',
+      // `<input type="date">` exige AAAA-MM-JJ, en heure LOCALE.
+      embargoUntil: record.embargoUntil
+        ? pourChampDate(new Date(record.embargoUntil))
+        : '',
       category: record.category ?? '',
       recordType: record.recordType,
       publisher: record.publisher ?? '',
@@ -225,6 +239,11 @@ export default function AdminRecordPage() {
             isbn: recordForm.isbn || undefined,
             publishYear: recordForm.publishYear ? Number(recordForm.publishYear) : undefined,
             category: recordForm.category || undefined,
+            // ⚠ `null`, PAS `undefined`. Le DTO distingue les deux : `undefined`
+            // laisse la valeur en place, `null` l'EFFACE. Un champ vidé par la
+            // bibliothécaire doit lever l'embargo — avec `undefined`, elle
+            // croirait l'avoir levé et il tiendrait toujours.
+            embargoUntil: recordForm.embargoUntil || null,
             recordType: recordForm.recordType,
             summary: recordForm.summary,
             ...(defense
@@ -378,6 +397,34 @@ export default function AdminRecordPage() {
             {record.category ? ` · ${record.category}` : ''} · {record.recordType}
             {record.isbn ? ` · ISBN ${record.isbn}` : ''}
           </p>
+          {/*
+            ⚠ L'EMBARGO SE VOIT SUR LA FICHE, pas seulement dans le formulaire.
+            Une bibliothécaire qui vient d'en poser un doit le RELIRE, et une
+            collègue qui ouvre la notice doit le savoir sans entrer en édition.
+            Sans cette ligne, la moitié « poser » existait et la moitié « voir »
+            manquait — et c'est ce découpage-là qui fabrique un document qu'on
+            croit protégé.
+
+            ⚠ INFORMATION, pas avertissement : un embargo est un état VOULU.
+          */}
+          {(() => {
+            const embargo = lireEmbargo(record.embargoUntil);
+            if (embargo.etat === 'aucun') return null;
+            return (
+              <p className="mt-2 text-sm text-muted">
+                {embargo.etat === 'en-cours' ? (
+                  <>
+                    <span className="font-semibold text-ink">
+                      {LIBELLES.embargo.enCours(dateLisible(embargo.jusquAu))}
+                    </span>{' '}
+                    {LIBELLES.embargo.enCoursSuite}
+                  </>
+                ) : (
+                  LIBELLES.embargo.echu(dateLisible(embargo.depuis))
+                )}
+              </p>
+            );
+          })()}
         </div>
         {!editingRecord && (
           <div className="flex flex-wrap items-center gap-2">
@@ -557,6 +604,28 @@ export default function AdminRecordPage() {
                 value={recordForm.summary}
                 onChange={(e) => setRecordForm({ ...recordForm, summary: e.target.value })}
               />
+            </label>
+            <label className="col-span-2 flex flex-col gap-1.5 text-sm font-medium">
+              {LIBELLES.embargo.champ}
+              <Input
+                type="date"
+                className="max-w-xs"
+                value={recordForm.embargoUntil}
+                onChange={(e) =>
+                  setRecordForm({ ...recordForm, embargoUntil: e.target.value })
+                }
+              />
+              <span className="text-xs font-normal text-muted">
+                {LIBELLES.embargo.champAide}
+              </span>
+              {/* ⚠ La levée se DIT. Vider un champ et enregistrer est un geste
+                  dont l'effet n'est pas évident : sans cette ligne, on peut
+                  croire qu'il faut autre chose pour lever un embargo. */}
+              {recordForm.embargoUntil === '' && record.embargoUntil && (
+                <span className="text-xs font-normal text-ocre">
+                  {LIBELLES.embargo.lever}
+                </span>
+              )}
             </label>
             <div className="col-span-2 flex gap-2">
               <Button type="submit" disabled={savingRecord}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { dateLisible, lireEmbargo } from '@/lib/embargo';
 import { LIBELLES } from '@/lib/libelles';
 
 /** Les textes de la réservation, côté LECTEUR. */
@@ -32,6 +33,14 @@ interface RecordDetail {
   contributors: { name: string; role: string; position: number; authorId: string | null }[];
   isbn: string | null;
   publishYear: number | null;
+  /**
+   * ⚠ SERVI PAR LE CONTRAT DE NOTICE PUBLIQUE, et son commentaire dit
+   * pourquoi : « une notice dont le fichier refuse SANS DIRE POURQUOI serait
+   * exactement le faux silencieux que ce dépôt passe son temps à corriger ».
+   * Le front ne le déclarait pas, donc personne ne le montrait — la date était
+   * servie à vide depuis le premier jour.
+   */
+  embargoUntil: string | null;
   language: string;
   category: string | null;
   publisher: string | null;
@@ -185,6 +194,29 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
           <Badge>{LIBELLES.ficheNotice.badgeIndisponible}</Badge>
         )}
       </div>
+
+      {/*
+        ⚠ DIT INDÉPENDAMMENT DU REFUS DE LECTURE, et c'est délibéré. Le message
+        d'accès (`access.message`) ne s'affiche que pour un lecteur CONNECTÉ et
+        sur une notice qui porte un fichier ; l'embargo, lui, est un fait de la
+        notice. Un visiteur, ou un lecteur devant une notice sans fichier, doit
+        pouvoir comprendre pourquoi ce document n'est pas encore lisible.
+
+        ⚠ Et il ne contredit pas le refus : les deux disent la même date, et le
+        refus reste à l'endroit du GESTE, où il sert.
+      */}
+      {(() => {
+        const embargo = lireEmbargo(record.embargoUntil);
+        if (embargo.etat !== 'en-cours') return null;
+        return (
+          <p className="mt-3 rounded-lg border border-line bg-paper px-4 py-3 text-sm">
+            <span className="font-semibold text-ink">
+              {LIBELLES.embargo.enCours(dateLisible(embargo.jusquAu))}
+            </span>{' '}
+            <span className="text-muted">{LIBELLES.embargo.enCoursSuite}</span>
+          </p>
+        );
+      })()}
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
         {(() => {

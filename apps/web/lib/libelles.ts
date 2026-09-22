@@ -307,6 +307,53 @@ export const LIBELLES = {
    * avec une copie numérique (le cas « purement numérique »), 119 sans rien.
    * La phrase convient aux deux : dans les deux cas, il n'y a pas d'exemplaire.
    */
+  /**
+   * L'EMBARGO — poser une date, et la DIRE.
+   *
+   * ⚠ LA FONCTIONNALITÉ EXISTAIT ENTIÈREMENT SAUF ICI. L'API accepte
+   * `embargoUntil` à la création et à la mise à jour, l'APPLIQUE à deux points
+   * de décision (l'accès en ligne et l'émission de licence hors-ligne), sert la
+   * date sur la notice publique avec un commentaire qui dit pourquoi, et a même
+   * séparé son refus de celui d'un droit manquant — pour que le lecteur sache
+   * qu'il doit ATTENDRE et non DEMANDER.
+   *
+   * Le front ne connaissait pas le mot : zéro occurrence, aucun champ, aucun
+   * affichage. Mesuré le 16 septembre 2026, et zéro notice sous embargo sur
+   * 8 480 — la fonctionnalité n'avait jamais pu être exercée par le produit.
+   *
+   * ⚠ LES DEUX MOITIÉS SONT UN SEUL LOT. Livrer le champ sans l'affichage
+   * fabrique le défaut que l'affichage corrige : une bibliothécaire croit avoir
+   * protégé un document, et le lecteur voit un refus sans raison — il conclut à
+   * une panne et réessaie.
+   */
+  embargo: {
+    /** Le champ de catalogage. Vide = pas d'embargo ; l'effacer le lève. */
+    champ: 'Sous embargo jusqu’au',
+    champAide:
+      'Laissez vide s’il n’y a pas d’embargo. Le document reste DÉCRIT dans le catalogue ; seul son fichier devient inaccessible jusqu’à cette date.',
+    /** ⚠ Effacer la date est un geste ordinaire, pas une suppression. */
+    lever: 'Effacer la date lève l’embargo à l’enregistrement.',
+
+    /**
+     * ⚠ INFORMATION, JAMAIS AVERTISSEMENT. Un embargo est un état VOULU — une
+     * thèse sous embargo est la situation normale d'un travail récent. Le
+     * signaler en jaune qualifierait d'anomalie ce que la bibliothécaire vient
+     * de poser exprès. On réserve l'avertissement à ce que personne n'a pu
+     * vouloir.
+     */
+    enCours: (date: string) => `Sous embargo jusqu’au ${date}.`,
+    /**
+     * ⚠ CE QUE LA PHRASE DOIT CONTINUER DE DIRE, et c'est la raison pour
+     * laquelle l'API sert la date : un fichier qui refuse SANS DIRE POURQUOI
+     * est le faux silencieux que ce dépôt passe son temps à corriger. Le
+     * lecteur doit comprendre qu'il n'a rien à demander — seulement à attendre.
+     */
+    enCoursSuite:
+      'La description reste consultable ; le fichier ne l’est pas encore.',
+    /** Une date PASSÉE ne se dit pas « sous embargo » : il est levé. */
+    echu: (date: string) => `Embargo échu le ${date}.`,
+  },
+
   ficheNotice: {
     /**
      * ⚠ PAS UN BOUTON GRISÉ. Un bouton désactivé se lit comme une panne, et un
