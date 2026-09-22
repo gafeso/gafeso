@@ -20,6 +20,22 @@ jobs:
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
+        with:
+          # ⚠ HISTORIQUE COMPLET, ET CE N'EST PAS UNE COMMODITÉ.
+          #
+          # `actions/checkout` clone en PROFONDEUR 1 par défaut. Or des tests du
+          # front datent les écrans avec `git log --diff-filter=A` pour savoir
+          # lesquels relèvent d'une convention postérieure au 10/09/2026. Sans
+          # historique, la date est vide, la discrimination s'effondre, et TOUS
+          # les écrans entrent dans la population — 28 échecs, dont le message
+          # ne nomme jamais la cause.
+          #
+          # ⚠ Mesuré le 22/09/2026 : la suite web passe sur un clone COMPLET du
+          # dépôt public (101 fichiers, 1 022 cas) et échoue sur un `--depth 1`.
+          # La CI ne lance aujourd'hui que les tests API, donc elle est verte —
+          # mais y ajouter les tests web est un geste évident, et il tomberait
+          # sur un piège qui n'a rien à voir avec ce qu'on aurait changé.
+          fetch-depth: 0
 
       - name: Installer Node.js 20
         uses: actions/setup-node@v4
