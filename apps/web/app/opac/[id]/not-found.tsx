@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import { LIBELLES } from '@/lib/libelles';
 
 /**
@@ -10,7 +11,7 @@ import { LIBELLES } from '@/lib/libelles';
  */
 export default function NoticeIntrouvable() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 text-center">
+    <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-12 text-center">
       <h1 className="font-serif text-2xl font-bold">{LIBELLES.opac.noticeIntrouvableTitre}</h1>
       <p className="mt-2 text-sm text-muted">{LIBELLES.opac.noticeIntrouvableTexte}</p>
       <Link

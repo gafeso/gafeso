@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -62,7 +63,7 @@ export function FicheAuteur({ initial = null }: { initial?: AuthorDetail | null 
 
   if (error) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
         </p>
@@ -72,7 +73,7 @@ export function FicheAuteur({ initial = null }: { initial?: AuthorDetail | null 
   if (!author) return null;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main id={ID_CONTENU} className="mx-auto max-w-3xl px-6 py-8">
       <Link href="/opac/auteurs" className="text-sm text-muted hover:text-ink">
         ← Tous les auteurs
       </Link>

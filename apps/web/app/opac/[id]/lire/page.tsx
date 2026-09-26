@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ID_CONTENU } from '@/components/lien-evitement';
 import { LIBELLES } from '@/lib/libelles';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -51,7 +52,7 @@ export default function LirePage() {
 
   if (error === ANONYMOUS) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <main id={ID_CONTENU} className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-muted">
           La lecture en ligne est réservée aux membres.{' '}
           <Link href="/login" className="font-semibold text-ocre underline">
@@ -75,7 +76,7 @@ export default function LirePage() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <main id={ID_CONTENU} className="mx-auto max-w-lg px-6 py-16 text-center">
         <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
         </p>
@@ -91,7 +92,7 @@ export default function LirePage() {
 
   if (!data)
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <main id={ID_CONTENU} className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-muted">{LIBELLES.chargements.document}</p>
       </main>
     );

@@ -234,6 +234,65 @@ Le script est idempotent : le relancer (ex. après un ajout de données de
 démo dans une future version) ne régénère jamais un mot de passe/lien pour
 un compte déjà existant.
 
+### ⚠ Reprendre l'accès à un compte dont le mot de passe est perdu
+
+L'idempotence ci-dessus a une conséquence qu'il faut nommer : **relancer le
+provisionnement ne vous rendra pas l'accès.** Le compte existe, donc le script
+le laisse intact et n'émet aucun lien. C'est le bon comportement — il ne faut
+pas qu'un second passage réinitialise les identifiants d'une école en service —
+et c'est une impasse le jour où le mot de passe est perdu.
+
+Le chemin normal pour obtenir un lien de définition est l'activation d'un compte
+par quelqu'un qui porte `comptes.activer`, donc une **session authentifiée** :
+fermé, précisément, quand c'est le mot de passe de l'administrateur qui manque.
+Aucune route plateforme (`x-admin-api-key`) ne réémet de lien.
+
+`scripts/reprendre-acces-comptes.mjs` couvre ce cas, et **il n'écrit aucun mot
+de passe** : il émet un lien à usage unique, et c'est le produit qui enregistre
+le mot de passe quand la personne le choisit — après avoir validé sa longueur et
+consommé le jeton. Rien de secret ne transite donc par la ligne de commande,
+l'environnement, ou l'historique du shell.
+
+**1. Voir les comptes** — lecture seule, n'écrit rien. Les adresses d'une
+instance ne sont pas devinables : elles sont dérivées de `APP_URL` au
+provisionnement et peuvent avoir été surchargées par `PROVISION_ADMIN_EMAIL`.
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  exec api node scripts/reprendre-acces-comptes.mjs --ecole <slug> --lister
+```
+
+La colonne `MDP` dit si le compte a déjà défini un mot de passe.
+
+**2. Émettre un lien pour les comptes que vous nommez.** Le script échoue —
+**avant d'écrire quoi que ce soit** — si l'une des adresses n'existe pas : un
+script qui émet deux liens sur trois laisse un état que personne ne peut
+décrire.
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  exec api node scripts/reprendre-acces-comptes.mjs \
+  --ecole <slug> <adresse-1> <adresse-2>
+```
+
+Il imprime un lien par compte, avec son échéance. **Ils ne sont pas réaffichés.**
+
+⚠ Trois choses à savoir :
+- les liens valent **24 h** et servent **une seule fois** — un lien rejoué est
+  refusé, et c'est ce qui les rend sûrs ;
+- ils s'ouvrent dans un navigateur sur le domaine de `APP_URL` : si le front est
+  indisponible, réparez-le d'abord ;
+- un compte `SUSPENDED` ou `PENDING` reçoit un lien qui **fonctionnera** — le
+  script vous en avertit, parce que reprendre l'accès d'un compte suspendu
+  n'est probablement pas ce que vous vouliez.
+
+⚠ **Le super-admin plateforme ne passe pas par là.** Il vit dans le schéma
+`public`, se connecte par `POST /admin/login`, et n'a pas de lien de définition.
+Son mot de passe perdu se retrouve dans le coffre où le provisionnement vous a
+demandé de le noter — ou, à défaut, il se repose par la même mécanique
+appliquée au schéma `public`, ce que ce script ne fait volontairement pas :
+c'est un compte de plateforme, pas d'école, et son périmètre n'est pas le même.
+
 Le domaine dérivé de `APP_URL` doit correspondre au `Host` que le navigateur
 envoie réellement (donc `PUBLIC_DOMAIN`, pas `API_DOMAIN`) : c'est lui qui
 résout l'école courante (voir `TenancyService.resolveByHost`). Pour une

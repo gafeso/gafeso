@@ -35,6 +35,7 @@
 // PROVISION_ADMIN_FIRSTNAME, PROVISION_ADMIN_LASTNAME.
 
 import { PrismaClient } from '@prisma/client';
+import { emettreLienMotDePasse } from './lib/lien-mot-de-passe.mjs';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { loadEnvIfPresent } from './lib/load-env.mjs';
@@ -74,8 +75,6 @@ const PRIMARY_COLOR = process.env.PROVISION_PRIMARY_COLOR;
 
 // Mêmes constantes que AccountsService (apps/api/src/accounts/accounts.service.ts)
 // — même politique de mot de passe que le reste de l'application.
-const TOKEN_TTL_HOURS = 24;
-const TOKEN_BYTES = 32;
 const BCRYPT_ROUNDS = 10;
 
 const log = (msg) => console.log(`  • ${msg}`);
@@ -162,10 +161,11 @@ async function ensureSchoolAdmin(db) {
         activatedAt: new Date(),
       },
     });
-    const token = randomBytes(TOKEN_BYTES).toString('hex');
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_HOURS * 3600 * 1000);
-    await tx.passwordToken.create({ data: { userId: user.id, token, expiresAt } });
-    return `${APP_URL}/definir-mot-de-passe?token=${token}`;
+    // ⚠ Une seule implémentation du lien, partagée avec
+    // `reprendre-acces-comptes.mjs` : la durée de vie du jeton, sa taille et la
+    // forme de l'URL décrivent la MÊME chose des deux côtés.
+    const { url } = await emettreLienMotDePasse(tx, user.id, APP_URL);
+    return url;
   });
   printOnce('Administrateur école — lien à usage unique (24h)', ADMIN_EMAIL, [
     `lien : ${setPasswordUrl}`,

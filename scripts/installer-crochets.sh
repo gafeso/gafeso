@@ -214,6 +214,30 @@ fi
 
 # ── 2 · La suite doit être verte.
 #    ⚠ Jamais dans la même commande qu'une action : on lit, puis on décide.
+#
+# ⚠⚠ CETTE ÉTAPE RESSEMBLE À UNE REDONDANCE AVEC L'ÉTAPE 3, ET N'EN EST PAS UNE.
+#
+# L'étape 3 (`npm run test:base`) relance la suite ENTIÈRE avec `PG_LIVE=1` :
+# tout ce que fait l'étape 2, plus les gardes vivants. Le geste qui vient est
+# donc de supprimer celle-ci pour gagner du temps. NE LE FAITES PAS.
+#
+# Quand la base de développement est injoignable — une machine sans Docker, un
+# conteneur arrêté —, l'étape 3 AVERTIT et sort en 0, délibérément : un garde
+# qui n'a rien pu mesurer ne doit bloquer personne. Sans l'étape 2, plus RIEN
+# n'aurait alors vérifié la suite, et le push passerait sur du rouge.
+#
+# ⚠ Et le temps gagné serait nul ou presque. Mesuré le 22 septembre 2026 par
+# `git push --dry-run`, qui exécute ce crochet pour de vrai :
+#
+#     cache turbo chaud ......... 15,2 s
+#     cache turbo invalidé ...... 36,5 s   (le pire cas)
+#     dont la suite à froid ..... 18,6 s   (2 610 tests)
+#     dont les gardes vivants ... 11,9 s
+#
+# Une dette a été ouverte le 16 septembre sur « le crochet dépasse deux
+# minutes », puis RETIRÉE le 22 après cette mesure : le délai venait de l'outil
+# qui lançait la commande, pas d'ici. Un nombre non mesuré survit d'autant mieux
+# qu'il est précis.
 printf '%s…%s exécution de la suite avant publication\n' "$GRIS" "$FIN"
 SORTIE=$(npm test --silent 2>&1)
 CODE=$?

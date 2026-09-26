@@ -37,11 +37,46 @@ const lire = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
  * — les lignes de continuation d'un commentaire JSX ne portent aucun marqueur,
  * c'est précisément ce qui l'avait pris en défaut.
  */
+/**
+ * ⚠ PAR ÉTAT DE LIGNE, PLUS PAR EXPRESSION RÉGULIÈRE — 22 septembre 2026.
+ *
+ * L'ancienne version enchaînait trois `replace` multilignes, dont
+ * `\{\s*\/\*[\s\S]*?\*\/\s*\}` pour les commentaires JSX. Elle a mangé
+ * **2 262 caractères** de `mes-encadrements` — soixante-dix lignes, les deux
+ * `<main>` compris — parce qu'une ACCOLADE D'INTERFACE suivie d'un JSDoc lui
+ * ressemble mot pour mot :
+ *
+ *     interface Donnees {
+ *       /** ⚠ … *␟/          ← vu comme l'ouverture d'un `{\/* … *\/}`
+ *
+ * …et le non-gourmand se referme alors sur le PREMIER vrai `*␟/}` venu, ici
+ * soixante-dix lignes plus bas. Le fichier ne déclarait plus aucun `<main>`.
+ *
+ * ⚠ ET LE DÉFAUT ÉTAIT INVISIBLE tant que la population était une liste de cinq
+ * fichiers écrite à la main : aucun des cinq n'avait cette forme. C'est en
+ * DÉRIVANT la population qu'il est apparu — l'élargissement d'un garde éprouve
+ * l'instrument autant que le code.
+ *
+ * Le suivi d'état par ligne est la forme que ce dépôt a retenue le 11 septembre
+ * 2026, pour ce défaut exact, dans un autre garde.
+ */
 function sansCommentaires(src: string): string {
-  return src
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, ' ') // {/* … */} multilignes
-    .replace(/\/\*[\s\S]*?\*\//g, ' ') //             /* … */ multilignes
-    .replace(/^\s*\/\/.*$/gm, ' '); //                   // … en début de ligne
+  const gardees: string[] = [];
+  let dansCommentaire = false;
+  for (const ligne of src.split('\n')) {
+    const nette = ligne.trim();
+    if (dansCommentaire) {
+      if (nette.includes('*/')) dansCommentaire = false;
+      continue;
+    }
+    if (nette.startsWith('//')) continue;
+    if (nette.startsWith('/*') || nette.startsWith('{/*')) {
+      if (!nette.includes('*/')) dansCommentaire = true;
+      continue;
+    }
+    gardees.push(ligne);
+  }
+  return gardees.join('\n');
 }
 
 /**
@@ -76,14 +111,106 @@ const AVEC_NAVIGATION = [
   'app/page.tsx',
 ].filter((f, i, t) => t.indexOf(f) === i);
 
-/** Les fichiers qui rendent un `<main>` atteint par ce lien. */
-const PORTEURS_DE_CIBLE = [
-  'components/admin-shell.tsx',
-  'app/page.tsx',
-  'app/opac/page.tsx',
-  'app/opac/auteurs/page.tsx',
-  'app/opac/[id]/fiche-notice.tsx',
+/**
+ * Les fichiers qui rendent un `<main>` — DÉRIVÉS, plus déclarés.
+ *
+ * ⚠ CETTE LISTE ÉTAIT ÉCRITE À LA MAIN : cinq chemins. Mesuré le 22 septembre
+ * 2026 : **23 fichiers rendent un `<main>`**, et la moitié gardée du garde en
+ * couvrait cinq. Le reproche que l'en-tête de ce fichier adresse aux listes
+ * tenues à la main — « elle SERA fausse » — valait donc pour sa propre seconde
+ * moitié.
+ *
+ * ⚠ ET 23 N'ÉTAIT PAS 23 DÉFAUTS. Le tri, qui est tout l'intérêt de la mesure :
+ *
+ * · **3 défauts réels** — `/opac/[id]/lire`, `/opac/auteurs/[id]`,
+ *   `/opac/[id]/not-found` : leur `<main>` ne portait pas `id={ID_CONTENU}`,
+ *   et le layout `/opac` rend pourtant le lien. **Le lien d'évitement de ces
+ *   trois pages ne menait nulle part.** Corrigés le 22 septembre.
+ * · **2 défauts d'une autre nature** — `/admin/catalogue/[id]` et
+ *   `/admin/collections/[id]` rendaient leur PROPRE `<main>` dans leur branche
+ *   de chargement, IMBRIQUÉ dans celui de la coque. Corrigés aussi.
+ * · **4 écrans sans aucune barre** — `login`, `inscription`,
+ *   `definir-mot-de-passe`, `e/[slug]` : pas de navigation, donc pas de lien
+ *   d'évitement, donc aucune cible à porter. Ils sont EXCLUS par mesure, pas
+ *   par liste.
+ * · le reste : des `<main>` cités dans des COMMENTAIRES.
+ */
+function mainsRendus(source: string): string[] {
+  return sansCommentaires(source).match(/<main\b[^>]*>/g) ?? [];
+}
+
+function fichiersRendantUnMain(): string[] {
+  // ⚠ Un `<main>` cité dans un COMMENTAIRE n'est pas un `<main>` rendu —
+  // `admin-shell` en porte un qui RACONTE l'absence corrigée en septembre, et
+  // deux écrans du personnel portent désormais la note « pas de main ici ».
+  return fichiersRendant('<main ').filter((f) => mainsRendus(lire(f)).length > 0);
+}
+
+/**
+ * ⚠ DÉCLARÉS SANS BARRE, DONC SANS CIBLE — et c'est MESURÉ, pas supposé : ces
+ * quatre écrans ne rendent ni `<Header>`, ni `<nav>`, ni `<LienDEvitement>`.
+ * Le jour où l'un d'eux gagne une barre, le témoin d'en dessous le dit.
+ */
+const SANS_BARRE = [
+  'app/login/page.tsx',
+  'app/inscription/page.tsx',
+  'app/definir-mot-de-passe/page.tsx',
+  'app/e/[slug]/page.tsx',
 ];
+
+const PORTEURS_DE_CIBLE = fichiersRendantUnMain().filter((f) => !SANS_BARRE.includes(f));
+
+describe('l’instrument, avant ce qu’il mesure', () => {
+  it('⚠ témoin SYNTHÉTIQUE — une accolade suivie d’un JSDoc n’est pas un commentaire JSX', () => {
+    // ⚠ LE DÉFAUT EXACT QUE L'ANCIENNE VERSION PORTAIT, en entrée fabriquée :
+    // elle voyait dans `interface X {` + `/** … */` l'ouverture d'un `{/* … */}`
+    // et se refermait sur le premier `*/}` venu — soixante-dix lignes plus bas,
+    // emportant tout ce qu'il y avait entre les deux.
+    //
+    // Le témoin est un BLOC D'ENTRÉE, pas une valeur : il passe par tout le
+    // chemin de l'instrument, et c'est la seule forme qui éprouve les lignes
+    // que la dernière n'exerce pas.
+    const bloc = [
+      'interface Donnees {',
+      '  /** une note. */',
+      '  champ: boolean;',
+      '}',
+      'const a = <main id={ID_CONTENU}>x</main>;',
+      "        {/* un vrai commentaire JSX",
+      '            sur plusieurs lignes */}',
+      'const b = <main id={ID_CONTENU}>y</main>;',
+    ].join('\n');
+    expect(mainsRendus(bloc)).toHaveLength(2);
+  });
+
+  it('⚠ et un `<main>` cité dans un commentaire ne compte pas', () => {
+    const bloc = ['// <main> manquait ici', '/* <main> aussi */', 'const c = 1;'].join('\n');
+    expect(mainsRendus(bloc)).toHaveLength(0);
+  });
+
+  it('témoin de COMPTE — la population dérivée n’est ni vide ni la liste d’avant', () => {
+    // Cinq chemins étaient écrits à la main ; 23 fichiers rendent un `<main>`,
+    // dont quatre écrans sans barre, exclus par mesure.
+    expect(PORTEURS_DE_CIBLE.length).toBeGreaterThan(8);
+    expect(PORTEURS_DE_CIBLE).toContain('components/admin-shell.tsx');
+    // ⚠ Les trois qui manquaient, et dont le lien ne menait nulle part.
+    expect(PORTEURS_DE_CIBLE).toContain('app/opac/[id]/lire/page.tsx');
+    expect(PORTEURS_DE_CIBLE).toContain('app/opac/[id]/not-found.tsx');
+    // Témoin d'ABSENCE sur la confusion plausible : un écran SANS barre.
+    expect(PORTEURS_DE_CIBLE).not.toContain('app/login/page.tsx');
+  });
+
+  it('⚠ les écrans déclarés SANS BARRE n’en ont toujours aucune', () => {
+    // Refusé dans les deux sens : le jour où l'un d'eux gagne un en-tête, il
+    // doit sortir de cette liste et recevoir sa cible.
+    for (const f of SANS_BARRE) {
+      const src = lire(f);
+      expect(src, `${f} porte désormais une barre : retirez-le de SANS_BARRE`).not.toMatch(
+        /<Header|<nav\b|LienDEvitement/,
+      );
+    }
+  });
+});
 
 describe('⚠ la population est DÉRIVÉE, pas déclarée', () => {
   it('elle voit les écrans que la liste écrite à la main ratait', () => {

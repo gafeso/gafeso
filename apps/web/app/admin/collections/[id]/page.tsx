@@ -294,10 +294,15 @@ export default function CollectionDetailPage() {
     return <Alert tone="error">{error}</Alert>;
   }
   if (!collection)
+    // ⚠ PAS DE `<main>` ICI — la coque du personnel en fournit un, avec la
+    // cible du lien d'évitement. En rendre un second l'IMBRIQUAIT dans le
+    // premier : deux repères de contenu sur la même page, dont un que le lien
+    // ne peut pas atteindre. `rapport-annuel` porte la même note depuis sa
+    // naissance ; ces deux branches dégradées l'avaient manquée.
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <div className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-muted">{LIBELLES.chargements.collection}</p>
-      </main>
+      </div>
     );
 
   return (
