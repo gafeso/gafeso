@@ -10,8 +10,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ModuleActifGuard } from '../modules/module-actif.guard';
-import { ModuleRequis } from '../modules/module-requis.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModulesService } from '../modules/modules.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
@@ -260,10 +258,59 @@ export class CirculationController {
     return this.circulation.cancelHold(this.db(tenant), id);
   }
 
-  // ── Règles ──────────────────────────────────────────────────
+  // ── Règles de circulation ───────────────────────────────────
+  //
+  // ⚠ DEUX ÉCARTS CORRIGÉS LE 26/09/2026, tous deux signalés par la session
+  // front en écrivant l'écran des règles de prêt. Aucun ne se voyait.
+  //
+  // ① LE MODULE `amendes` NE GOUVERNE PLUS CES ROUTES. `CirculationRule` porte
+  //    QUATRE valeurs et trois n'ont rien à voir avec les amendes :
+  //    `loanPeriodDays`, `maxRenewals`, `maxCheckouts`. Une école qui éteint
+  //    `amendes` — ce que le produit présente comme un choix légitime — perdait
+  //    la possibilité de régler ses DURÉES DE PRÊT et ses plafonds.
+  //
+  //    ⚠ Et l'incohérence était mesurable : `CirculationService` lit
+  //    `circulationRule` DIRECTEMENT, sans passer par ces routes ni par le
+  //    garde de module. Les valeurs restaient donc APPLIQUÉES au guichet ; seul
+  //    leur réglage devenait inatteignable. Un paramètre qui agit et qu'on ne
+  //    peut plus voir est pire qu'un paramètre absent.
+  //
+  //    `finePerDay` reste réglable module éteint, et c'est sans effet :
+  //    `tarifApplicable` fige l'amende à zéro quand `amendes` est inactif.
+  //
+  // ② LIRE N'EST PAS ÉCRIRE. Les quatre routes exigeaient `circulation.faire`,
+  //    la fonction du GUICHET, par le décorateur de classe. Or fixer la durée
+  //    d'un prêt est un acte de PARAMÉTRAGE D'ÉTABLISSEMENT.
+  //
+  //    ⚠ Ce n'est pas une politique inventée : l'écran voisin
+  //    `/admin/regles-de-pret` exige DÉJÀ `etablissement.regles` pour le même
+  //    genre de réglage. Le `circulation.faire` sur les écritures était
+  //    l'anomalie, pas la référence.
+  //
+  //    ⚠ L'écart ne se voyait pas parce que l'Administrateur porte les DEUX :
+  //    un accord par coïncidence, qui tombait au premier rôle personnalisé
+  //    recevant `etablissement.regles` sans `circulation.faire`.
+  //
+  //    LES QUATRE exigent `etablissement.regles`, GET compris.
+  //
+  //    ⚠ J'AVAIS D'ABORD DÉCOUPÉ LECTURE / ÉCRITURE — GET sous
+  //    `circulation.faire`, les écritures sous `etablissement.regles`. C'était
+  //    une supposition, et `argument-atteignable.spec.ts` l'a refusée : la
+  //    liste qui fournit l'`id` doit être atteignable sous la fonction qui le
+  //    CONSOMME, sinon un rôle personnalisé portant `etablissement.regles`
+  //    seule ne saurait jamais quel identifiant modifier.
+  //
+  //    La mesure a tranché : UN SEUL écran appelle ces quatre routes
+  //    (`app/admin/regles-de-circulation`), et le guichet ne lit PAS cette
+  //    route — `CirculationService` calcule ses échéances en interne. Un écran,
+  //    une fonction.
+  //
+  //    ⚠ RÉTRÉCISSEMENT ASSUMÉ, et il porte sur un seul rôle : le
+  //    Bibliothécaire perd l'accès aux règles de circulation, lecture comprise.
+  //    Tout le reste du guichet lui reste. L'écran est sous `/admin/`, et son
+  //    voisin `/admin/regles-de-pret` exigeait déjà `etablissement.regles`.
   @Post('rules')
-  @UseGuards(ModuleActifGuard)
-  @ModuleRequis('amendes')
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_REGLES)
   @ApiOperation({
     summary: 'Créer une règle de circulation',
     description:
@@ -278,16 +325,14 @@ export class CirculationController {
   }
 
   @Get('rules')
-  @UseGuards(ModuleActifGuard)
-  @ModuleRequis('amendes')
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_REGLES)
   @ApiOperation({ summary: 'Lister les règles de circulation' })
   async listRules(@CurrentTenant() tenant: ResolvedTenant | null) {
     return this.circulation.listRules(this.db(tenant));
   }
 
   @Patch('rules/:id')
-  @UseGuards(ModuleActifGuard)
-  @ModuleRequis('amendes')
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_REGLES)
   @ApiOperation({ summary: 'Modifier une règle de circulation' })
   async updateRule(
     @CurrentTenant() tenant: ResolvedTenant | null,
@@ -298,8 +343,7 @@ export class CirculationController {
   }
 
   @Delete('rules/:id')
-  @UseGuards(ModuleActifGuard)
-  @ModuleRequis('amendes')
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_REGLES)
   @ApiOperation({ summary: 'Supprimer une règle de circulation' })
   async deleteRule(
     @CurrentTenant() tenant: ResolvedTenant | null,

@@ -356,6 +356,36 @@ export const LIBELLES = {
 
   ficheNotice: {
     /**
+     * ⚠ LES REPLIS SONT DES TEXTES VISIBLES — et ce sont les seuls que
+     * l'utilisateur lit quand tout va mal. Ils étaient écrits en dur dans
+     * l'écran : ils ne s'affichent que si l'API ne rend pas de message, donc
+     * au pire moment, et c'est exactement pour ça que personne ne les relit.
+     */
+    reservationImpossible: 'Réservation impossible.',
+    noticeIndisponible: 'Notice indisponible.',
+    accesIndisponible: 'Accès indisponible pour le moment.',
+    reserver: 'Réserver ce document',
+    reservationEnCours: 'Réservation…',
+    /** Statut d'exemplaire, dans les mots du lecteur. */
+    enTransit: 'En transit',
+    /**
+     * ⚠ ELLE PORTE UN NOMBRE, donc elle est une FONCTION : une langue qui place
+     * ses mots autrement n'a rien à recomposer. Et la position compte — « vous
+     * êtes en file » sans rang laisse croire qu'on est premier.
+     */
+    reservationEnregistree: (position: number) =>
+      `Réservation enregistrée — vous êtes en position ${position} dans la file.`,
+    /**
+     * ⚠ TROIS CADENAS, TROIS PHRASES, et ce n'est pas une répétition : chacune
+     * nomme CE QUI est réservé aux membres — la disponibilité, les exemplaires,
+     * la lecture. Les fondre en « réservé aux membres » ferait trois fois la
+     * même phrase sur un même écran, et le lecteur ne saurait plus laquelle
+     * répond à sa question.
+     */
+    membresDisponibilite: 'Disponibilité réservée aux membres',
+    membresExemplaires: 'Exemplaires et disponibilité réservés aux membres',
+    membresLecture: 'Lecture en ligne réservée aux membres',
+    /**
      * ⚠ PAS UN BOUTON GRISÉ. Un bouton désactivé se lit comme une panne, et un
      * lecteur d'écran n'annonce qu'« bouton, non disponible ». La phrase dit ce
      * qui EST, et elle ne propose rien qu'on ne puisse pas tenir.
@@ -885,6 +915,28 @@ export const LIBELLES = {
    * qui sert à monter un dossier de promotion, et sans rien pouvoir y faire,
    * puisque le rattachement se pose au catalogage.
    */
+  /**
+   * LE VOCABULAIRE DE `recordType`, dans les mots du lecteur.
+   *
+   * ⚠ IL NE SE CONFOND PAS AVEC `typesDeDepot`, et c'est une DISTINCTION, pas
+   * une duplication. `Deposit.documentType` porte cinq valeurs — le vocabulaire
+   * académique du dépôt. `BiblioRecord.recordType` en porte d'autres, dont
+   * `ouvrage`, parce qu'il décrit TOUT le catalogue. Les fondre ferait
+   * apparaître « Ouvrage » dans un menu de dépôt de thèse — c'est le cas
+   * d'école de « deux tableaux qui se ressemblent ne sont pas le même
+   * tableau », et les deux tables portent la note depuis le 13 septembre 2026.
+   *
+   * Sorti de l'écran le 22 septembre : la distinction reste, le texte non.
+   */
+  typesDeNotice: {
+    memoire: 'Mémoire',
+    these: 'Thèse',
+    licence: 'Mémoire de licence',
+    master: 'Mémoire de master',
+    these_unique: 'Thèse unique',
+    ouvrage: 'Ouvrage',
+  } as Record<string, string>,
+
   mesEncadrements: {
     titre: 'Mes encadrements',
     introduction:
@@ -1726,6 +1778,25 @@ export const LIBELLES = {
     suppressionImpossible: 'Suppression impossible.',
   },
 
+  /** L'identité de l'établissement — écran né de la scission de /admin/parametres. */
+  etablissement: {
+    chargementImpossible: 'Chargement impossible.',
+    enregistrementImpossible: 'Enregistrement impossible.',
+    /**
+     * ⚠ CES DEUX-LÀ NE SONT PAS DES REPLIS : ils DISENT CE QUI VIENT D'ÊTRE
+     * FAIT, et leur contenu engage. « Obligatoire pour les gestionnaires et les
+     * administrateurs » nomme QUI est concerné — sans cette précision, un
+     * administrateur croirait avoir imposé la double authentification à toute
+     * l'école, lecteurs compris.
+     */
+    deuxFacteursObligatoire:
+      'Double authentification désormais obligatoire pour les gestionnaires et administrateurs.',
+    deuxFacteursOptionnelle: 'Double authentification rendue optionnelle.',
+    /** ⚠ Il annonce un RECHARGEMENT : sans ça, la page qui se recharge seule inquiète. */
+    couleursEnregistrees:
+      'Couleurs enregistrées. La page va se recharger pour les appliquer partout.',
+  },
+
   reglesDePret: {
     titre: 'Règles de prêt',
     /**
@@ -2013,6 +2084,14 @@ export const LIBELLES = {
    * doublons — et un doublon de thèse, personne ne sait lequel est le bon.
    */
   monDepot: {
+    /** ⚠ Replis : lus seulement quand l'API ne dit rien, donc jamais relus. */
+    chargementImpossible: 'Chargement impossible.',
+    designationImpossible: 'Désignation impossible.',
+    creationImpossible: 'Création impossible.',
+    envoiDocumentImpossible: 'Envoi du document impossible.',
+    soumissionImpossible: 'Soumission impossible.',
+    /** ⚠ Fonction et non concaténation : une langue peut placer la date devant. */
+    decideLe: (date: string) => ` · décidé le ${date}`,
     titre: 'Mon dépôt',
     introduction:
       'Déposez votre mémoire ou votre thèse, puis suivez son avancement jusqu’à la validation.',

@@ -126,7 +126,7 @@ export default function MonDepotPage() {
     try {
       setDepots(await api<Depot[]>('/depots/mes-depots', {}, getToken()));
     } catch (err) {
-      setErreur(err instanceof ApiError ? err.message : 'Chargement impossible.');
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.chargementImpossible);
     }
   }, []);
 
@@ -160,7 +160,7 @@ export default function MonDepotPage() {
       await charger();
       setAvis({ ton: 'success', texte: LIBELLES.monDepot.directeurChange });
     } catch (err) {
-      setErreur(err instanceof ApiError ? err.message : 'Désignation impossible.');
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.designationImpossible);
     } finally {
       setEnCours(null);
     }
@@ -187,7 +187,7 @@ export default function MonDepotPage() {
       setForm({ title: '', authorName: '', documentType: 'memoire', year: '' });
       await charger();
     } catch (err) {
-      setErreur(err instanceof ApiError ? err.message : 'Création impossible.');
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.creationImpossible);
     }
   }
 
@@ -217,7 +217,7 @@ export default function MonDepotPage() {
       }
       await charger();
     } catch (err) {
-      setErreur(err instanceof ApiError ? err.message : 'Envoi du document impossible.');
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.envoiDocumentImpossible);
     } finally {
       setEnCours(null);
     }
@@ -277,7 +277,7 @@ export default function MonDepotPage() {
       );
       await charger();
     } catch (err) {
-      setErreur(err instanceof ApiError ? err.message : 'Soumission impossible.');
+      setErreur(err instanceof ApiError ? err.message : LIBELLES.monDepot.soumissionImpossible);
     } finally {
       setEnCours(null);
     }
@@ -644,7 +644,7 @@ export default function MonDepotPage() {
               <div className="mt-2 text-xs text-muted">
                 Créé le {dateFr(d.createdAt)}
                 {d.submittedAt && ` · soumis le ${dateFr(d.submittedAt)}`}
-                {d.decidedAt && ` · décidé le ${dateFr(d.decidedAt)}`}
+                {d.decidedAt && LIBELLES.monDepot.decideLe(dateFr(d.decidedAt))}
               </div>
             </Card>
           );

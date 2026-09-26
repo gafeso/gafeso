@@ -360,19 +360,20 @@ describe('registre — le motif de verrouillage est exploitable, pas seulement l
     const quoi = amendes.ecrans.map((e) => e.quoi).join(' ');
     expect(quoi).toContain('section');
     expect(quoi).toContain('le guichet, lui, reste');
-    // ⚠ TROISIÈME CHEMIN LE 22 SEPTEMBRE 2026, et c'est le premier écran ENTIER
-    // que ce module gouverne — les deux autres sont des SECTIONS dans des
-    // écrans du noyau. Ajouté par la session front avec son lot (dette n° 15),
-    // et signalé en passation : `/admin/regles-de-circulation` appelle les
-    // quatre routes `/circulation/rules`, toutes sous `@ModuleRequis('amendes')`.
+    // ⚠ LE TROISIÈME CHEMIN A ÉTÉ RETIRÉ LE 26/09/2026, et ce test avait écrit
+    // la condition : « le jour où le couplage tombe, cette ligne, la
+    // déclaration du registre et le `module` de l'entrée de menu changent
+    // ENSEMBLE ». Il est tombé — les quatre routes `/circulation/rules` ne
+    // portent plus `@ModuleRequis('amendes')`, parce que trois de leurs quatre
+    // champs gouvernent les durées de prêt et les plafonds.
     //
-    // ⚠ Le couplage est discutable — une règle porte aussi la durée du prêt et
-    // les plafonds — et le jour où il tombe, cette ligne, la déclaration du
-    // registre et le `module` de l'entrée de menu changent ENSEMBLE.
+    // ⚠ `amendes` ne gouverne donc plus AUCUN écran entier : ses deux entrées
+    // sont des SECTIONS dans des écrans du noyau, ce qu'elles étaient avant le
+    // 22 septembre. Et l'écran des règles nomme encore « amende » sans en
+    // dépendre — toléré explicitement dans `ecrans-declares.spec.ts`.
     expect(amendes.ecrans.map((e) => e.chemin)).toEqual([
       'guichet',
       'admin/adherents/[id]',
-      'admin/regles-de-circulation',
     ]);
   });
 });

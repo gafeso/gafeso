@@ -35,15 +35,13 @@ const T = LIBELLES.mesEncadrements;
  * vocabulaire académique du dépôt. `BiblioRecord.recordType` en porte d'autres,
  * dont `ouvrage`, parce qu'il décrit TOUT le catalogue. Les fondre ferait
  * apparaître « Ouvrage » dans un menu de dépôt de thèse.
+ *
+ * ⚠ SORTI DE L'ÉCRAN le 22 septembre 2026, et la distinction est PARTIE AVEC
+ * LUI : les deux tables voisinent désormais dans `libelles.ts`, chacune avec sa
+ * note. Les rapprocher rendait le rapprochement VISIBLE — c'est ce qui manquait
+ * pour qu'on ne les fonde pas par inadvertance.
  */
-const TYPES: Record<string, string> = {
-  memoire: 'Mémoire',
-  these: 'Thèse',
-  licence: 'Mémoire de licence',
-  master: 'Mémoire de master',
-  these_unique: 'Thèse unique',
-  ouvrage: 'Ouvrage',
-};
+const TYPES = LIBELLES.typesDeNotice;
 
 interface Encadrement {
   recordId: string;

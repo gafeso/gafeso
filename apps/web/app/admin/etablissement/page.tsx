@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { LIBELLES } from '@/lib/libelles';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
@@ -60,7 +61,7 @@ export default function EtablissementPage() {
       setSecondaryColor(current.secondaryColor);
       setRequire2fa(current.require2fa);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Chargement impossible.');
+      setError(err instanceof ApiError ? err.message : LIBELLES.etablissement.chargementImpossible);
     }
   }, []);
 
@@ -83,11 +84,11 @@ export default function EtablissementPage() {
       setRequire2fa(next);
       setNotice(
         next
-          ? 'Double authentification désormais obligatoire pour les gestionnaires et administrateurs.'
-          : 'Double authentification rendue optionnelle.',
+          ? LIBELLES.etablissement.deuxFacteursObligatoire
+          : LIBELLES.etablissement.deuxFacteursOptionnelle,
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Enregistrement impossible.');
+      setError(err instanceof ApiError ? err.message : LIBELLES.etablissement.enregistrementImpossible);
     } finally {
       setSavingSecurity(false);
     }
@@ -108,10 +109,10 @@ export default function EtablissementPage() {
         { method: 'PATCH', body: JSON.stringify({ primaryColor, secondaryColor }) },
         getToken(),
       );
-      setNotice('Couleurs enregistrées. La page va se recharger pour les appliquer partout.');
+      setNotice(LIBELLES.etablissement.couleursEnregistrees);
       setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Enregistrement impossible.');
+      setError(err instanceof ApiError ? err.message : LIBELLES.etablissement.enregistrementImpossible);
     } finally {
       setSaving(false);
     }

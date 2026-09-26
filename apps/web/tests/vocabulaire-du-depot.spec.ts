@@ -72,7 +72,20 @@ describe('le vocabulaire des types de dépôt', () => {
     // La duplication est ce qui a produit la divergence. Un écran qui réécrit
     // sa propre table recommence exactement ce qu'on vient de défaire.
     const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
-    const copies = execFileSync(
+    // ⚠ `grep` SORT EN 1 QUAND IL NE TROUVE RIEN, et `execFileSync` LÈVE sur un
+    // code non nul. Ce garde a donc cassé le 22 septembre 2026 — non pas parce
+    // que la propriété était violée, mais parce qu'elle est devenue VRAIE :
+    // `mes-encadrements` était le dernier écran à porter sa table, elle est
+    // partie dans `libelles.ts`, et grep n'a plus rien trouvé.
+    //
+    // ⭐ Un instrument qui LÈVE quand ce qu'il traque disparaît est un
+    // instrument qui ne sait pas dire « zéro ». Le cas le plus favorable lui
+    // était inconnu, parce qu'il n'était jamais arrivé.
+    const sansCorrespondance = (e: unknown) =>
+      (e as { status?: number }).status === 1 ? '' : (() => { throw e; })();
+    let brut: string;
+    try {
+      brut = execFileSync(
       'grep',
       // ⚠ ON CHERCHE LES LIBELLÉS, PAS LES CLÉS. Première écriture : un motif
       // sur `'these_unique'` entre guillemets — or une table s'écrit avec des
@@ -82,9 +95,11 @@ describe('le vocabulaire des types de dépôt', () => {
       // pas celle qu'on emploie vraiment.
       ['-rlE', "'(Mémoire de licence|Mémoire de master|Thèse unique)'", 'app', 'components', '--include=*.tsx'],
       { cwd: process.cwd(), encoding: 'utf-8' },
-    )
-      .split('\n')
-      .filter(Boolean);
+      );
+    } catch (e) {
+      brut = sansCorrespondance(e);
+    }
+    const copies = brut.split('\n').filter(Boolean);
 
     expect(
       copies,
@@ -93,6 +108,32 @@ describe('le vocabulaire des types de dépôt', () => {
         '⚠ SAUF `mes-encadrements`, qui affiche `recordType` et NON\n' +
         '`documentType` : deux vocabulaires distincts, et les fondre ferait\n' +
         'apparaître « Ouvrage » dans un menu de dépôt de thèse.',
-    ).toEqual(['app/mes-encadrements/page.tsx']);
+    ).toEqual([]);
+  });
+
+  /**
+   * ⚠ L'EXCEPTION A ÉTÉ RÉSOLUE, PAS SUPPRIMÉE — 22 septembre 2026.
+   *
+   * Ce test attendait EXACTEMENT `['app/mes-encadrements/page.tsx']` : un écran
+   * déclaré, refusé dans les deux sens. Il a donc REFUSÉ le jour où l'écran a
+   * cessé de recopier la table — c'est-à-dire le jour où la dette s'est
+   * résolue, et c'est précisément ce qu'on lui demande. Une dette qui ne se
+   * rappelle qu'en s'aggravant laisserait passer sa propre résolution.
+   *
+   * ⚠ MAIS LA PROPRIÉTÉ QUI COMPTAIT N'ÉTAIT PAS « l'écran a sa table » : c'est
+   * que les DEUX VOCABULAIRES RESTENT DISTINCTS. Elle a changé de porteur — des
+   * écrans vers `libelles.ts` — et une propriété qui change de porteur est
+   * exactement le moment où elle disparaît sans bruit. Elle est donc regardée
+   * ici, là où elle vit maintenant.
+   */
+  it('⚠ les deux vocabulaires restent DISTINCTS — fondus, « Ouvrage » entrerait dans un dépôt', () => {
+    const depot = Object.keys(LIBELLES.typesDeDepot);
+    const notice = Object.keys(LIBELLES.typesDeNotice);
+    // `recordType` décrit tout le catalogue : il porte au moins une valeur que
+    // le vocabulaire du dépôt n'a pas, et c'est elle qui interdit de les fondre.
+    expect(notice).toContain('ouvrage');
+    expect(depot).not.toContain('ouvrage');
+    // Et ils ne sont pas devenus le même objet par mégarde.
+    expect(LIBELLES.typesDeDepot).not.toBe(LIBELLES.typesDeNotice);
   });
 });

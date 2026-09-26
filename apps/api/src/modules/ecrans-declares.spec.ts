@@ -154,6 +154,31 @@ function texteDeLaPage(chemin: string): string {
   return code + '\n' + texteDesLibelles(feuillesEmployees(code));
 }
 
+/**
+ * Pages qui MENTIONNENT un module sans en DÉPENDRE.
+ *
+ * ⚠ Ce garde est approximatif par construction — il cherche UN MOT par module —
+ * et il le dit. Un écran peut nommer « amende » sans rien perdre quand le module
+ * s'éteint ; le déclarer dans `ecrans` mentirait à la boîte de confirmation, qui
+ * annonce ce qui va DISPARAÎTRE.
+ *
+ * ⚠ Chaque tolérance porte son motif, et le test ci-dessous refuse celles qui
+ * deviennent périmées.
+ */
+const MENTIONS_SANS_DEPENDANCE: Record<string, Record<string, string>> = {
+  amendes: {
+    'admin/regles-de-circulation':
+      'Cet écran règle `finePerDay` parmi les quatre champs d’une règle de ' +
+      'circulation, donc il nomme « amende ». Mais il ne DÉPEND plus du module ' +
+      'depuis le 26/09/2026 : ses routes ne portent plus `@ModuleRequis`, et ' +
+      'l’écran affiche sa colonne Amende sans consulter l’état du module — rien ' +
+      'n’y disparaît. Le déclarer ferait promettre à la boîte de confirmation la ' +
+      'disparition d’un écran qui reste. ' +
+      '⚠ Ce que ça révèle est signalé au front : un champ dont la valeur est ' +
+      'figée à zéro module éteint ne devrait pas paraître réglable.',
+  },
+};
+
 describe('écrans déclarés — le front est là où on le croit', () => {
   const pages = pagesDuFront();
 
@@ -197,10 +222,33 @@ describe('écrans déclarés — le front est là où on le croit', () => {
       const motif = new RegExp(m.motifEcrans, 'i');
       for (const page of pages) {
         if (!motif.test(texteDeLaPage(page))) continue;
+        if (MENTIONS_SANS_DEPENDANCE[id]?.[page]) continue;
         if (!declarees.has(page)) oublis.push(`${id} → ${page} parle de « ${m.motifEcrans} »`);
       }
     }
     expect(oublis, 'pages concernées mais non déclarées').toEqual([]);
+  });
+
+  it('⚠ une tolérance PÉRIMÉE est refusée', () => {
+    // Une page qui a cessé de parler du module, ou qui est désormais déclarée,
+    // ne doit plus figurer ici : une exception qu'on ne relit jamais finit par
+    // couvrir autre chose.
+    const mortes: string[] = [];
+    for (const [id, pages] of Object.entries(MENTIONS_SANS_DEPENDANCE)) {
+      const m = MODULES_PAR_ID.get(id)!;
+      const motif = new RegExp(m.motifEcrans, 'i');
+      for (const page of Object.keys(pages)) {
+        const existe = pagesDuFront().includes(page);
+        const parle = existe && motif.test(texteDeLaPage(page));
+        const declaree = m.ecrans.some((e) => e.chemin === page);
+        if (!parle || declaree) mortes.push(`${id} → ${page}`);
+      }
+    }
+    expect(
+      mortes,
+      'Tolérance(s) qui ne correspondent plus : la page ne parle plus du ' +
+        'module, a disparu, ou est désormais déclarée. Retirez la ligne.',
+    ).toEqual([]);
   });
 
   it('chaque module activable déclare au moins un endroit, et chacun dit QUOI', () => {

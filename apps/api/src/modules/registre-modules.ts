@@ -130,27 +130,28 @@ export const MODULES: readonly ModuleDeclare[] = [
       { chemin: 'guichet', quoi: 'la section Amendes (le guichet, lui, reste)' },
       { chemin: 'admin/adherents/[id]', quoi: 'la section Amendes de la fiche d’adhérent' },
       /*
-       * ⚠ LE PREMIER ÉCRAN ENTIER QUE CE MODULE GOUVERNE — ajouté le
-       * 22 septembre 2026 par la session FRONT, dans un fichier qui n'est pas
-       * le sien, parce que son lot a rendu ce garde rouge et qu'un `main`
-       * rouge bloque tout le monde. Signalé en passation le même jour.
+       * ⚠ L'ÉCRAN `admin/regles-de-circulation` A ÉTÉ RETIRÉ D'ICI le
+       * 26/09/2026, et c'est le geste que le commentaire précédent avait prévu :
+       * « le jour où les routes se découplent, cette ligne et le `module` de
+       * l'entrée changent ensemble ».
        *
-       * `/admin/regles-de-circulation` (dette front n° 15) appelle les quatre
-       * routes `/circulation/rules`, qui portent toutes
-       * `@ModuleRequis('amendes')`. L'entrée de menu porte donc le module :
-       * sans ça, elle mènerait à un écran que l'API refuse.
+       * Les quatre routes `/circulation/rules` ne portent plus
+       * `@ModuleRequis('amendes')` : elles gouvernent les durées de prêt et les
+       * plafonds de prêts et de renouvellements — trois champs sur quatre qui
+       * n'ont rien à voir avec les amendes. Une école qui éteignait le module
+       * perdait leur réglage pendant que la circulation continuait de les
+       * APPLIQUER, puisque le service lit la table directement.
        *
-       * ⚠ ET LE COUPLAGE EST DISCUTABLE, c'est le fond de la passation :
-       * `CirculationRule` porte aussi `loanPeriodDays`, `maxCheckouts` et
-       * `maxRenewals`, qui n'ont rien à voir avec les amendes. Une école qui
-       * éteint ce module perd le réglage de ses DURÉES DE PRÊT. Le jour où les
-       * routes se découplent, cette ligne et le `module` de l'entrée changent
-       * ensemble.
+       * ⚠ ET LE LAISSER AURAIT FAIT MENTIR LA BOÎTE DE CONFIRMATION. Elle nomme
+       * ce qui va disparaître quand on éteint un module ; elle aurait annoncé la
+       * disparition d'un écran qui reste. C'est « qu'est-ce qui reste écrit sans
+       * plus être vrai ? », posé sur le texte que l'administrateur lit au moment
+       * précis où il décide.
+       *
+       * ⚠ L'écran nomme encore « amende » — il règle `finePerDay` — sans en
+       * dépendre : toléré explicitement dans `ecrans-declares.spec.ts`, avec son
+       * motif et un refus de péremption.
        */
-      {
-        chemin: 'admin/regles-de-circulation',
-        quoi: 'l’écran Règles de prêt (durées, plafonds et amende par catégorie)',
-      },
     ],
     motifEcrans: '\\bamendes?\\b',
   },
@@ -363,12 +364,31 @@ export function dependantsDe(id: string): string[] {
  * calcul, lui, se règle par une branche — l'amende vaut zéro, le retour se fait.
  */
 export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
-  amendes: [
-    'circulation/circulation.controller.ts :: Post rules',
-    'circulation/circulation.controller.ts :: Get rules',
-    'circulation/circulation.controller.ts :: Patch rules/:id',
-    'circulation/circulation.controller.ts :: Delete rules/:id',
-  ],
+  // ⚠ `amendes` N'A PLUS AUCUNE ROUTE depuis le 26/09/2026, et la liste vide est
+  // VRAIE — vérifiée, pas déclarée.
+  //
+  // Elle portait les quatre routes `/circulation/rules`, et c'était faux :
+  // `CirculationRule` compte QUATRE champs et trois n'ont rien à voir avec les
+  // amendes (`loanPeriodDays`, `maxRenewals`, `maxCheckouts`). Une école qui
+  // éteignait `amendes` perdait le réglage de ses DURÉES DE PRÊT — pendant que
+  // `CirculationService` continuait de les APPLIQUER, puisqu'il lit la table
+  // directement. Un paramètre qui agit et qu'on ne peut plus voir.
+  //
+  // Le commentaire d'origine disait « seuls les TARIFS sont des routes du
+  // module » : il décrivait UN champ sur quatre et nommait la route d'après lui.
+  //
+  // ⚠ CE QUE L'EXTINCTION FAIT DÉSORMAIS, et c'est mesuré : `amendesActives`
+  // entre dans le sac `DueSettings` — construit à UN SEUL endroit, six appelants
+  // y passent — et `tarifApplicable` fige l'amende à zéro. Le retour d'un
+  // document se fait quand même, ce qui est tout l'objet du découpage.
+  //
+  // ⚠ NE PAS « CORRIGER » CETTE LISTE VIDE EN Y REMETTANT DES ROUTES. C'est le
+  // geste que `rappels` a appelé le 15 septembre — et là-bas il était JUSTE,
+  // cinq routes existaient vraiment. Ici la liste vide est le résultat d'une
+  // mesure, et `MODULES_SANS_ROUTE` (dans le garde) exige qu'un module sans
+  // route soit consulté par un `estActif` quelque part : sinon l'éteindre ne
+  // ferait rien du tout.
+  amendes: [],
   // ⚠ LES SEPT ROUTES DU MOISSONNAGE, et la garde est posée sur la CLASSE : une
   // huitième écrite demain l'hérite. Elles sont listées ici quand même — c'est
   // ce compte exact qui oblige à revenir le jour où l'une change de nom.

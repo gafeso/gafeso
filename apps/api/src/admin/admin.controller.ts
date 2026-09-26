@@ -16,6 +16,7 @@ import { AdminAuditInterceptor } from '../audit/admin-audit.interceptor';
 import { AdminService } from './admin.service';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
 import { SuperAdminLoginDto } from './dto/super-admin-login.dto';
+import { ReinitialiserSuperAdminDto } from './dto/reinitialiser-super-admin.dto';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -31,6 +32,36 @@ export class AdminController {
   })
   async login(@Body() dto: SuperAdminLoginDto) {
     return this.admin.superAdminLogin(dto.email, dto.password);
+  }
+
+  @Post('super-admins/reinitialiser')
+  @UseGuards(ApiKeyGuard)
+  @ApiSecurity('admin-api-key')
+  // ⚠ 5/min, COMME LA CONNEXION — et pas plus serré, après mesure.
+  //
+  // J'avais mis 3, en raisonnant « ce geste n'est pas répétitif ». En
+  // l'éprouvant, les trois premiers REFUS (clé absente, confirmation absente,
+  // confirmation à false) ont consommé le quota : les deux cas suivants
+  // rendaient 429 au lieu de leur vrai code. Sur une reprise d'accès faite
+  // sous pression, deux adresses mal tapées suffiraient à faire attendre une
+  // minute quelqu'un qui cherche déjà pourquoi il n'entre pas.
+  //
+  // ⚠ Et le throttle n'est PAS ce qui protège de l'accident — `confirme: true`
+  // l'est. Son seul office ici est d'arrêter une boucle ; 5 y suffit.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Reprendre l’accès à un super-admin plateforme (mot de passe perdu)',
+    description:
+      'Réservé à la plateforme (clé API x-admin-api-key). Le super-admin vit ' +
+      'dans le schéma `public` et n’a AUCUN chemin de reprise : `PasswordToken` ' +
+      'est par-tenant, donc le lien de définition ne lui est pas applicable. ' +
+      'Le serveur ENGENDRE un mot de passe fort et le rend UNE FOIS — il n’en ' +
+      'accepte jamais un en entrée. Exige `confirme: true` : le mot de passe ' +
+      'actuel cesse de fonctionner immédiatement. Journalisé par ' +
+      'l’intercepteur d’audit (le corps n’y figure pas).',
+  })
+  async reinitialiserSuperAdmin(@Body() dto: ReinitialiserSuperAdminDto) {
+    return this.admin.reinitialiserSuperAdmin(dto.email);
   }
 
   @Post('tenants')
@@ -63,8 +94,20 @@ export class AdminController {
   }
 
   @Get('tenants/:slug/socle')
+  // ⚠ LE GARDE MANQUAIT, et cette route répondait 200 SANS AUCUNE CLÉ pendant
+  // que ses onze voisines rendaient 401. Mesuré le 22/09/2026 en cherchant
+  // autre chose — aucun test ne la couvrait, parce que `gardes-declarees`
+  // n'examine que les contrôleurs portant `@RequiresFunctions`, et celui-ci
+  // est gardé par la clé de plateforme.
+  //
+  // Ce qu'elle laissait fuir n'est pas une donnée personnelle — des comptes de
+  // configuration — mais elle CONFIRME QU'UN SLUG EXISTE : un oracle
+  // d'énumération des écoles d'une instance, pour qui essaie des noms.
+  @UseGuards(ApiKeyGuard)
+  @ApiSecurity('admin-api-key')
   @ApiOperation({
     summary: 'État du socle d’un établissement (rôles, catégories, règles, classes)',
+    description: 'Réservé à la plateforme (clé API x-admin-api-key).',
   })
   async socle(@Param('slug') slug: string) {
     return this.admin.tenantSocle(slug);

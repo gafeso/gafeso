@@ -287,11 +287,43 @@ Il imprime un lien par compte, avec son échéance. **Ils ne sont pas réaffich�
   n'est probablement pas ce que vous vouliez.
 
 ⚠ **Le super-admin plateforme ne passe pas par là.** Il vit dans le schéma
-`public`, se connecte par `POST /admin/login`, et n'a pas de lien de définition.
-Son mot de passe perdu se retrouve dans le coffre où le provisionnement vous a
-demandé de le noter — ou, à défaut, il se repose par la même mécanique
-appliquée au schéma `public`, ce que ce script ne fait volontairement pas :
-c'est un compte de plateforme, pas d'école, et son périmètre n'est pas le même.
+`public`, se connecte par `POST /admin/login`, et n'a pas de lien de définition —
+`PasswordToken` est par-tenant. Il a sa propre route, ci-dessous.
+
+### ⚠ Reprendre l'accès au super-admin plateforme
+
+Le mot de passe du super-admin se retrouve d'abord dans le coffre où le
+provisionnement vous a demandé de le noter. À défaut :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  exec api sh -c 'curl -s -X POST http://localhost:4000/admin/super-admins/reinitialiser \
+    -H "Content-Type: application/json" \
+    -H "x-admin-api-key: $ADMIN_API_KEY" \
+    -d "{\"email\":\"<adresse du super-admin>\",\"confirme\":true}"'
+```
+
+La clé est lue dans l'environnement du conteneur : **ne la retapez pas sur la
+ligne de commande**, elle resterait dans l'historique du shell.
+
+Le serveur **ENGENDRE** un mot de passe fort et le rend **une seule fois**. Il
+n'en accepte jamais un en entrée : une valeur choisie par l'opérateur voyagerait
+dans un corps de requête et serait probablement réutilisée ailleurs.
+
+⚠ Trois choses :
+- `confirme: true` est **obligatoire**. Le mot de passe actuel cesse de
+  fonctionner à la seconde où la commande réussit — un appel fait par
+  distraction, une commande rejouée, coûterait l'accès à la plateforme.
+- La route est gardée par `x-admin-api-key`. **Ce n'est pas un élargissement de
+  droit** : le garde de plateforme accepte indifféremment cette clé ou un JWT
+  super-admin, donc le porteur de la clé a déjà tout ce qu'un super-admin peut
+  faire. La route lui rend une porte qu'il possédait.
+- Elle est journalisée (intercepteur d'audit `/admin`), et le corps de la requête
+  n'apparaît pas dans le journal.
+
+⚠ **Si la clé est perdue AUSSI**, il n'y a plus de chemin par l'API : elle est
+dans `.env.prod`, sur le serveur. Reposez-la, redémarrez le conteneur `api`, puis
+utilisez la commande ci-dessus.
 
 Le domaine dérivé de `APP_URL` doit correspondre au `Host` que le navigateur
 envoie réellement (donc `PUBLIC_DOMAIN`, pas `API_DOMAIN`) : c'est lui qui

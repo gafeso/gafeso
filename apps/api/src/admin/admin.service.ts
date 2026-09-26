@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +17,17 @@ import { CategoriesService } from '../categories/categories.service';
 import { RolesService } from '../roles/roles.service';
 import { MODELES_A_SUPPRIMER, proprietePrisma } from './lignes-partagees-d-une-ecole';
 import { EXEMPLE_HOME_CONTENT, EXEMPLE_HOME_THEME } from '../tenancy/home-seed-exemple';
+
+/**
+ * Tours de bcrypt — la MÊME valeur que `AuthService` et `AccountsService`.
+ *
+ * ⚠ C'est une troisième copie, et elle est recopiée faute de mieux : les trois
+ * services n'ont pas de module commun. Un test la garde
+ * (`tours-de-bcrypt.spec.ts`) — sinon le jour où l'on durcit la politique, deux
+ * services la durciraient et le troisième continuerait de hacher plus faible,
+ * sans que rien ne le dise.
+ */
+const BCRYPT_ROUNDS_ADMIN = 10;
 import {
   buildAddMissingColumnsStatements,
   buildColumnConstraintStatements,
@@ -198,6 +210,65 @@ export class AdminService {
     return {
       accessToken: await this.jwt.signAsync(payload),
       superAdmin: { id: admin.id, email: admin.email, name: admin.name },
+    };
+  }
+
+  /**
+   * REPRENDRE L'ACCÈS À UN SUPER-ADMIN PLATEFORME dont le mot de passe est perdu.
+   *
+   * ## Pourquoi cette route existe
+   *
+   * Le super-admin vit dans le schéma `public` et se connecte par
+   * `POST /admin/login`. Il n'a AUCUN chemin de reprise : `PasswordToken` est
+   * par-tenant, donc le lien de définition — la mécanique que le produit
+   * emploie partout ailleurs — ne lui est pas applicable.
+   *
+   * ⚠ LA FORME FAUTIVE QUE CE PROBLÈME APPELLE, et elle PASSERAIT : créer un
+   * `PasswordToken` dans `public`. La table y existe (le gabarit la porte), donc
+   * l'écriture réussit. Mais l'écran `/definir-mot-de-passe` résout son tenant
+   * par le DOMAINE : un jeton de `public` n'y serait jamais trouvé, et la
+   * personne lirait « Lien invalide ou expiré » sur un lien qu'on vient de lui
+   * donner. Un faux dispositif complet — il s'exécute, il écrit, il ne sert
+   * à rien.
+   *
+   * ## Pourquoi ce n'est PAS un élargissement de droit
+   *
+   * Mesuré : `payload.superAdmin` n'est honoré que par `ApiKeyGuard`, qui
+   * accepte indifféremment ce JWT ou `ADMIN_API_KEY`. Le porteur de la clé a
+   * donc DÉJÀ tout ce qu'un super-admin peut faire. Cette route ne lui ouvre
+   * rien de neuf — elle lui rend une porte qu'il possédait.
+   *
+   * ## Le mot de passe est ENGENDRÉ, jamais reçu
+   *
+   * Rendu UNE FOIS dans la réponse. L'accepter en entrée ferait voyager une
+   * valeur choisie par l'opérateur — donc réutilisée ailleurs — dans un corps
+   * de requête.
+   */
+  async reinitialiserSuperAdmin(email: string) {
+    const normalise = email.trim().toLowerCase();
+    const admin = await this.prisma.superAdmin.findUnique({ where: { email: normalise } });
+    // ⚠ On DIT que le compte n'existe pas. C'est l'inverse de `superAdminLogin`,
+    // qui rend un message unique pour ne rien divulguer — et c'est juste dans
+    // les deux cas : là, l'appelant est un inconnu ; ici, il porte la clé de
+    // plateforme et il a besoin de savoir s'il s'est trompé d'adresse.
+    if (!admin) {
+      throw new NotFoundException(
+        `Aucun super-admin plateforme à l'adresse « ${normalise} ».`,
+      );
+    }
+    // 18 octets en base64url ≈ 24 caractères — même force que le mot de passe
+    // posé par `provision-production.mjs` sur ce même compte.
+    const motDePasse = randomBytes(18).toString('base64url');
+    await this.prisma.superAdmin.update({
+      where: { id: admin.id },
+      data: { password: await bcrypt.hash(motDePasse, BCRYPT_ROUNDS_ADMIN) },
+    });
+    return {
+      email: admin.email,
+      motDePasse,
+      avertissement:
+        "Ce mot de passe n'est affiché qu'une fois et n'est stocké en clair " +
+        'nulle part. Notez-le maintenant. Le précédent ne fonctionne plus.',
     };
   }
 

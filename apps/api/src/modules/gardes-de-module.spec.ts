@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { ModuleActifGuard } from './module-actif.guard';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MODULES_ACTIVABLES, ROUTES_PAR_MODULE } from './registre-modules';
 
@@ -72,7 +72,12 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     // exactement le cas auquel il était aveugle il y a deux jours.
     // 33 → 38 le 15 septembre 2026 : les cinq routes de `rappels`, qui
     // n'étaient gardées par aucun module.
-    expect(declarees.length).toBe(38);
+    expect(declarees.length).toBe(34);
+    // ⚠ 38 → 34 le 26/09/2026 : les QUATRE routes `/circulation/rules` ne sont
+    // plus des routes du module `amendes`. Elles gouvernent les durées de prêt
+    // et les plafonds — trois champs sur quatre n'ont rien à voir avec les
+    // amendes — et une école qui éteignait le module perdait leur réglage
+    // pendant que la circulation continuait de les APPLIQUER.
     for (const { cle } of declarees) {
       const [fichier, reste] = cle.split(' :: ');
       const [verbe, ...ch] = reste.split(' ');
@@ -159,6 +164,29 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     expect(fichiers.size).toBeGreaterThan(0); // témoin
   });
 
+/**
+ * Les modules activables qui n'ont AUCUNE route à eux.
+ *
+ * ⚠ Une liste vide est un CHOIX ÉCRIT, jamais un constat. Celle de `rappels`
+ * était un constat faux pendant des semaines — le contrôleur en portait cinq,
+ * dont `POST run`, qui envoie des courriels à tous les adhérents en retard.
+ *
+ * ⚠ ET LE MOTIF NE SUFFIT PAS : le test ci-dessous EXIGE que l'extinction d'un
+ * module sans route agisse quelque part dans le code, par un `estActif`. Sans
+ * cela, éteindre le module ne ferait rien du tout — et un interrupteur qui
+ * n'interrompt rien est le faux dispositif le plus rassurant qui soit.
+ */
+const MODULES_SANS_ROUTE: Record<string, string> = {
+  amendes:
+    'Aucune route exclusive : les amendes se CALCULENT dans la circulation, qui ' +
+    'est du noyau. Garder `POST /circulation/return` refuserait de rendre un ' +
+    'livre dans une école ayant éteint les amendes. L’extinction agit par une ' +
+    'BRANCHE — `amendesActives` entre dans le sac `DueSettings`, construit à un ' +
+    'seul endroit, et `tarifApplicable` fige l’amende à zéro. ' +
+    '(Les quatre routes `/circulation/rules` y figuraient jusqu’au 26/09/2026 : ' +
+    'elles gouvernent les durées de prêt et les plafonds, pas les amendes.)',
+};
+
   it('un module activable sans aucune route l’assume explicitement', () => {
     // ⚠ CE TEST A AFFIRMÉ LE CONTRAIRE PENDANT DES SEMAINES. Il disait que
     // « `rappels` n'a pas de route à lui : son extinction agit sur le
@@ -168,12 +196,67 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     // un constat faux, et le test le figeait.
     for (const id of MODULES_ACTIVABLES) {
       expect(ROUTES_PAR_MODULE, `${id} doit être déclaré, même vide`).toHaveProperty(id);
+      if (ROUTES_PAR_MODULE[id].length > 0) continue;
       expect(
-        ROUTES_PAR_MODULE[id].length,
-        `${id} : une liste VIDE se déclare, elle ne se constate pas — ` +
-          'vérifiez qu’aucune route du module n’échappe au garde.',
-      ).toBeGreaterThan(0);
+        MODULES_SANS_ROUTE,
+        `${id} : une liste VIDE se déclare, elle ne se constate pas.\n` +
+          'DEUX ISSUES :\n' +
+          `  · des routes lui appartiennent → listez-les dans ROUTES_PAR_MODULE ;\n` +
+          `  · il n'en a vraiment aucune → déclarez-le dans MODULES_SANS_ROUTE\n` +
+          "    avec son MOTIF, et dites sur QUOI son extinction agit.\n" +
+          '⚠ `rappels` a porté une liste vide FAUSSE pendant des semaines, et son ' +
+          '`POST run` envoyait des courriels dans une école qui les avait éteints.',
+      ).toHaveProperty(id);
     }
+  });
+
+  it('⚠ une déclaration « sans route » PÉRIMÉE est refusée', () => {
+    const perimees = Object.keys(MODULES_SANS_ROUTE).filter(
+      (id) => (ROUTES_PAR_MODULE[id]?.length ?? 0) > 0,
+    );
+    expect(
+      perimees,
+      'Module(s) déclarés sans route qui en ont désormais. Retirez la ligne de ' +
+        'MODULES_SANS_ROUTE — une exception qu’on ne relit jamais finit par ' +
+        'couvrir autre chose.',
+    ).toEqual([]);
+  });
+
+  it('⭐ un module SANS ROUTE agit quand même : son extinction est CONSULTÉE', () => {
+    // ⚠ C'est l'assertion qui empêche cette liste de devenir l'endroit où l'on
+    // range les modules inertes. Un motif est une affirmation ; celle-ci se
+    // mesure : le code doit interroger `estActif` pour ce module quelque part,
+    // sinon l'éteindre ne fait RIEN.
+    const sources: string[] = [];
+    const parcourir = (rel: string) => {
+      for (const e of readdirSync(join(RACINE, rel), { withFileTypes: true })) {
+        const c = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) parcourir(c);
+        else if (e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts')) {
+          sources.push(readFileSync(join(RACINE, c), 'utf-8'));
+        }
+      }
+    };
+    parcourir('');
+    const tout = sources.join('\n');
+
+    for (const [id, motif] of Object.entries(MODULES_SANS_ROUTE)) {
+      expect(motif.length, `${id} : motif trop court`).toBeGreaterThan(60);
+      expect(
+        new RegExp(`estActif\\([^)]*'${id}'`).test(tout),
+        `${id} est déclaré SANS ROUTE, et son extinction n'est consultée nulle ` +
+          `part : aucun \`estActif(…, '${id}')\` dans le code. Éteindre ce module ` +
+          'ne ferait donc rien du tout — un interrupteur qui n’interrompt rien.',
+      ).toBe(true);
+    }
+  });
+
+  it('⚠ TÉMOIN : l’assertion ci-dessus sait dire NON', () => {
+    // Sans ce cas, le motif « estActif trouvé » pourrait être vrai par accident
+    // — une regex trop large trouverait n'importe quel `estActif`.
+    const faux = "await this.modules.estActif(t.id, 'amendes');";
+    expect(new RegExp("estActif\\([^)]*'amendes'").test(faux)).toBe(true);
+    expect(new RegExp("estActif\\([^)]*'module-inexistant'").test(faux)).toBe(false);
   });
 });
 

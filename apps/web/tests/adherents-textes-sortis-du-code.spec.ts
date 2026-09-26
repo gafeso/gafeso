@@ -82,11 +82,22 @@ function dateDeCreation(chemin: string): string {
  * venais d'écrire. Les reprendre dans le même tour mêlerait une correction
  * mesurée à quatre reprises non mesurées.
  */
-const DETTE_TEXTES_EN_DUR = [
-  'app/admin/etablissement/page.tsx',
-  'app/opac/[id]/fiche-notice.tsx',
-  'app/mes-encadrements/page.tsx',
-  'app/mon-depot/page.tsx',
+const DETTE_TEXTES_EN_DUR: string[] = [
+  // ✅ VIDÉE LE 22 SEPTEMBRE 2026, le jour même où elle a été déclarée.
+  //
+  // Les quatre écrans portaient 18 chaînes, dont 14 étaient des REPLIS
+  // (« Chargement impossible. », « Soumission impossible. »…) : les seuls
+  // textes que l'utilisateur lit quand tout va mal, et ceux que personne ne
+  // relit jamais puisqu'ils ne s'affichent qu'au pire moment.
+  //
+  // ⚠ Et l'une des quatre n'était PAS une chaîne oubliée : `mes-encadrements`
+  // portait la table du vocabulaire de `recordType`, DISTINCTE de
+  // `typesDeDepot` — cinq valeurs académiques d'un côté, tout le catalogue de
+  // l'autre. Les fondre ferait apparaître « Ouvrage » dans un menu de dépôt de
+  // thèse. Elle est sortie de l'écran SANS être fondue, et les deux tables
+  // voisinent désormais dans `libelles.ts`, chacune avec sa note : le
+  // rapprochement est visible, ce qui est exactement ce qui manquait pour
+  // qu'on ne les confonde pas.
 ];
 
 const FICHIERS = ecransSurLeDisque()

@@ -49,11 +49,17 @@ describe('Un garde de module doit être RÉSOLVABLE là où il est posé', () =>
     readFileSync(join(SRC, f), 'utf-8').includes('@ModuleRequis('),
   );
 
-  it('⚠ TÉMOIN DE COMPTE : il en trouve exactement SEPT', () => {
+  it('⚠ TÉMOIN DE COMPTE : il en trouve exactement SIX', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
-    // signale le huitième, écrit demain par quelqu'un qui n'aura pas lu ceci.
+    // signale le septième, écrit demain par quelqu'un qui n'aura pas lu ceci.
+    //
+    // ⚠ SEPT → SIX le 26/09/2026 : `circulation.controller.ts` ne porte plus
+    // aucun `@ModuleRequis`. Ses quatre routes `/circulation/rules` étaient
+    // gardées par `amendes`, alors qu'elles gouvernent les durées de prêt et
+    // les plafonds — une école qui éteignait le module perdait leur réglage.
+    // Le compte a fait son office : il a obligé à venir dire POURQUOI un
+    // contrôleur a cessé d'être gardé, ce qu'un `toBeGreaterThan` aurait tu.
     expect(gardes.map((f) => f.replace(/\\/g, '/')).sort()).toEqual([
-      'circulation/circulation.controller.ts',
       'depots/depots.controller.ts',
       'moissonnage/moissonnage.controller.ts',
       'oai/oai.controller.ts',

@@ -61,7 +61,7 @@ const STATUS_LABELS: Record<string, string> = {
   AVAILABLE: 'Disponible',
   CHECKED_OUT: 'Emprunté',
   ON_HOLD: 'Réservé',
-  IN_TRANSIT: 'En transit',
+  IN_TRANSIT: LIBELLES.ficheNotice.enTransit,
   DAMAGED: 'Abîmé',
   LOST: 'Perdu',
   WITHDRAWN: 'Retiré',
@@ -109,7 +109,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
       }>('/reader/holds', { method: 'POST', body: JSON.stringify({ recordId: id }) }, getToken());
 
       if (!res.readyForPickup) {
-        setHoldMsg(`Réservation enregistrée — vous êtes en position ${res.queuePosition} dans la file.`);
+        setHoldMsg(LIBELLES.ficheNotice.reservationEnregistree(res.queuePosition));
         return;
       }
 
@@ -123,7 +123,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
       const prevenu = (res.nonPrevenus?.length ?? 0) === 0;
       setHoldMsg(prevenu ? base : `${base} ${T.confirmationNonEnvoyee}`);
     } catch (err) {
-      setHoldError(err instanceof ApiError ? err.message : 'Réservation impossible.');
+      setHoldError(err instanceof ApiError ? err.message : LIBELLES.ficheNotice.reservationImpossible);
     } finally {
       setPlacing(false);
     }
@@ -133,7 +133,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
     api<RecordDetail>(`/opac/records/${id}`, {}, getToken())
       .then(setRecord)
       .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Notice indisponible.'),
+        setError(err instanceof ApiError ? err.message : LIBELLES.ficheNotice.noticeIndisponible),
       );
   }, [id]);
 
@@ -145,7 +145,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
     if (!record || record.membersOnly || !record.digitalCopy) return;
     api<RecordAccessStatus>(`/collections/me/records/${id}/access`, {}, getToken())
       .then(setAccess)
-      .catch(() => setAccess({ granted: false, message: 'Accès indisponible pour le moment.' }));
+      .catch(() => setAccess({ granted: false, message: LIBELLES.ficheNotice.accesIndisponible }));
   }, [record, id]);
 
   if (error) {
@@ -178,7 +178,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
           {formatTitle(record.title, record.titleComplement)}
         </h1>
         {record.membersOnly ? (
-          <MemberLock hint="Disponibilité réservée aux membres" />
+          <MemberLock hint={LIBELLES.ficheNotice.membresDisponibilite} />
         ) : record.availability?.borrowable ? (
           <Badge tone="green">{LIBELLES.ficheNotice.badgeDisponible}</Badge>
         ) : record.availability?.totalItems === 0 ? (
@@ -296,7 +296,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         <>
           <h2 className="mt-8 flex items-center gap-2 font-serif text-xl font-bold">
             Exemplaires &amp; disponibilité
-            <MemberLock hint="Exemplaires et disponibilité réservés aux membres" />
+            <MemberLock hint={LIBELLES.ficheNotice.membresExemplaires} />
           </h2>
           <div className="mt-3 flex items-center gap-3 rounded-lg border border-dashed border-ocre/50 bg-ocre/5 px-4 py-4 text-sm text-muted">
             <LockIcon className="h-5 w-5 shrink-0 text-ocre" />
@@ -364,7 +364,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
               {!holdMsg &&
                 (connected ? (
                   <Button onClick={placeHold} disabled={placing}>
-                    {placing ? 'Réservation…' : 'Réserver ce document'}
+                    {placing ? LIBELLES.ficheNotice.reservationEnCours : LIBELLES.ficheNotice.reserver}
                   </Button>
                 ) : (
                   <p className="text-sm text-muted">
@@ -383,7 +383,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
       <h2 className="mt-8 flex items-center gap-2 font-serif text-xl font-bold">
         Lecture en ligne
         {record.membersOnly && (
-          <MemberLock hint="Lecture en ligne réservée aux membres" />
+          <MemberLock hint={LIBELLES.ficheNotice.membresLecture} />
         )}
       </h2>
       {record.membersOnly ? (

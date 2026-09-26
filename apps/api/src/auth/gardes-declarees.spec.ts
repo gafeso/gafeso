@@ -190,6 +190,10 @@ const DECIDE_DANS_LE_SERVICE: Record<string, string> = {
 };
 
 const AUTRE_MECANISME: Record<string, string> = {
+  'admin/admin.controller.ts :: Post super-admins/reinitialiser':
+    'ApiKeyGuard — reprise d’accès au super-admin plateforme (backlog n° 48). '
+    + 'Pas un élargissement : le garde accepte indifféremment la clé ou un JWT '
+    + 'super-admin, donc le porteur de la clé avait déjà tout.',
   'admin/admin.controller.ts :: Post tenants': 'ApiKeyGuard — provisionnement',
   'admin/admin.controller.ts :: Get tenants': 'ApiKeyGuard',
   'admin/admin.controller.ts :: Get tenants/:slug': 'ApiKeyGuard',
@@ -375,8 +379,15 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     // office — il a fallu revenir ici et vérifier que la route publique rend
     // exactement ce que rend `records/:id`, et rien de plus.
     // ⚠ 60 → 61 : `GET /opac/provenances` (P7-3). Même office.
-    expect(sansFonction.length).toBe(61);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(61);
+    // ⚠ 61 jusqu'au 26/09/2026. Puis 62 : la reprise d'accès au super-admin
+    // plateforme (backlog n° 48). Le compte a fait son office — il a obligé à
+    // venir DÉCLARER la route, donc à écrire pourquoi elle n'a pas de fonction
+    // et ce qui la garde à la place.
+    //
+    // ⚠ Les DEUX comptes bougent ensemble : l'un mesure ce qui EST, l'autre ce
+    // qui est DÉCLARÉ. N'en changer qu'un rendrait le second silencieux.
+    expect(sansFonction.length).toBe(62);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(62);
   });
 });
 
