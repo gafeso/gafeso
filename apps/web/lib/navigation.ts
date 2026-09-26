@@ -226,34 +226,6 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         description: 'Prêter, rendre, encaisser une amende — au code-barres.',
       },
       {
-        href: '/admin/regles-de-circulation',
-        libelle: 'Règles de prêt',
-        /**
-         * ⚠ SOUS GUICHET, ET PAS SOUS ADMINISTRATION — le précédent est écrit
-         * dans `/admin/regles-de-pret` lui-même : « le paramétrage des rappels
-         * vivait sur le même écran, mais son API exige une TROISIÈME
-         * permission ; le laisser ici aurait donné un bloc qui refuse à la
-         * personne même qui voit l'écran ».
-         *
-         * Les quatre routes `/circulation/rules` exigent `circulation.faire`,
-         * la fonction du guichet — pas `etablissement.regles`. Aujourd'hui
-         * l'Administrateur a les deux, donc l'écart ne se verrait pas : c'est
-         * un accord PAR COÏNCIDENCE, et il tombe au premier rôle personnalisé
-         * qui reçoit `etablissement.regles` sans `circulation.faire`.
-         */
-        fonctions: ['circulation.faire'],
-        /**
-         * ⚠ `amendes`, et ce n'est PAS un choix du front : les quatre routes
-         * portent `@ModuleRequis('amendes')`. Le couplage est discutable — une
-         * règle porte aussi la durée du prêt et le plafond d'emprunts, qui
-         * n'ont rien à voir avec les amendes — et il est signalé en passation.
-         * Tant qu'il tient, l'entrée doit disparaître avec le module, sans quoi
-         * elle mènerait à un écran que l'API refuse.
-         */
-        module: 'amendes',
-        description: 'Durée du prêt, plafonds et amende, par catégorie et par type.',
-      },
-      {
         href: '/admin/rappels',
         description: 'Les courriels de retard déjà partis, et leur réglage.',
         libelle: 'Rappels envoyés',
@@ -366,6 +338,42 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         description: 'Nom, logo, couleurs et coordonnées de l’établissement.',
         libelle: 'Identité',
         fonctions: ['etablissement.apparence'],
+        groupe: 'Établissement',
+      },
+      {
+        href: '/admin/regles-de-circulation',
+        /**
+         * ⚠ « Durées et plafonds », PAS « Règles de prêt » — et ce n'est pas un
+         * goût. Le voisin `/admin/regles-de-pret` porte déjà ce libellé, et les
+         * deux entrées vivent désormais dans le MÊME onglet : deux commandes qui
+         * s'annoncent pareil sont indiscernables pour qui n'a pas l'écran, et
+         * `getByRole` refuserait de choisir. Le harnais qui cible par le nom
+         * accessible est un lecteur d'écran qui s'exécute à chaque commit — on
+         * corrige le produit, on ne contourne pas le sélecteur.
+         */
+        libelle: 'Durées et plafonds',
+        /**
+         * ⚠ DÉPLACÉ DE GUICHET LE 26 SEPTEMBRE 2026, et la fonction avec. Les
+         * quatre routes `/circulation/rules` exigent `etablissement.regles`
+         * depuis le découplage du backend ; elles exigeaient `circulation.faire`
+         * jusque-là, et l'entrée aussi.
+         *
+         * ⚠ LE BIBLIOTHÉCAIRE PERD CET ÉCRAN, lecture comprise — mesuré sur
+         * `ROLES_SYSTEME` : `etablissement.regles` est portée par
+         * l'ADMINISTRATEUR SEUL, le Gestionnaire ne l'a pas non plus. Garder
+         * `circulation.faire` ici lui laisserait une entrée qui mène à un refus.
+         */
+        fonctions: ['etablissement.regles'],
+        /**
+         * ⚠ PLUS DE `module: 'amendes'`, et le motif est un vrai défaut corrigé,
+         * pas un rangement : trois des quatre champs — durée du prêt, plafond de
+         * prêts, plafond de renouvellements — n'ont rien à voir avec les amendes,
+         * et le service de circulation les lit DIRECTEMENT. Une école qui
+         * éteignait le module voyait donc ses durées APPLIQUÉES et leur réglage
+         * inatteignable. Les routes ne portent plus `@ModuleRequis('amendes')` ;
+         * l'entrée ne doit donc plus disparaître avec lui.
+         */
+        description: 'Durée du prêt, plafonds et amende, par catégorie et par type.',
         groupe: 'Établissement',
       },
       {

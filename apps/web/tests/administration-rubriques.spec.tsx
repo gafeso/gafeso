@@ -104,7 +104,11 @@ describe('la structure de la navigation', () => {
       'Un écran d’administration sans description : la page de rubriques ' +
         'redeviendrait une liste de liens. Décrivez son EFFET, pas son contenu.',
     ).toEqual([]);
-    expect(admin.entrees.length).toBe(7);
+    // ⚠ 8 depuis le 26 septembre 2026 : `/admin/regles-de-circulation` est
+    // arrivé de Guichet avec sa fonction (`etablissement.regles`). Un compte
+    // exact ne dit pas que le code est juste — il oblige à revenir le regarder,
+    // et c'est ce qu'il a fait.
+    expect(admin.entrees.length).toBe(8);
   });
 });
 

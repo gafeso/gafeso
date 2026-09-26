@@ -108,7 +108,13 @@ describe('⚠ LA PURGE : elle trace ce qu’elle a MESURÉ, et le dépôt survit
       }),
     };
     return {
-      svc: new PurgeDepotsService(prisma as never, storage as never),
+      // ⚠ Le module `depot` est ACTIF dans cette doublure : ces cas éprouvent la
+      // purge, pas la garde. Celle-ci a son propre fichier — et une doublure qui
+      // rendrait `false` ici ferait passer tous les cas ci-dessous pour des
+      // « rien à purger », ce qui est exactement la confusion qu'on corrige.
+      svc: new PurgeDepotsService(prisma as never, storage as never, {
+        estActif: async () => true,
+      } as never),
       db,
       storage,
       auditCreate,
@@ -129,12 +135,13 @@ describe('⚠ LA PURGE : elle trace ce qu’elle a MESURÉ, et le dépôt survit
   it('les DEUX objets partent — le clair et le chiffré', async () => {
     const { svc, db, storage } = service([VIEUX]);
     const r = await svc.purgerUneEcole(db, 't1', MAINTENANT);
+    if (!r.purge) throw new Error('la garde a sauté : ce cas éprouve la purge');
 
     expect(storage.deleteObject.mock.calls.map((c) => c[0])).toEqual([
       'd1/doc.pdf',
       'd1/doc.enc',
     ]);
-    expect(r).toEqual({ depots: 1, objets: 2, echecs: 0 });
+    expect(r).toEqual({ purge: true, depots: 1, objets: 2, echecs: 0 });
   });
 
   it('⚠ le journal est écrit, et il NOMME ce qui a été supprimé', async () => {
@@ -156,6 +163,7 @@ describe('⚠ LA PURGE : elle trace ce qu’elle a MESURÉ, et le dépôt survit
     // l'acte », et sur une suppression elle se paie cher.
     const { svc, db, auditCreate } = service([VIEUX], true);
     const r = await svc.purgerUneEcole(db, 't1', MAINTENANT);
+    if (!r.purge) throw new Error('la garde a sauté : ce cas éprouve la purge');
 
     const meta = auditCreate.mock.calls[0][0].data.metadata as Record<string, unknown>;
     expect(meta.objetsSupprimes).toEqual([]);
@@ -199,6 +207,7 @@ describe('⚠ LA PURGE : elle trace ce qu’elle a MESURÉ, et le dépôt survit
       { ...VIEUX, decidedAt: new Date('2027-06-01T00:00:00Z') },
     ]);
     const r = await svc.purgerUneEcole(db, 't1', MAINTENANT);
+    if (!r.purge) throw new Error('la garde a sauté : ce cas éprouve la purge');
 
     expect(storage.deleteObject).not.toHaveBeenCalled();
     expect(r.depots).toBe(0);
@@ -212,6 +221,7 @@ describe('⚠ LA PURGE : elle trace ce qu’elle a MESURÉ, et le dépôt survit
       { ...VIEUX, decidedAt: new Date('2026-09-12T12:00:00Z') },
     ]);
     const r = await svc.purgerUneEcole(db, 't1', new Date('2026-09-12T13:00:00Z'));
+    if (!r.purge) throw new Error('la garde a sauté : ce cas éprouve la purge');
 
     expect(storage.deleteObject).not.toHaveBeenCalled();
     expect(r.depots).toBe(0);

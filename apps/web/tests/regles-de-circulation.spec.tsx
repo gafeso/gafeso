@@ -25,7 +25,7 @@ import { fermerSession, ouvrirSession } from './aide-session';
 
 const T = LIBELLES.reglesDeCirculation;
 
-let FONCTIONS: string[] = ['circulation.faire'];
+let FONCTIONS: string[] = ['etablissement.regles'];
 vi.mock('@/lib/functions', () => ({ useMyFunctions: () => ({ functions: FONCTIONS }) }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -61,7 +61,7 @@ let liste: unknown = REGLES;
 let listeRefuse = false;
 
 beforeEach(() => {
-  FONCTIONS = ['circulation.faire'];
+  FONCTIONS = ['etablissement.regles'];
   envois = [];
   liste = REGLES;
   listeRefuse = false;
@@ -132,7 +132,51 @@ describe('La table montre la COLLECTION, pas un réglage', () => {
     expect(screen.queryByText(LIBELLES.commun.chargement)).toBeNull();
   });
 
-  it('sans la fonction, l’écran refuse en la nommant', async () => {
+  it('⚠ le Bibliothécaire — l’ANCIENNE fonction — est refusé, pas accueilli', async () => {
+    // ⚠ CE CAS EST LE LOT DU 26 SEPTEMBRE 2026, et un `FONCTIONS = []` ne
+    // l'aurait jamais attrapé. L'écran a vécu quatre jours sous
+    // `circulation.faire` ; ses routes exigent `etablissement.regles` depuis le
+    // découplage du module `amendes`. Un Bibliothécaire porte la PREMIÈRE et
+    // pas la seconde : sans ce cas, garder l'ancienne garde laisse la suite
+    // verte et l'écran visible à qui l'API refuse.
+    //
+    // C'est « le jeu d'essai n'atteint pas le chemin » pris par l'autre bout :
+    // le cas minimal (aucune fonction) traverse le même garde et ne distingue
+    // pas les deux fonctions. Seul le jeu d'essai RÉEL — les sept fonctions du
+    // Bibliothécaire — mesure le rétrécissement.
+    FONCTIONS = [
+      'document.lire',
+      'catalogue.gerer',
+      'outils.catalogue',
+      'circulation.faire',
+      'adherents.gerer',
+      'circulation.retards',
+      'lecteurs.voir',
+    ];
+    render(<ReglesDeCirculationPage />);
+    expect(await screen.findByText(LIBELLES.refusDeDroit.reglesDeCirculation)).toBeTruthy();
+    // et il ne voit pas la table : un refus n'est pas un écran en lecture seule
+    expect(screen.queryByText(T.titre)).toBeNull();
+    expect(envois.filter((e) => e.url.includes('/circulation/rules'))).toEqual([]);
+  });
+
+  it('⚠ son titre ne se confond pas avec celui de son VOISIN d’onglet', () => {
+    // Les deux écrans s'appelaient « Règles de prêt » et vivaient dans deux
+    // onglets. Le déplacement du 26 septembre 2026 les a mis côte à côte : le
+    // titre, comme le libellé de l'entrée, doit les distinguer.
+    expect(T.titre).not.toBe(LIBELLES.reglesDePret.titre);
+  });
+
+  it('⚠ le refus NOMME la fonction que l’écran exige, et son destinataire', () => {
+    // Un test qui restate la constante suivrait sa dégradation sans broncher :
+    // c'est la PROPRIÉTÉ du texte qu'on éprouve, pas son emploi.
+    expect(LIBELLES.refusDeDroit.reglesDeCirculation).toContain('etablissement.regles');
+    expect(LIBELLES.refusDeDroit.reglesDeCirculation).not.toContain('circulation.faire');
+    expect(LIBELLES.refusDeDroit.reglesDeCirculation).toMatch(/administrateur/i);
+    expect(LIBELLES.refusDeDroit.reglesDeCirculation).toMatch(/demandez|contactez/i);
+  });
+
+  it('sans aucune fonction, l’écran refuse en la nommant', async () => {
     FONCTIONS = [];
     render(<ReglesDeCirculationPage />);
     expect(await screen.findByText(LIBELLES.refusDeDroit.reglesDeCirculation)).toBeTruthy();

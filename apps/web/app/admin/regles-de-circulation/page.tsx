@@ -19,13 +19,32 @@
  * bibliothécaire avait posée. Un singleton n'est pas une collection à un
  * élément.
  *
- * ⚠ ET POURQUOI SOUS GUICHET, PAS SOUS ADMINISTRATION. Le précédent est écrit
- * dans `/admin/regles-de-pret` : « le paramétrage des rappels vivait sur le
- * même écran, mais son API exige une TROISIÈME permission ; le laisser ici
- * aurait donné un bloc qui refuse à la personne même qui voit l'écran ». Les
- * quatre routes exigent `circulation.faire`. L'Administrateur a les deux
- * fonctions, donc l'écart ne se verrait pas aujourd'hui — c'est un accord PAR
- * COÏNCIDENCE, et il tombe au premier rôle personnalisé.
+ * ⚠ SOUS ADMINISTRATION DEPUIS LE 26 SEPTEMBRE 2026 — et l'écran a d'abord
+ * vécu sous Guichet, avec `circulation.faire`, parce que c'était ce que ses
+ * quatre routes exigeaient. Elles exigent désormais `etablissement.regles`.
+ *
+ * ⚠ ET LE COMMENTAIRE PRÉCÉDENT AVAIT PRÉVU LE MÉCANISME, pas son occasion.
+ * Il disait : « l'Administrateur a les deux fonctions, donc l'écart ne se
+ * verrait pas aujourd'hui — c'est un accord PAR COÏNCIDENCE, et il tombe au
+ * premier rôle personnalisé ». L'accord est bien tombé, mais par l'autre
+ * bout : ce ne sont pas les rôles qui ont divergé, ce sont les ROUTES qui ont
+ * changé de fonction. Écrit ici parce qu'une prédiction juste sur le mécanisme
+ * et fausse sur la cause se relit comme une prédiction ratée, et elle ne
+ * l'était pas.
+ *
+ * ⚠ CE QUE ÇA COÛTE, NOMMÉ : le Bibliothécaire perd l'accès à cet écran,
+ * lecture comprise — mesuré sur `ROLES_SYSTEME`, `etablissement.regles` est
+ * portée par l'ADMINISTRATEUR SEUL (le Gestionnaire ne l'a pas non plus). Ce
+ * n'est pas un choix du front : garder `circulation.faire` ici donnerait
+ * exactement le défaut que ce fichier cite deux paragraphes plus haut — un
+ * écran visible dont l'API refuse les quatre routes.
+ *
+ * ⚠ ET LE MODULE `amendes` A DISPARU DE L'ENTRÉE, pour un motif qui n'est pas
+ * cosmétique : trois des quatre champs — durée du prêt, plafond de prêts,
+ * plafond de renouvellements — n'ont rien à voir avec les amendes, et le
+ * service de circulation les lit DIRECTEMENT. Une école qui éteignait les
+ * amendes voyait donc ses durées appliquées et leur réglage inatteignable :
+ * un paramètre qui AGIT et qu'on ne peut plus voir.
  */
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
@@ -148,7 +167,7 @@ export default function ReglesDeCirculationPage() {
 
   // ⚠ Un refus n'est pas une attente : sans ce garde, l'adresse tapée sans la
   // fonction laisserait la table sur « Chargement… » indéfiniment.
-  if (functions && !functions.includes('circulation.faire')) {
+  if (functions && !functions.includes('etablissement.regles')) {
     return <Alert tone="error">{LIBELLES.refusDeDroit.reglesDeCirculation}</Alert>;
   }
 

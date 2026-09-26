@@ -48,10 +48,18 @@ describe('quelles entrées dépendent d’un module', () => {
       '/admin/moissonnage',
       '/admin/rappels',
       '/admin/rapport-annuel',
-      // ⚠ Neuvième le 22 septembre 2026 : les règles de circulation (dette
-      // n° 15). Ses quatre routes portent `@ModuleRequis('amendes')` — donc
-      // une entrée de plus, et le PREMIER écran entier que ce module gouverne.
-      '/admin/regles-de-circulation',
+      /*
+       * ⚠ `/admin/regles-de-circulation` A QUITTÉ CETTE LISTE le 26 septembre
+       * 2026, et c'est le geste que le témoin d'en dessous avait annoncé :
+       * « le jour où l'API découple, cette entrée change de module — et ce
+       * témoin le rappellera ». Il l'a rappelé, en refusant.
+       *
+       * Ses quatre routes ne portent plus `@ModuleRequis('amendes')` : trois
+       * des quatre champs — durée du prêt, plafond de prêts, plafond de
+       * renouvellements — n'ont rien à voir avec les amendes, et le service de
+       * circulation les lit DIRECTEMENT. Une école qui éteignait le module
+       * voyait donc ses durées APPLIQUÉES et leur réglage inatteignable.
+       */
       // ⚠ Sixième depuis P8-1 : l'entrée portait `modulePrevu` — un champ
       // d'ATTENTE, qui a survécu toute une phase à la condition qui le
       // justifiait. Le module existe, ses routes sont gardées.
@@ -90,27 +98,31 @@ describe('quelles entrées dépendent d’un module', () => {
     expect(moduleDeLaRoute('/mes-encadrements')).toBeUndefined();
   });
 
-  it('⚠ `amendes` a UNE entrée depuis le 22 septembre — et ses blocs restent dans le noyau', () => {
-    // ⚠ CE TÉMOIN DISAIT L'INVERSE, et il avait raison jusqu'à aujourd'hui :
-    // « amendes n'a PAS d'entrée, ses blocs vivent dans des écrans du noyau ».
-    // Le guichet et la fiche d'adhérent appartiennent toujours au noyau, et
-    // éteindre `amendes` y retire des BLOCS, pas une entrée — ça n'a pas
-    // changé.
+  it('⚠ `amendes` n’a AUCUNE entrée — ses effets sont des blocs dans le noyau', () => {
+    // ⚠ CE TÉMOIN A DIT TROIS CHOSES SUCCESSIVES, et les trois étaient vraies
+    // à leur date. Il vaut d'être lu en entier, parce qu'il est le seul de ce
+    // dépôt à avoir annoncé son propre retournement :
     //
-    // Ce qui a changé : `/admin/regles-de-circulation` (dette n° 15) est un
-    // écran ENTIER dont les quatre routes portent `@ModuleRequis('amendes')`.
-    // Son entrée doit donc disparaître avec le module, sans quoi elle mènerait
-    // à un écran que l'API refuse.
+    //   · avant le 22/09 — « amendes n'a PAS d'entrée, ses blocs vivent dans
+    //     des écrans du noyau » ;
+    //   · le 22/09 — « UNE entrée : `/admin/regles-de-circulation`, premier
+    //     écran ENTIER que ce module gouverne » ;
+    //   · le 26/09 — de nouveau AUCUNE, parce que l'API a découplé.
     //
-    // ⚠ Et le couplage est DISCUTABLE, il est signalé en passation : une règle
-    // porte aussi la durée du prêt et le plafond d'emprunts, qui n'ont rien à
-    // voir avec les amendes. Une école qui éteint les amendes perd le réglage
-    // de ses durées de prêt. Le jour où l'API découple, cette entrée change de
-    // module — et ce témoin le rappellera.
+    // ⚠ ET LA VERSION DU 22 ÉCRIVAIT LE GESTE À VENIR : « le couplage est
+    // DISCUTABLE […] une règle porte aussi la durée du prêt et le plafond
+    // d'emprunts, qui n'ont rien à voir avec les amendes. Une école qui éteint
+    // les amendes perd le réglage de ses durées de prêt. Le jour où l'API
+    // découple, cette entrée change de module — et ce témoin le rappellera. »
+    // Il l'a rappelé en refusant le lot d'aujourd'hui.
+    //
+    // Le guichet et la fiche d'adhérent restent dans le noyau : éteindre
+    // `amendes` y retire des BLOCS, pas une entrée. C'est ce que ce témoin
+    // disait au départ, et il le redit.
     const parModule = NAVIGATION_PERSONNEL.flatMap((o) => o.entrees).filter(
       (e) => e.module === 'amendes',
     );
-    expect(parModule.map((e) => e.href)).toEqual(['/admin/regles-de-circulation']);
+    expect(parModule.map((e) => e.href)).toEqual([]);
   });
 });
 
@@ -143,16 +155,24 @@ describe('⚠ un module éteint retire son entrée', () => {
       '/admin/interoperabilite',
       '/admin/depots-soumis',
       '/admin/depots-a-cataloguer',
-      // ⚠ Sixième le 22 septembre 2026 : les règles de circulation, sous
-      // `amendes`. C'est le premier écran ENTIER que ce module gouverne — ses
-      // autres effets étaient des blocs dans des écrans du noyau.
-      '/admin/regles-de-circulation',
       // ⚠ Depuis le 15 septembre 2026, la file du directeur est une entrée de
       // la barre : elle doit disparaître comme les deux autres du circuit.
       '/depots-a-valider',
     ]) {
       expect(restant).not.toContain(href);
     }
+
+    // ⚠ ET L'AFFIRMATION INVERSE, sur l'écran qui a quitté cette liste le
+    // 26 septembre 2026 : `/admin/regles-de-circulation` DOIT RESTER, tous
+    // modules éteints. Sans cette ligne, le retrait ne serait gardé par rien —
+    // une entrée retirée d'une liste d'attendus ne laisse aucune trace, et
+    // c'est exactement la forme « qu'est-ce qui reste écrit sans plus être
+    // vrai ? » prise à l'envers : ici il ne reste RIEN d'écrit.
+    //
+    // Le motif tient en une phrase : le service de circulation lit les durées
+    // et les plafonds DIRECTEMENT, donc ils s'appliquent même module éteint.
+    // Un paramètre qui agit doit rester réglable.
+    expect(restant).toContain('/admin/regles-de-circulation');
     expect(restant).not.toContain('/admin/moissonnage');
     // ⚠ Témoin de COMPTE, et il compare les ÉLÉMENTS, pas seulement le total.
     // Un compte exact sur deux listes ne prouve rien tant qu'on n'a pas comparé

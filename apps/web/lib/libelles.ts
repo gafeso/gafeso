@@ -897,8 +897,20 @@ export const LIBELLES = {
      */
     recolement:
       'Le récolement n’est pas ouvert à votre compte (fonction « outils.catalogue »).',
+    /**
+     * ⚠ NOMMAIT « circulation.faire » jusqu'au 26 septembre 2026. Les quatre
+     * routes exigent `etablissement.regles` depuis le découplage du module
+     * `amendes` : le texte désignait donc une fonction que l'écran ne demande
+     * plus, et il aurait envoyé réclamer la mauvaise.
+     *
+     * ⚠ Un refus NOMME à qui s'adresser — un recours sans destinataire est une
+     * impasse, et pour un Bibliothécaire qui vient de perdre cet écran, c'est
+     * la seule sortie.
+     */
     reglesDeCirculation:
-      'Les règles de prêt ne sont pas ouvertes à votre compte (fonction « circulation.faire »).',
+      'Le réglage des durées et des plafonds n’est pas ouvert à votre compte ' +
+      '(fonction « etablissement.regles », réservée à l’administrateur). ' +
+      'Demandez-le à l’administrateur de votre établissement.',
   },
 
   /**
@@ -1732,7 +1744,19 @@ export const LIBELLES = {
    * avait posée. **Un singleton n'est pas une collection à un élément.**
    */
   reglesDeCirculation: {
-    titre: 'Règles de prêt',
+    /**
+     * ⚠ « Durées et plafonds » DEPUIS LE 26 SEPTEMBRE 2026 — l'écran s'appelait
+     * « Règles de prêt », et `reglesDePret.titre` aussi. Les deux ont vécu dans
+     * deux onglets différents ; le déplacement de Guichet vers Administration
+     * les a mis CÔTE À CÔTE, et deux écrans de même titre dans le même onglet
+     * sont indiscernables pour qui navigue sans voir la page.
+     *
+     * ⚠ Et le titre suit la PORTE, pas l'inverse : l'entrée de navigation porte
+     * le même libellé. Une phrase fausse vit souvent à deux endroits — celui
+     * qui mène et celui qui accueille — et on les corrige ENSEMBLE ou on en
+     * laisse une.
+     */
+    titre: 'Durées et plafonds',
     introduction:
       'Une règle par couple catégorie d’adhérent / type d’exemplaire. Le guichet applique la plus précise qui correspond au prêt.',
     /** ⚠ Ce que « * » veut dire, écrit là où on le lit — pas dans une aide. */

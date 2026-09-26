@@ -37,6 +37,20 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'refusDeDroit.reglesDeCirculation',
+    nature: 'promet',
+    raison:
+      'Un refus qui adresse la personne à quelqu’un d’autre est un RECOURS, et ' +
+      'un recours sans destinataire est une impasse. Le 26 septembre 2026, les ' +
+      'quatre routes /circulation/rules ont cessé d’exiger circulation.faire ' +
+      'pour exiger etablissement.regles : le Bibliothécaire a PERDU cet écran, ' +
+      'lecture comprise, et cette phrase est tout ce qu’il obtient. Elle doit ' +
+      'continuer de NOMMER la fonction réellement exigée (etablissement.regles, ' +
+      'jamais l’ancienne) et DIRE à qui s’adresser — l’administrateur de ' +
+      'l’établissement est le seul à la porter, mesuré sur ROLES_SYSTEME. ' +
+      '« Réessayez plus tard » serait une attente, pas une sortie.',
+  },
+  {
     cle: 'reservations.confirmationNonEnvoyee',
     nature: 'promet',
     raison:

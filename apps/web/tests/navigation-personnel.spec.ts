@@ -54,12 +54,44 @@ describe('découpage par métier (et non plus tout sous Administration)', () => 
     expect(onglet('guichet')!.entrees.map((e) => e.href)).toContain('/guichet');
   });
 
+  it('deux entrées du MÊME onglet ne portent jamais le même libellé', () => {
+    // ⚠ L'INVARIANT, pas le cas : le 26 septembre 2026, déplacer
+    // `/admin/regles-de-circulation` sous Administration l'a mis à côté d'un
+    // `/admin/regles-de-pret` qui s'appelait aussi « Règles de prêt ». Deux
+    // commandes qui s'annoncent pareil sont indiscernables pour qui navigue
+    // sans voir l'écran — et `getByRole` refuse de choisir, ce qui est le même
+    // constat rendu par la suite.
+    //
+    // Écrit comme propriété plutôt que comme assertion sur ces deux entrées :
+    // la prochaine collision viendra d'un écran dont personne ici n'a entendu
+    // parler.
+    for (const onglet of NAVIGATION_PERSONNEL) {
+      const vus = new Map<string, string[]>();
+      for (const e of onglet.entrees) {
+        vus.set(e.libelle, [...(vus.get(e.libelle) ?? []), e.href]);
+      }
+      const doubles = [...vus.entries()].filter(([, hrefs]) => hrefs.length > 1);
+      expect(
+        doubles,
+        `onglet « ${onglet.libelle} » : ${doubles
+          .map(([l, h]) => `« ${l} » porté par ${h.join(' et ')}`)
+          .join(' ; ')} — renommez-en un, ne contournez pas le sélecteur.`,
+      ).toEqual([]);
+    }
+  });
+
   it('Administration ne garde que du paramétrage', () => {
     expect(onglet('administration')!.entrees.map((e) => e.libelle)).toEqual([
       // ⚠ « Modules » EN TÊTE : activer un module décide de ce que les autres
       // écrans montrent. C'est le réglage qui commande les réglages.
       'Modules',
       'Identité',
+      // ⚠ ARRIVÉE LE 26 SEPTEMBRE 2026, en provenance de Guichet : ses quatre
+      // routes exigent `etablissement.regles` et non plus `circulation.faire`.
+      // Le libellé N'EST PAS « Règles de prêt » — son voisin le porte déjà, et
+      // deux commandes de même nom dans le même onglet sont indiscernables pour
+      // qui n'a pas l'écran. Voir l'invariant d'unicité juste en dessous.
+      'Durées et plafonds',
       'Règles de prêt',
       'Page d’accueil',
       'Interopérabilité',

@@ -234,6 +234,42 @@ Le script est idempotent : le relancer (ex. après un ajout de données de
 démo dans une future version) ne régénère jamais un mot de passe/lien pour
 un compte déjà existant.
 
+### ⚠ Ce que le provisionnement NE crée PAS : ni bibliothécaire, ni étudiant
+
+Une instance fraîchement provisionnée porte **deux comptes**, et deux seulement :
+
+| Compte | Où il vit | Comment il se connecte |
+|---|---|---|
+| super-admin **plateforme** | schéma `public` | `POST /admin/login` |
+| **administrateur** de l'école | schéma de l'école | l'écran de connexion, par le lien de définition |
+
+⚠ **Aucun compte de bibliothécaire, de gestionnaire ni d'étudiant n'est créé.**
+C'est délibéré : ce sont les comptes d'une école réelle, et un script ne doit pas
+en inventer sur l'instance d'un client. Mais rien ne le disait, et on le découvre
+en cherchant un compte à montrer.
+
+**Ce que l'administrateur fait ensuite**, dans cet ordre :
+
+1. **Les comptes du personnel** — *Administration › Comptes*, création puis
+   activation. Le rôle est choisi **par l'activateur**, jamais par l'inscrit :
+   posez-le au moment de l'activation. Chaque compte reçoit un lien de
+   définition de mot de passe (24 h, usage unique) ; aucun mot de passe n'est
+   jamais envoyé en clair.
+2. **Les classes** — *Administration › Classes*. Elles gouvernent l'accès aux
+   collections : sans elles, aucune règle par classe ne peut être écrite.
+3. **Les étudiants attendus** — l'import du fichier de l'école (matricule,
+   courriel, classe). C'est lui qui rend l'inscription publique automatique :
+   un étudiant dont le matricule et le courriel y figurent est activé seul, les
+   autres attendent une activation manuelle.
+   ⚠ Servez-vous de l'**aperçu** avant d'importer : il nomme les lignes qui
+   partiraient. Un remplacement sans aperçu est un retrait en aveugle.
+
+⚠ **Les données de démonstration que le script crée** (classes, une collection,
+quelques notices) existent pour ne pas démarrer sur un catalogue vide. Elles ne
+contiennent aucun compte utilisable, et rien ne les distingue de données réelles
+une fois l'école en service : retirez-les avant la mise en production si l'école
+ne veut pas les voir.
+
 ### ⚠ Reprendre l'accès à un compte dont le mot de passe est perdu
 
 L'idempotence ci-dessus a une conséquence qu'il faut nommer : **relancer le

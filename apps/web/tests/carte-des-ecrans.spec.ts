@@ -155,9 +155,15 @@ describe('la carte des écrans', () => {
     // Un compte, pas une présence : il convoque quelqu'un le jour où un écran
     // s'ajoute, et c'est ce jour-là qu'on décide s'il a une porte.
     // ⚠ 48 depuis le 22 septembre 2026 : `/admin/regles-de-circulation`
-    // (dette n° 15). Il a une porte — onglet Guichet, fonction
-    // `circulation.faire`, module `amendes` — et c'est ce témoin qui a posé la
-    // question au bon moment.
+    // (dette n° 15). Il a une porte — et c'est ce témoin qui a posé la question
+    // au bon moment.
+    //
+    // ⚠ Sa porte a CHANGÉ le 26 septembre 2026 : onglet Administration,
+    // fonction `etablissement.regles`, plus aucun module. Le compte n'a pas
+    // bougé — il ne pouvait pas : un écran déplacé reste un écran. C'est la
+    // limite du témoin de compte, et elle est écrite ici plutôt que découverte
+    // ailleurs : il convoque quand un écran s'AJOUTE, jamais quand sa porte se
+    // déplace. Ce qui garde la porte est la carte engendrée juste en dessous.
     expect(ecransSurLeDisque().length).toBe(48);
   });
 

@@ -41,7 +41,6 @@ refuser la route par l’API.
 | Écran | Adresse | Fonction exigée | Module | Ce qu’on y fait |
 |---|---|---|---|---|
 | Prêt et retour | `/guichet` | `circulation.faire` | noyau | Prêter, rendre, encaisser une amende — au code-barres. |
-| Règles de prêt | `/admin/regles-de-circulation` | `circulation.faire` | `amendes` — **disparaît si éteint** | Durée du prêt, plafonds et amende, par catégorie et par type. |
 | Rappels envoyés | `/admin/rappels` | `circulation.retards` | `rappels` — **disparaît si éteint** | Les courriels de retard déjà partis, et leur réglage. |
 
 ### Onglet « Outils »
@@ -66,6 +65,7 @@ refuser la route par l’API.
 |---|---|---|---|---|
 | Modules *(Établissement)* | `/admin/modules` | `modules.gerer` | noyau | Allumer ou éteindre les fonctions de l’école. |
 | Identité *(Établissement)* | `/admin/etablissement` | `etablissement.apparence` | noyau | Nom, logo, couleurs et coordonnées de l’établissement. |
+| Durées et plafonds *(Établissement)* | `/admin/regles-de-circulation` | `etablissement.regles` | noyau | Durée du prêt, plafonds et amende, par catégorie et par type. |
 | Règles de prêt *(Établissement)* | `/admin/regles-de-pret` | `etablissement.regles` | noyau | Renouvellement en ligne et mise de côté des réservations. |
 | Page d’accueil *(Établissement)* | `/admin/accueil` | `etablissement.apparence` | noyau | Textes et images de la page publique. |
 | Interopérabilité *(Diffusion)* | `/admin/interoperabilite` | `diffusion.gerer` | `interoperabilite` — **disparaît si éteint** | Ce que l’extérieur peut moissonner de votre catalogue. |
