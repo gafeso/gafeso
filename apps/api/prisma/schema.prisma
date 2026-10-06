@@ -104,6 +104,23 @@ model TenantSettings {
   themeTokens                Json?   @map("theme_tokens")
   latticeEnabled             Boolean @default(false) @map("lattice_enabled")
   homepageContent            Json?   @map("homepage_content")
+  /// MENTIONS LÉGALES et POLITIQUE DE CONFIDENTIALITÉ, rédigées par l'école.
+  ///
+  /// ⚠ POURQUOI UNE COLONNE SÉPARÉE ET PAS `homepageContent`, et le motif vient
+  /// du front (6 octobre 2026) : `normalizeHomeContent` devrait alors connaître
+  /// des pages qui ne sont PAS de l'accueil. « Deux choses dans une colonne
+  /// finit par faire décider à l'une pour l'autre. » La colonne coûte une
+  /// migration et se lit.
+  ///
+  /// ⚠ ET LE MOTIF MÉTIER décide de la FORME : sur l'instance de l'UO, l'éditeur
+  /// et le responsable du traitement sont L'UO, pas ResurgiTech. Un texte en dur
+  /// signé ResurgiTech sur le site d'un client serait FAUX — légalement, pas
+  /// seulement cosmétiquement. Ces pages se rédigent donc par école, comme
+  /// l'accueil.
+  ///
+  /// Forme : { mentions: { blocs: Record<string,string>, publieeLe: string|null },
+  ///           confidentialite: { … } } — normalisée en lecture comme l'accueil.
+  pagesLegales               Json?   @map("pages_legales")
   // 2FA OBLIGATOIRE pour les rôles disposant de comptes.gerer / etablissement.gerer.
   // Schéma public (pas de sync-schema) → défaut non-null sans risque.
   require2fa                 Boolean @default(false) @map("require_2fa")

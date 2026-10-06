@@ -32,6 +32,11 @@ const TRACE_ATTENDUE: Record<string, string> = {
   themeTokens: 'changedTheme',
   latticeEnabled: 'changedLattice',
   homepageContent: 'changedHomepage',
+  // ⚠ Un texte JURIDIQUE mérite au moins autant de trace que l'accueil, et sans
+  // doute plus : c'est le document qui désigne l'éditeur et le responsable du
+  // traitement. « Quand a-t-il changé ? » est la première question du jour où il
+  // est contesté.
+  pagesLegales: 'changedPagesLegales',
 };
 
 /**
@@ -62,7 +67,12 @@ describe('audit des réglages de l’école', () => {
   it('le relevé lit bien le DTO (témoin de compte)', () => {
     // Six champs aujourd'hui. Un compte exact, et non « au moins un » : c'est
     // ce qui signale un champ ajouté dont personne n'aurait parlé.
-    expect(champs.length).toBe(6);
+    // ⚠ 6 → 7 le 6 octobre 2026 : `pagesLegales` (mentions légales et
+    // confidentialité, demandées par le front pour l'UO). Le compte a fait son
+    // office — il a refusé le lot en NOMMANT le champ, et il a obligé à venir
+    // choisir ce qu'on trace. Un texte juridique mérite au moins autant de
+    // trace que l'accueil.
+    expect(champs.length).toBe(7);
     expect(champs).toContain('require2fa'); // le champ qui a motivé le lot
   });
 

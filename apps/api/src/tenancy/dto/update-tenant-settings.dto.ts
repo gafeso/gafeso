@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsObject, IsOptional, Matches, Validate } from 'class-validator';
 import { BandeauAccueilValide } from './hero-slides.validator';
+import { PagesLegalesValides } from './pages-legales.validator';
 import { ReglageDeplace } from './reglage-deplace.validator';
 
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
@@ -65,4 +66,25 @@ export class UpdateTenantSettingsDto {
   @IsObject({ message: 'homepageContent doit être un objet.' })
   @Validate(BandeauAccueilValide)
   homepageContent?: Record<string, unknown>;
+
+  /**
+   * MENTIONS LÉGALES et CONFIDENTIALITÉ — remplacement complet, comme l'accueil.
+   *
+   * ⚠ Le validateur REFUSE plutôt que de laisser le normaliseur tronquer : sur
+   * un document juridique, une troncature silencieuse n'est pas une gêne
+   * d'affichage. Voir `pages-legales.validator.ts`.
+   *
+   * ⚠ Et ce que la route PUBLIQUE en rend est FILTRÉ : seules les pages dont
+   * `publieeLe` est posé sortent. Un brouillon n'est pas lisible du dehors.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Pages légales rédigées par l’établissement : ' +
+      '{ mentions: { blocs, publieeLe }, confidentialite: { … } }. ' +
+      'Seules les pages dont publieeLe est posé sont servies publiquement.',
+  })
+  @IsOptional()
+  @IsObject({ message: 'pagesLegales doit être un objet.' })
+  @Validate(PagesLegalesValides)
+  pagesLegales?: Record<string, unknown>;
 }

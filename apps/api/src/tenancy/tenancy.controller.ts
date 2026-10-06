@@ -32,6 +32,7 @@ import { ResolvedTenant, TenancyService } from './tenancy.service';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { mergeHomeTokens } from './home-theme';
 import { heroSlidesEffectives, normalizeHomeContent } from './home-content';
+import { normaliserPagesLegales, pourLePublic } from './pages-legales';
 import { enrollmentUrl, qrPng, qrPosterPdf } from './enrollment-qr';
 
 /**
@@ -245,6 +246,18 @@ export class TenancyController {
       include: { settings: true },
     });
     const content = normalizeHomeContent(record?.settings?.homepageContent);
+    // 🔴 LES PAGES LÉGALES, FILTRÉES — cette route est PUBLIQUE.
+    //
+    // Elle est déclarée « contenu de la vitrine publique » dans l'inventaire des
+    // routes sans fonction. Servir la colonne telle quelle y publierait les
+    // BROUILLONS d'une bibliothécaire : un texte juridique à demi rédigé,
+    // lisible de tout l'internet, sous le nom de l'établissement.
+    //
+    // `pourLePublic` ne laisse sortir que ce dont `publieeLe` est posé. Voir
+    // `pages-legales.ts` pour le motif complet.
+    const pagesLegales = pourLePublic(
+      normaliserPagesLegales(record?.settings?.pagesLegales),
+    );
     return {
       name: nomAffichable(record?.name, tenant.name),
       slug: tenant.slug,
@@ -253,6 +266,7 @@ export class TenancyController {
       themeTokens: mergeHomeTokens(record?.settings?.themeTokens),
       latticeEnabled: record?.settings?.latticeEnabled ?? false,
       content,
+        pagesLegales,
       // ⚠ À CÔTÉ de `content`, JAMAIS DEDANS.
       //
       // Liste EFFECTIVE du bandeau : celle qui est stockée, ou — pour une école
@@ -314,6 +328,11 @@ export class TenancyController {
       // LU plus haut (GET current) — un toggle doit pouvoir afficher son état.
       metadata: {
         changedHomepage: dto.homepageContent !== undefined,
+          // ⚠ UN TEXTE JURIDIQUE MÉRITE AU MOINS AUTANT DE TRACE QUE L'ACCUEIL,
+          // et sans doute plus : c'est le document qui désigne l'éditeur et le
+          // responsable du traitement. Savoir QUAND il a changé est la première
+          // question qu'on posera le jour où il est contesté.
+          changedPagesLegales: dto.pagesLegales !== undefined,
         changedColors: dto.primaryColor !== undefined || dto.secondaryColor !== undefined,
         changedTheme: dto.themeTokens !== undefined,
         changedLattice: dto.latticeEnabled !== undefined,

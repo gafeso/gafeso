@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { mergeHomeTokens, sanitizeHomeTokens } from './home-theme';
 import { sanitizeHomeContentInput } from './home-content';
+import { assainirPagesLegalesEnEntree } from './pages-legales';
 import { isValidSlug } from './tenant-schema';
 
 export interface ResolvedTenant {
@@ -105,12 +106,22 @@ export class TenancyService {
         ? (sanitizeHomeContentInput(dto.homepageContent) as unknown as Prisma.InputJsonValue)
         : undefined;
 
+    // pagesLegales : remplacement complet, comme l'accueil. Le DTO a déjà REFUSÉ
+    // ce qui serait tronqué — la normalisation ici ne fait donc que borner des
+    // valeurs déjà acceptables, et elle NFC-ise les textes (ils arrivent d'un
+    // copier-coller depuis un PDF, donc d'un tiers).
+    const pagesLegales: Prisma.InputJsonValue | undefined =
+      dto.pagesLegales !== undefined
+        ? (assainirPagesLegalesEnEntree(dto.pagesLegales) as unknown as Prisma.InputJsonValue)
+        : undefined;
+
     const data = {
       ...(dto.primaryColor !== undefined && { primaryColor: dto.primaryColor }),
       ...(dto.secondaryColor !== undefined && { secondaryColor: dto.secondaryColor }),
       ...(themeTokens !== undefined && { themeTokens }),
       ...(dto.latticeEnabled !== undefined && { latticeEnabled: dto.latticeEnabled }),
       ...(homepageContent !== undefined && { homepageContent }),
+      ...(pagesLegales !== undefined && { pagesLegales }),
     };
     return this.prisma.tenantSettings.upsert({
       where: { tenantId },
