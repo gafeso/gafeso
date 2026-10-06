@@ -230,6 +230,96 @@ pendant 759 commits. `apps/api/src/health/version-publiee.spec.ts` refuse qu'ils
 changent, et il lit `git show HEAD:` — pas l'arbre de travail, parce que c'est
 l'archive qu'on étiquette et qu'on déploie.
 
+## 🔴 AVANT TOUT REDÉMARRAGE D'UNE INSTANCE EN SERVICE — le contrôle des secrets
+
+Depuis la V1, **l'API REFUSE DE DÉMARRER** si un secret de production porte une
+valeur d'exemple (`change_me`, `dev_`, `example`, `À REMPLIR`) ou est plus court
+que son minimum. C'est voulu — un `change_me` en production est un compte
+administrateur offert à qui lit le dépôt public.
+
+⚠ **Mais sur une instance EN SERVICE, ce refus se découvre au REDÉMARRAGE**, et
+le conteneur boucle alors en redémarrant. On le demande donc AVANT :
+
+```bash
+scripts/verifier-secrets-de-production.sh
+```
+
+Il charge **le module de l'API lui-même** depuis l'image (donc une seule source :
+un contrôle qui recopierait les seuils dirait oui le jour où l'API dit non), il
+ne démarre **ni la base ni Meilisearch** (`--no-deps`), et il **n'imprime aucune
+valeur** — seulement le nom de la variable, sa longueur, et ce qu'un attaquant
+pourrait faire.
+
+⚠ **À lancer APRÈS le build et AVANT `up -d`.** Le script a besoin de l'image.
+
+### 🔴 Ce que rc4 faisait de faux, et qui a empêché un démarrage
+
+*Mesuré par Jean sur la démonstration le 6 octobre 2026.*
+
+```
+REFUS DE DÉMARRER — POSTGRES_PASSWORD est VIDE.
+```
+
+Or `.env.prod` la portait. **Le conteneur `api` ne reçoit pas cette variable** :
+ce fichier compose ne lui passe que `DATABASE_URL`, composée depuis elle. Le
+contrôle vérifiait une variable absente du conteneur qu'il protège.
+
+**Corrigé depuis rc5** : le mot de passe de la base est jugé **dans
+`DATABASE_URL`**, et le refus nomme les deux — *« POSTGRES_PASSWORD (lu dans
+DATABASE_URL, que le conteneur reçoit) »*. Vous corrigez toujours
+`POSTGRES_PASSWORD` dans `.env.prod`.
+
+⚠ **Si vous êtes sur rc4**, le contournement est un fichier compose
+supplémentaire qui passe `POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}` au service
+`api`. Montez en rc5 dès que possible : le contournement ajoute une seconde
+source pour la même valeur, et deux sources s'accordent par coïncidence.
+
+### Et le contrôle se fait aussi AVANT les migrations, depuis rc5
+
+Le refus vivait dans `main.ts`, donc après `prisma migrate deploy`. Un mot de
+passe de base faible produisait donc une boucle de `P1000: Authentication
+failed` au lieu du refus explicite. Il est désormais dans le point d'entrée,
+**avant toute migration** — un contrôle de configuration passe avant tout accès
+à la base.
+
+**Les six secrets et leurs minimums :**
+
+| Variable | Minimum | Ce qu'un attaquant peut faire |
+|---|---|---|
+| `JWT_SECRET` | 32 | signer une session de n'importe quel compte de n'importe quelle école |
+| `POSTGRES_PASSWORD` | 24 | lire et écrire TOUTE la base, toutes écoles confondues — ⚠ **jugé dans `DATABASE_URL`**, que le conteneur reçoit (voir ci-dessous) |
+| `MEILI_MASTER_KEY` | 24 | lire et modifier l'index — donc tout le catalogue |
+| `MINIO_ROOT_PASSWORD` | 16 | remplacer les fichiers déposés, et MinIO sert les couvertures sur un domaine PUBLIC |
+| `OFFLINE_CONTENT_KEK` | 40 | déchiffrer TOUS les documents protégés (32 octets en base64 = 44 caractères) |
+| `ADMIN_API_KEY` | 24, **vide autorisé** | provisionner des écoles ; vide = routes de plateforme désactivées, choix légitime en mono-établissement |
+
+🔴 **Et si c'est `OFFLINE_CONTENT_KEK` qui est refusée sur une instance qui porte
+déjà des documents chiffrés : NE LA TOURNEZ PAS.** Il n'existe aucun script de
+réenveloppement — la tourner rend illisible tout le contenu déjà ingéré (backlog
+n° 54).
+
+⚠ **Mais MESUREZ D'ABORD — la dette est proportionnelle au nombre de documents
+déjà ingérés, et sur une instance neuve il n'y en a AUCUN :**
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "
+    SELECT n.nspname, (SELECT count(*) FROM pg_class c
+      WHERE c.relnamespace = n.oid AND c.relname = 'digital_copies')
+    FROM pg_namespace n WHERE n.nspname LIKE 'tenant_%'"
+# puis, pour chaque école :
+#   SELECT count(*) FROM tenant_<slug>.digital_copies WHERE enc_status = 'ready';
+```
+
+**Zéro document ⇒ la rotation est LIBRE, sans aucune perte.**
+
+🔴 **Et cette ligne a été corrigée le 6 octobre 2026 parce qu'elle portait un
+faux.** Elle disait, en substance, « ne la tournez pas, l'instance porte 155
+documents chiffrés » — c'était le chiffre de **notre base de développement**,
+attribué à une instance que nous n'avons pas le droit de lire. Mesurée par son
+exploitant : **0.** Le faux n'exposait rien ; il INTERDISAIT un geste sûr, et un
+interdit fondé sur un faux ne se rouvre jamais parce qu'il paraît prudent.
+
 ## ⭐ PREMIER DÉMARRAGE — l'assistant d'installation
 
 **Une instance neuve n'a aucun compte, et aucune route n'en crée.** Au premier

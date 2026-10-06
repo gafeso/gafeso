@@ -138,7 +138,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 corps() { curl -s "$@"; }
 
 # ── POINT 1 — sans jeton, rien ne passe
-titre "① sans session, rien ne passe — sauf `etat`"
+titre "① sans session, rien ne passe — sauf la route etat"
 [ "$(code "$A/installation/etat")" = 200 ] && vert "etat → 200 (publique, par dessein)" || rouge "etat devrait être publique"
 requise=$(corps "$A/installation/etat")
 echo "$requise" | grep -q '"requise":true' && vert "etat dit requise:true" || rouge "etat: $requise"

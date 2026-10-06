@@ -13,6 +13,7 @@ import {
   SECRETS_DE_PRODUCTION,
   motifDeRefus,
   refusDesSecrets,
+  motDePasseDeLUrl,
 } from './secrets-de-production';
 
 const RACINE = join(__dirname, '..', '..', '..', '..');
@@ -160,6 +161,57 @@ describe('⭐ LE REFUS MORD — sur chaque forme de faiblesse', () => {
   });
 
   it('témoin POSITIF global : six valeurs fortes ne produisent AUCUN refus', () => {
-    expect(refusDesSecrets(() => 'Z'.repeat(64))).toEqual([]);
+    // ⚠ CE TÉMOIN A ÉTÉ CORRIGÉ LE 6 OCTOBRE 2026, et sa première forme disait
+    // quelque chose sur nos fixtures. Il faisait `() => 'Z'.repeat(64)` — toute
+    // variable rend la même chaîne forte. Ça passait tant que
+    // `POSTGRES_PASSWORD` était lue directement ; depuis qu'elle est lue DANS
+    // `DATABASE_URL`, une chaîne de Z n'est pas une URL, donc le mot de passe
+    // extrait est vide, donc le refus tombe.
+    //
+    // ⭐ Et c'est la bonne nouvelle : la fixture ne RESSEMBLAIT PAS au monde.
+    // Un témoin qui rend la même valeur pour toutes les variables ne peut pas
+    // voir qu'une variable a une FORME.
+    const fort = 'Z'.repeat(64);
+    const lire = (v: string) =>
+      v === 'DATABASE_URL' ? `postgresql://u:${fort}@db:5432/b?schema=public` : fort;
+    expect(refusDesSecrets(lire)).toEqual([]);
+  });
+
+  it('🔴 le mot de passe de la BASE est lu dans DATABASE_URL, pas dans POSTGRES_PASSWORD', () => {
+    // ⚠ CE CAS A COÛTÉ UN DÉMARRAGE DE PRODUCTION (6 octobre 2026). Le conteneur
+    // `api` ne reçoit PAS `POSTGRES_PASSWORD` : le compose ne lui passe que
+    // `DATABASE_URL`, composée depuis elle. Le contrôle vérifiait donc une
+    // variable absente du conteneur qu'il protège.
+    const fort = 'Z'.repeat(64);
+
+    // ① l'environnement RÉEL de la production : pas de POSTGRES_PASSWORD
+    const prod = (v: string) =>
+      v === 'DATABASE_URL' ? `postgresql://u:${fort}@db:5432/b?schema=public` : fort;
+    expect(refusDesSecrets(prod), 'une configuration VALIDE de production').toEqual([]);
+
+    // ② et le refus mord quand c'est l'URL qui porte une valeur faible
+    const faible = (v: string) =>
+      v === 'DATABASE_URL' ? 'postgresql://u:change_me_svp@db:5432/b?schema=public' : fort;
+    const motifs = refusDesSecrets(faible);
+    expect(motifs).toHaveLength(1);
+    expect(motifs[0], 'il nomme ce que l’opérateur ÉDITE').toContain('POSTGRES_PASSWORD');
+    expect(motifs[0], 'et il dit OÙ il a lu').toContain('DATABASE_URL');
+
+    // ③ ⚠ témoin d'ABSENCE sur la confusion PLAUSIBLE : poser un
+    // POSTGRES_PASSWORD fort ne doit PAS sauver une URL faible. Un repli vers le
+    // nom de l'opérateur ferait passer le contrôle en développement et le ferait
+    // échouer en production — exactement la divergence qu'on corrige.
+    expect(refusDesSecrets(faible)).toHaveLength(1);
+  });
+
+  it('⚠ un mot de passe percent-encodé n’est pas jugé TRONQUÉ', () => {
+    // Un mot de passe peut contenir `@`, `:` et `/` encodés. Un découpage à la
+    // main jugerait une chaîne coupée — donc trop courte — et refuserait un mot
+    // de passe FORT. `URL` les décode.
+    const brut = 'aB@c:d/eF%gH!jK0nO1pQ2rS3tU4';
+    const encode = encodeURIComponent(brut);
+    expect(motDePasseDeLUrl(`postgresql://u:${encode}@db:5432/b`)).toBe(brut);
+    expect(motDePasseDeLUrl('pas une url')).toBeNull();
+    expect(motDePasseDeLUrl('postgresql://u@db:5432/b'), 'URL sans mot de passe').toBe('');
   });
 });
