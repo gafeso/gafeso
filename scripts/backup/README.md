@@ -29,7 +29,7 @@ pas d'une panne matérielle.
 > ⚠ Restauration = écrasement. Arrêter l'application (`api`, `web`) d'abord.
 
 ⚠ **`psql` SORT EN 0 MÊME QUAND LA RESTAURATION ÉCHOUE.** Mesuré le 06/10/2026
-par `scripts/recette-sauvegarde-restauree.sh` : quatre erreurs SQL, code de
+par `./scripts/recette-sauvegarde-restauree.sh` : quatre erreurs SQL, code de
 sortie zéro — et sur une archive VIDE, zéro erreur et zéro restauré. **Le code
 de sortie ne dit rien ; seule la comparaison des données le dit.** La dernière
 étape ci-dessous n'est donc pas une précaution, c'est la mesure.

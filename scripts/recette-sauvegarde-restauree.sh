@@ -17,7 +17,7 @@
 # l'hôte. Le conteneur se nomme par `RECETTE_DB_CONTENEUR` (défaut : celui du
 # développement).
 #
-# Usage : bash scripts/recette-sauvegarde-restauree.sh
+# Usage : ./scripts/recette-sauvegarde-restauree.sh
 set -uo pipefail
 
 ROUGE=$'\033[0;31m'; VERT=$'\033[0;32m'; GRIS=$'\033[0;90m'; JAUNE=$'\033[0;33m'; FIN=$'\033[0m'
