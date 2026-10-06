@@ -793,6 +793,34 @@ export class AccountsService {
   // Helpers — jeton dans la transaction, emails après
   // ───────────────────────────────────────────────────────────
   /** Crée le jeton 24 h (usage unique) et retourne l'URL de définition. */
+  /**
+   * Pose un jeton de mot de passe DANS une transaction en cours et rend l'URL.
+   *
+   * ⚠ RENDUE PUBLIQUE le 6 octobre 2026 pour l'assistant d'installation, et le
+   * motif est celui qui compte : l'assistant doit créer son administrateur ET
+   * obtenir le lien DANS LA MÊME transaction. `createStaff` rend bien un
+   * compte, mais PAS son `setPasswordUrl` — donc un échec d'envoi laisserait
+   * l'administrateur sans aucun chemin vers le seul compte de l'instance. Et
+   * enchaîner `createStaff` puis `passwordLink` poserait DEUX jetons, dont le
+   * premier — celui qui est parti par courriel — serait invalidé par le second.
+   */
+  async creerLienMotDePasseDans(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<string> {
+    return this.createPasswordToken(tx, userId);
+  }
+
+  /** Même chose hors transaction — pour une REPRISE, où le compte existe déjà. */
+  async creerLienMotDePasse(db: TenantDb, userId: string): Promise<string> {
+    return db.$transaction(async (tx) => {
+      // ⚠ Les jetons précédents tombent : deux liens valides pour un même
+      // compte, c'est deux chemins à révoquer au lieu d'un.
+      await tx.passwordToken.deleteMany({ where: { userId } });
+      return this.createPasswordToken(tx, userId);
+    });
+  }
+
   private async createPasswordToken(
     tx: Prisma.TransactionClient,
     userId: string,

@@ -1,33 +1,41 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { refusDesSecrets } from './common/secrets-de-production';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { VERSION_PUBLIEE } from './health/version';
+import { InstallationService } from './installation/installation.service';
+import { engendrerJeton } from './installation/jeton-amorcage';
+import { PrismaService } from './prisma/prisma.service';
 import { MulterExceptionFilter } from './common/multer-exception.filter';
 
 /**
- * En production, refuse de démarrer avec des secrets d'exemple ou trop
- * courts : mieux vaut un échec franc au déploiement qu'une plateforme
- * ouverte avec « change_me » comme clé.
+ * EN PRODUCTION, REFUSE DE DÉMARRER SUR UN SECRET FAIBLE OU CONNU.
+ *
+ * ⚠ Il n'en couvrait que DEUX sur six — `JWT_SECRET` et `ADMIN_API_KEY`. La
+ * liste vit désormais dans `secrets-de-production.ts`, sous forme d'OBLIGATION :
+ * un secret neuf absent de la liste fait échouer son garde.
+ *
+ * ⚠ Et le pire cas n'est pas « faible », c'est « CONNU » : copier
+ * `.env.prod.example` tel quel fait du marqueur « À REMPLIR » la clé réelle —
+ * un secret publié dans notre propre dépôt.
  */
 function assertProductionSecrets(config: ConfigService): void {
   if (config.get<string>('NODE_ENV') !== 'production') return;
 
-  const problems: string[] = [];
-  const jwtSecret = config.get<string>('JWT_SECRET') ?? '';
-  if (jwtSecret.length < 32 || jwtSecret.includes('change_me')) {
-    problems.push('JWT_SECRET (32 caractères aléatoires minimum)');
-  }
-  const adminKey = config.get<string>('ADMIN_API_KEY') ?? '';
-  if (adminKey && (adminKey.length < 24 || /change_me|dev_/.test(adminKey))) {
-    problems.push('ADMIN_API_KEY (24 caractères aléatoires minimum, ou vide pour désactiver)');
-  }
-  if (problems.length > 0) {
+  const refus = refusDesSecrets((v) => config.get<string>(v));
+  if (refus.length > 0) {
     throw new Error(
-      `Refus de démarrer en production avec des secrets faibles : ${problems.join(' ; ')}.`,
+      'REFUS DE DÉMARRER — secrets de production faibles ou d’exemple :\n' +
+        refus.map((r) => `  · ${r}`).join('\n') +
+        '\n\nEngendrez-les : openssl rand -base64 32' +
+        '\nPour une instance DÉJÀ EN SERVICE, suivez « Rotation des secrets » ' +
+        'dans DEPLOY.md : l’ordre des gestes compte, et certains invalident les ' +
+        'sessions en cours.',
     );
   }
 }
@@ -85,7 +93,7 @@ async function bootstrap() {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Gafeso API')
       .setDescription('SIGB multi-tenant open-source — API NestJS')
-      .setVersion('0.1.0')
+      .setVersion(VERSION_PUBLIEE.version)
       .addBearerAuth()
       .addApiKey(
         { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
@@ -94,6 +102,51 @@ async function bootstrap() {
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('docs', app, document);
+  }
+
+  /**
+   * LE JETON D'AMORÇAGE — engendré À CHAQUE DÉMARRAGE tant que l'installation
+   * reste à faire.
+   *
+   * ⚠ POURQUOI À CHAQUE DÉMARRAGE et pas une seule fois. Un jeton posé une fois
+   * laisse un trou sans issue : l'installateur qui perd le fichier — un `rm`, un
+   * volume recréé, une copie oubliée — n'a plus AUCUN chemin, et il faudrait
+   * alors une route de reprise, c'est-à-dire une seconde porte sur une instance
+   * non installée. Régénérer ferme le trou sans ouvrir de porte : le fichier
+   * correspond toujours à ce que la base attend, et le jeton du démarrage
+   * précédent cesse de valoir.
+   *
+   * ⚠ ET `essaisRates` N'EST PAS REMIS À ZÉRO. C'est tout l'intérêt de l'avoir
+   * persisté : un attaquant qui fait tomber la sonde pour provoquer un
+   * redémarrage ne doit pas récupérer vingt essais.
+   */
+  try {
+    const installation = app.get(InstallationService, { strict: false });
+    if (await installation.estRequise()) {
+      const { empreinte, chemin } = engendrerJeton();
+      await app.get(PrismaService, { strict: false }).installation.update({
+        where: { id: 'unique' },
+        data: { jetonHash: empreinte },
+      });
+      Logger.warn(
+        'INSTALLATION REQUISE — cette instance n’a pas encore d’établissement. ' +
+          `Le jeton d’amorçage est dans ${chemin} (droits 0600). ` +
+          '⚠ Ne collez jamais son CONTENU ailleurs : pour demander de l’aide, ' +
+          'donnez ce CHEMIN. Il est consommé par l’installation et le fichier effacé.',
+        'Bootstrap',
+      );
+    }
+  } catch (erreur) {
+    // ⚠ On NE BLOQUE PAS le démarrage : une instance déjà installée dont la
+    // table manquerait (migration en retard) doit continuer de servir. Mais on
+    // le DIT, parce qu'un assistant qui ne s'ouvre jamais sur une instance
+    // neuve est indiscernable d'une instance déjà installée.
+    Logger.error(
+      'L’état d’installation n’a pas pu être lu : ' +
+        `${(erreur as Error).message}. Si cette instance est NEUVE, l’assistant ` +
+        'ne pourra pas s’ouvrir — vérifiez que les migrations Prisma sont appliquées.',
+      'Bootstrap',
+    );
   }
 
   const port = config.get<number>('API_PORT') ?? 4000;

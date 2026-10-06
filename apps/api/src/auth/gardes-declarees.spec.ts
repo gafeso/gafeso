@@ -190,6 +190,32 @@ const DECIDE_DANS_LE_SERVICE: Record<string, string> = {
 };
 
 const AUTRE_MECANISME: Record<string, string> = {
+  // ── L'ASSISTANT D'INSTALLATION — la TROISIÈME famille de gardes.
+  //
+  // ⚠ Elle n'est pas gardée par une FONCTION (il n'existe aucun compte avant
+  // l'installation, donc aucune fonction à exiger) ni par une CLÉ D'API (il
+  // n'existe pas encore d'instance à administrer). Son dispositif est
+  // `SessionAssistantGuard`, adossé au jeton d'amorçage.
+  //
+  // ⭐ ET SON INVENTAIRE PROPRE EST AILLEURS : `installation/routes-installation-gardees.spec.ts`
+  // vérifie que chaque route est gardée OU publique avec son motif, que les
+  // throttles sont ceux du code, et que la liste est complète. On ne mélange pas
+  // les populations ici — on les DÉCLARE, pour qu'aucune route ne soit dans
+  // l'inventaire de rien (leçon du 26 septembre : `GET /tenants/:slug/socle`).
+  'installation/installation.controller.ts :: Get etat':
+    'PUBLIQUE par dessein — le front doit choisir entre l’assistant et la ' +
+    'connexion avant d’avoir un jeton. Ne rend QUE le booléen.',
+  'installation/installation.controller.ts :: Post jeton':
+    'PUBLIQUE par nécessité — c’est elle qui vérifie le jeton d’amorçage. ' +
+    'Protégée par ce jeton, un throttle de 5/min et un verrou à 20 essais persisté.',
+  'installation/installation.controller.ts :: Get constat':
+    'SessionAssistantGuard — jeton d’amorçage échangé contre une session de 30 min',
+  'installation/installation.controller.ts :: Get modules':
+    'SessionAssistantGuard — la liste du registre, pendant l’installation seule',
+  'installation/installation.controller.ts :: Post test-courriel':
+    'SessionAssistantGuard + throttle 3/min — une route d’envoi ouverte est un relais de pourriel',
+  'installation/installation.controller.ts :: Post terminer':
+    'SessionAssistantGuard + confirme:true — ferme l’assistant définitivement (410 ensuite)',
   'admin/admin.controller.ts :: Post super-admins/reinitialiser':
     'ApiKeyGuard — reprise d’accès au super-admin plateforme (backlog n° 48). '
     + 'Pas un élargissement : le garde accepte indifféremment la clé ou un JWT '
@@ -367,7 +393,7 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     expect(perimees, 'exceptions périmées').toEqual([]);
   });
 
-  it('⚠ l’inventaire COMPTE juste — 55 routes sans fonction, pas « au moins une »', () => {
+  it('⚠ l’inventaire COMPTE juste — 68 routes sans fonction, pas « au moins une »', () => {
     // Un témoin qui COMPTE, et non qui constate : c'est la forme qui signale ce
     // à quoi on n'a pas pensé. Si ce nombre bouge, quelqu'un a ajouté ou retiré
     // une route joignable sans fonction — et doit le dire.
@@ -384,10 +410,18 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     // venir DÉCLARER la route, donc à écrire pourquoi elle n'a pas de fonction
     // et ce qui la garde à la place.
     //
+      // ⚠ 62 → 68 le 6 octobre 2026 : les SIX routes de l'assistant
+      // d'installation (chantier B de la V1). C'est le plus gros saut de ce
+      // compteur, et il désigne une TROISIÈME famille de gardes — ni fonction,
+      // ni clé d'API, mais `SessionAssistantGuard` adossé à un jeton d'amorçage.
+      // Leur inventaire propre est `installation/routes-installation-gardees.spec.ts`,
+      // écrit SÉPARÉMENT : élargir celui-ci mélangerait des populations dont les
+      // règles diffèrent (là-bas, une route DOIT être publique).
+      //
     // ⚠ Les DEUX comptes bougent ensemble : l'un mesure ce qui EST, l'autre ce
     // qui est DÉCLARÉ. N'en changer qu'un rendrait le second silencieux.
-    expect(sansFonction.length).toBe(62);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(62);
+    expect(sansFonction.length).toBe(68);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(68);
   });
 });
 

@@ -14,6 +14,7 @@
 // lien. L'accès est désormais exactement « cette personne a-t-elle au moins
 // une entrée ? ». L'API reste seule autorité sur les actions.
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMyFunctions } from '@/lib/functions';
@@ -22,6 +23,7 @@ import { destinationOnglet, moduleDeLaRoute, ongletDe, ongletsVisibles } from '@
 import { EcranModuleEteint } from '@/components/ecran-module-eteint';
 import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
+import { lireVersion, type VersionQuiTourne } from '@/lib/version-qui-tourne';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -202,6 +204,70 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      {/*
+        ⚠ LE PIED DE LA COQUE, et il n'existait pas avant le 6 octobre 2026. Il
+        ne porte qu'une chose : LA VERSION QUI TOURNE, avec son commit.
+        C'est la première question d'un support — « quelle version avez-vous ? » —
+        et jusqu'ici personne ne pouvait y répondre : les trois `package.json`
+        portaient `0.1.0` depuis 759 commits.
+
+        ⚠ Le commit est ICI et pas dans le pied public : ce n'est pas le même
+        lecteur. Un visiteur de bibliothèque n'a rien à faire d'un SHA.
+      */}
+      <VersionDeLInstance />
     </>
+  );
+}
+
+/**
+ * La version de l'instance, demandée à `GET /health` — publique, sans session.
+ *
+ * ⚠ ELLE N'AFFICHE RIEN TANT QU'ELLE NE SAIT PAS, et rien non plus si l'appel
+ * échoue. Pas de « version inconnue », pas de squelette : une non-réponse écrite
+ * comme un fait est le défaut que ce dépôt traque, et ici le faux coûterait un
+ * diagnostic mené sur le mauvais code.
+ *
+ * ⚠ `cache: 'no-store'` : une version mise en cache afficherait, juste après un
+ * déploiement, celle qu'on CROIT avoir déployée — le mode de panne exact que
+ * l'API a écarté en la lisant à l'exécution.
+ */
+function VersionDeLInstance() {
+  const [version, setVersion] = useState<VersionQuiTourne | null>(null);
+
+  useEffect(() => {
+    let vivant = true;
+    /*
+     * ⚠ UN `try` AUTOUR DE L'APPEL, ET PAS SEULEMENT UN `.catch`. Mesuré le
+     * 6 octobre 2026 : `fetch` peut lever SYNCHRONEMENT — c'est ce que font les
+     * doublures de ce dépôt, qui refusent bruyamment toute requête non couverte
+     * (« ce qui n'est pas explicitement prévu échoue bruyamment »). Un `.catch`
+     * ne voit que les rejets : l'exception traversait donc le rendu, et SEPT
+     * écrans sans rapport ont échoué en annonçant « bouton introuvable ».
+     *
+     * Le défaut n'était pas dans le test : une exception au montage de la coque
+     * casse tout ce qu'elle contient, en production comme en test. Un pied de
+     * page qui affiche un numéro de version ne doit jamais pouvoir faire ça.
+     */
+    async function demander() {
+      try {
+        const res = await fetch('/api/health', { cache: 'no-store' });
+        if (!res.ok) return;
+        const charge: unknown = await res.json();
+        if (vivant) setVersion(lireVersion(charge));
+      } catch {
+        /* injoignable, ou doublure qui refuse : on n'affiche rien */
+      }
+    }
+    void demander();
+    return () => {
+      vivant = false;
+    };
+  }, []);
+
+  if (!version) return null;
+  return (
+    <footer className="border-t border-line px-4 py-2 text-xs text-muted">
+      {LIBELLES.administration.version(version.version, version.commit)}
+    </footer>
   );
 }

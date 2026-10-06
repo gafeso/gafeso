@@ -1,9 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CollectionType, PrismaClient } from '@prisma/client';
+import { CollectionType, Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { refusDeDeplacement } from '../collections/hierarchie';
 import { planifierPropagation } from '../collections/propagation';
@@ -67,7 +68,51 @@ export class AccessControlService {
   //  - une collection COMMERCIAL/EXTERNAL est partagée (tenantId null), mais
   //    ses règles d'accès restent propres à chaque école.
   // ───────────────────────────────────────────────────────────
+  /**
+   * Traduit le refus de l'index `collections_nom_unique_par_parent` en 409.
+   *
+   * ⚠ SANS ELLE, LE REFUS SORT EN 500. Une `P2002` remontée telle quelle est une
+   * erreur serveur : l'écran dirait « une erreur est survenue » sur un geste que
+   * le produit refuse pour une raison précise et corrigeable.
+   *
+   * ⚠ ET LE MESSAGE NOMME LA COLLISION. « Nom déjà utilisé » ferait chercher
+   * dans toute l'arborescence : le nom est libre ailleurs, il ne l'est pas ICI.
+   * La contrainte porte sur la FRATRIE, et c'est ce que la phrase doit dire —
+   * sinon on envoie quelqu'un renommer une collection qui n'a rien à voir.
+   *
+   * ⚠ Une seule implémentation pour les DEUX portes, la création et le
+   * déplacement : deux formulations d'un même refus divergent le jour où l'une
+   * change, et c'est l'utilisateur qui paie la différence.
+   */
+  private refusDeNomEnFratrie(error: unknown, nom: string, racine: boolean): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        racine
+          ? `Une collection « ${nom} » existe déjà à la racine de votre établissement. ` +
+            'Deux collections de même niveau et de même nom seraient indiscernables ' +
+            'à l’écran — et une notice rattachée à la mauvaise élargirait son accès ' +
+            'en silence.'
+          : `Une collection « ${nom} » existe déjà sous la même collection parente. ` +
+            'Le nom reste libre ailleurs dans l’arborescence : c’est entre FRÈRES ' +
+            'qu’il doit être unique.',
+      );
+    }
+    throw error;
+  }
+
   async createCollection(dto: CreateCollectionDto, tenantId: string) {
+    try {
+      return await this.creerCollection(dto, tenantId);
+    } catch (error) {
+      // La route ne pose PAS de `parentId` : toute création est une RACINE.
+      this.refusDeNomEnFratrie(error, dto.name, true);
+    }
+  }
+
+  private async creerCollection(dto: CreateCollectionDto, tenantId: string) {
     return this.prisma.collection.create({
       data: {
         name: dto.name,
@@ -136,6 +181,28 @@ export class AccessControlService {
       if (refus) throw new BadRequestException(refus);
     }
 
+    // ⚠ LA SECONDE PORTE. `parentId` ne se pose QU'ICI — la route de création ne
+    // le lit même pas —, donc c'est ce chemin qui crée les FRATRIES. L'index les
+    // refuse par construction ; sans cette traduction, le refus sortirait en 500
+    // sur un geste que le produit refuse pour une raison corrigeable.
+    //
+    // ⚠ Le nom employé dans le message est celui d'APRÈS : `dto.name` s'il est
+    // fourni, sinon celui que la collection porte déjà. Nommer l'ancien nom dans
+    // un refus de renommage enverrait chercher la mauvaise collection.
+    try {
+      return await this.majCollection(id, dto);
+    } catch (error) {
+      const actuelle = await this.prisma.collection.findUnique({
+        where: { id },
+        select: { name: true, parentId: true },
+      });
+      const nom = dto.name ?? actuelle?.name ?? '';
+      const parentApres = dto.parentId !== undefined ? dto.parentId : actuelle?.parentId;
+      this.refusDeNomEnFratrie(error, nom, parentApres === null || parentApres === undefined);
+    }
+  }
+
+  private async majCollection(id: string, dto: UpdateCollectionDto) {
     return this.prisma.collection.update({
       where: { id },
       data: {

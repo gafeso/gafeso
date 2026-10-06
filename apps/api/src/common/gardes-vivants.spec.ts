@@ -59,10 +59,17 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement HUIT', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement NEUF', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
+    //
+    // ⚠ PUIS À NEUF le 26 septembre 2026 : l'unicité du nom de collection entre
+    // FRÈRES. Elle n'est pas dans `schema.prisma` — Prisma 5.22 n'exprime ni
+    // `NULLS NOT DISTINCT` ni les index partiels — donc `db push` ne la crée pas,
+    // et dev pourrait ne pas la porter quand la production la porte. Le compte a
+    // fait son office : il a obligé à revenir vérifier que ce garde est ROUGE
+    // base absente, et non vert sur rien.
     //
     // ⚠ PASSÉ DE TROIS À QUATRE le 12 septembre 2026, puis à SIX le 14 —
     // l'isolement entre écoles et la déprovision. Le compte a fait son office
@@ -75,6 +82,7 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'cataloging/formes-decomposees-en-base.spec.ts',
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
+      'collections/nom-de-collection-en-base.spec.ts',
       'roles/roles-systeme-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
       'tenancy/isolement-des-ecoles-en-base.spec.ts',

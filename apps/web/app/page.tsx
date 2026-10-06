@@ -14,6 +14,7 @@ import {
   fetchNouveautes,
   fetchTenantHome,
   toHomeTheme,
+  versionQuiTourne,
 } from '@/lib/server-api';
 import { homeThemeStyle } from '@/lib/home-theme';
 import { HomeHeader } from '@/components/home/home-header';
@@ -93,6 +94,10 @@ export default async function HomePage() {
   // ⚠ `fetchTenantHome` reste seul et AVANT : le repli sobre ci-dessus dépend
   // de sa réponse, et c'est lui qui porte le nom de l'école et le bandeau.
   // C'est le plancher de ce lot, structurel et assumé.
+  // ⚠ LA VERSION QUI TOURNE, demandée à l'API et jamais déduite. `null` quand
+  // on ne sait pas — et alors on n'affiche RIEN : un pied muet vaut mieux qu'un
+  // numéro inventé, qui enverrait un support lire le mauvais code.
+  const version = await versionQuiTourne();
   const { content, latticeEnabled } = home;
   const { identity } = content;
   const themeStyle = homeThemeStyle(toHomeTheme(home));
@@ -542,7 +547,13 @@ export default async function HomePage() {
               qu'en dessous, discrètement. C'est sa vitrine, pas la nôtre. */}
           <div className={styles.footBottom}>
             <div>{content.contact.copyright || home.name}</div>
-            <div className={styles.signatureGafeso}>{LIBELLES.pied.signature}</div>
+            <div className={styles.signatureGafeso}>
+              {LIBELLES.pied.signature}
+              {/* ⚠ Collée à la signature Gafeso, et pas au copyright de
+                  l'établissement : c'est la version de NOTRE logiciel, pas une
+                  mention de l'école. Et conditionnée — voir `version` plus haut. */}
+              {version && <> · {LIBELLES.pied.version(version.version)}</>}
+            </div>
           </div>
         </div>
       </footer>

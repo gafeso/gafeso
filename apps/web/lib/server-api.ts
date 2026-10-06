@@ -14,6 +14,7 @@
 import { headers } from 'next/headers';
 import type { HomeTheme } from '@/lib/home-theme';
 import type { Diapositive } from '@/lib/hero-slides';
+import { lireVersion, type VersionQuiTourne } from './version-qui-tourne';
 
 const HOME_TTL = 300; // secondes — cache raisonnable, invalidé à la sauvegarde admin
 
@@ -373,4 +374,26 @@ export async function fetchNouveautes(): Promise<NoticeANouveaute[] | null> {
 /** Adapte la charge utile au contrat du util de thème (lib/home-theme). */
 export function toHomeTheme(home: TenantHome): HomeTheme {
   return { primary: home.primaryColor, tokens: home.themeTokens };
+}
+
+/**
+ * LA VERSION QUI TOURNE, lue côté serveur pour le pied de page public.
+ *
+ * ⚠ `no-store` et pas de revalidation. Une version mise en cache afficherait,
+ * juste après un déploiement, « celle qu'on croit avoir déployée » — exactement
+ * le mode de panne que `apps/api/src/health/version.ts` a écarté en la lisant à
+ * l'exécution. Mettre en cache ici le réintroduirait côté web.
+ *
+ * ⚠ Rend `null` sur toute panne — API injoignable, charge inattendue. L'appelant
+ * n'affiche alors RIEN : un pied de page sans numéro est muet, un pied de page
+ * avec un faux numéro est un faux dispositif.
+ */
+export async function versionQuiTourne(): Promise<VersionQuiTourne | null> {
+  try {
+    const res = await fetch(`${apiUrl()}/health`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return lireVersion(await res.json());
+  } catch {
+    return null;
+  }
 }

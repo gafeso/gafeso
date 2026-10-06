@@ -1,6 +1,6 @@
 {
   "name": "@gafeso/api",
-  "version": "0.1.0",
+  "version": "0.0.0-non-publie",
   "private": true,
   "description": "Gafeso — API NestJS (monolithe modulaire)",
   "license": "AGPL-3.0",

@@ -74,6 +74,22 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
+# LA VERSION QUI TOURNE — posée au BUILD, lue de git par
+# `scripts/version-du-depot.sh`, jamais tapée à la main.
+#
+# ⚠ Les défauts ci-dessous sont les réponses HONNÊTES d'un build fait sans ces
+# arguments (un `docker build` à la main) : « non étiquetée » plutôt qu'un
+# numéro plausible. Un ARG non passé arrive comme chaîne VIDE, c'est pourquoi
+# `version.ts` borne sur le CONTENU et pas sur la présence.
+#
+# ⚠ Posés sur l'étage `runner` seulement : un ARG sur un étage de build
+# invaliderait le cache de compilation à CHAQUE commit, pour deux chaînes qui
+# n'entrent dans aucun calcul.
+ARG GAFESO_VERSION="non étiquetée"
+ARG GAFESO_COMMIT="inconnu"
+ENV GAFESO_VERSION=$GAFESO_VERSION
+ENV GAFESO_COMMIT=$GAFESO_COMMIT
+
 RUN addgroup -S gafeso && adduser -S gafeso -G gafeso
 
 # Dépendances de prod : node_modules RACINE (où npm hisse l'essentiel) + le
@@ -91,6 +107,22 @@ COPY --from=pruner /app/out/full/package.json ./package.json
 # `docker compose exec api node scripts/...` — voir DEPLOY.md. Copiés tels
 # quels depuis le contexte de build (racine du monorepo), pas de compilation.
 COPY scripts ./scripts
+
+# L'ÉTAT LOCAL DU CONTENEUR — aujourd'hui le seul fichier qui y vit est le jeton
+# d'amorçage de l'assistant d'installation.
+#
+# ⚠ TROUVÉ EN ÉCRIVANT DEPLOY.md, le 6 octobre 2026, et pas par la recette : elle
+# surchargeait `GAFESO_JETON_INSTALLATION_FICHIER` vers un répertoire temporaire,
+# donc elle n'a jamais exercé le chemin par défaut. Sans ce `mkdir`, le premier
+# démarrage d'une instance NEUVE aurait levé `ENOENT` sur /app/etat — exactement
+# la famille « le clone frais vérifie la PRÉSENCE, pas l'EXÉCUTION » : la recette
+# éprouvait un chemin qui n'est pas celui de la production.
+#
+# ⚠ Il N'EST PAS déclaré en VOLUME, délibérément. Le jeton ne doit pas survivre à
+# la destruction du conteneur : il est régénéré à chaque démarrage tant que
+# l'installation reste à faire, et un jeton qui persiste dans un volume que
+# personne ne nettoie est le défaut mesuré du 9 septembre.
+RUN mkdir -p /app/etat
 
 # Script d'entrée : applique les migrations Prisma puis démarre l'API.
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh

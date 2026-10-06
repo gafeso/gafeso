@@ -182,6 +182,102 @@ Les trois enregistrements DNS vérifiés par `install.sh` couvrent déjà ce cas
 `storage.<domaine>` en fait partie. Ne le retirez pas en pensant qu'il ne sert
 qu'aux couvertures d'ouvrages.
 
+## ⭐ Construire les images : la VERSION se pose au BUILD
+
+```bash
+git fetch --tags && git checkout v1.0.0-rc2
+V="$(scripts/version-du-depot.sh --exporter)" || exit 1
+eval "$V"
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+```
+
+⚠ **On construit DEPUIS L'ÉTIQUETTE, pas depuis `main`.** `main` avance ; une
+étiquette ne bouge pas. Un build fait sur `main` porte le dernier commit, pas la
+version qu'on croit déployer — et le script le DIRA (`non étiquetée`), ce qui est
+honnête mais pas ce qu'on voulait.
+
+⚠ **Et `eval "$(…)"` directement serait FAUX.** Cette forme **avale le code de
+sortie** : un refus passerait inaperçu, et le build produirait une image
+« non étiquetée » en silence. L'affectation, elle, propage le code — d'où les
+deux lignes.
+
+⚠ Le script **REFUSE** (code 1, rien sur la sortie standard) si des fichiers
+**suivis** sont modifiés : l'image ne correspondrait pas à l'étiquette. Il
+**avertit** en les nommant si des fichiers **non suivis** traînent dans le
+contexte de build — à vous de juger s'ils sont internes, et `.dockerignore` en
+écarte déjà les briefs.
+
+La première ligne lit l'étiquette git et le SHA court, et les exporte. Le compose
+les passe en `ARG` au `Dockerfile` de l'API, qui les fige dans l'image. `GET
+/health` les publie ensuite, et Swagger affiche la même valeur :
+
+```json
+{ "status": "ok", "version": "v1.0.0-rc1", "commit": "ba3ccc2" }
+```
+
+⚠ **Sans ces variables, l'image répond `version: "non étiquetée"`.** C'est la
+réponse HONNÊTE d'un build fait sans étiquette, et c'est voulu : un numéro
+plausible enverrait le support chercher dans le mauvais code. Le `commit`, lui,
+identifie exactement ce cas-là.
+
+⚠ **Le script REFUSE d'exporter sur un arbre de travail SALE** — l'image ne
+correspondrait pas à l'étiquette.
+
+⚠ **Et `package.json` n'est PAS la source.** Les trois portent
+`0.0.0-non-publie`, délibérément : un numéro tenu à la main est resté à `0.1.0`
+pendant 759 commits. `apps/api/src/health/version-publiee.spec.ts` refuse qu'ils
+changent, et il lit `git show HEAD:` — pas l'arbre de travail, parce que c'est
+l'archive qu'on étiquette et qu'on déploie.
+
+## ⭐ PREMIER DÉMARRAGE — l'assistant d'installation
+
+**Une instance neuve n'a aucun compte, et aucune route n'en crée.** Au premier
+démarrage, l'API détecte qu'il n'existe aucun établissement, engendre un **jeton
+d'amorçage** et le journalise :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml logs api | grep INSTALLATION
+```
+
+La ligne donne le **CHEMIN** d'un fichier à droits `0600` dans le conteneur :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  exec api cat /app/etat/jeton-installation.txt
+```
+
+Ouvrez ensuite l'application : l'assistant demande ce jeton, puis
+l'établissement, l'administrateur et les modules. À la fin, il affiche **une
+seule fois** le lien de définition du mot de passe de l'administrateur — notez-le
+avant de quitter la page, même si le courriel est parti.
+
+> 🔴 **NE COLLEZ JAMAIS LE CONTENU DU FICHIER DE JETON ailleurs** — ni dans un
+> ticket, ni sur un forum, ni dans une conversation. Pour demander de l'aide,
+> donnez le **CHEMIN**. Le jeton est à usage unique et son fichier est effacé
+> dès l'installation terminée, mais la fenêtre d'installation est exactement
+> celle où il vaut quelque chose.
+
+⚠ **Un jeton est RÉGÉNÉRÉ à chaque redémarrage** tant que l'installation reste à
+faire : si vous perdez le fichier, redémarrez `api` et relisez-le. Le jeton
+précédent cesse alors de valoir.
+
+⚠ **Après l'installation, les six routes `/installation/*` répondent `410
+Gone`.** Elles ont existé et n'existent plus — ce n'est pas une erreur de
+configuration.
+
+⚠ **Au-delà de 20 jetons faux présentés, l'assistant se verrouille** et le
+compteur est persisté : un redémarrage ne le remet pas à zéro. Le verrou se lève
+en base, délibérément :
+
+```sql
+UPDATE public.installation SET essais_rates = 0;
+```
+
+⚠ **Pour éprouver tout cela AVANT de le faire sur la machine qui servira votre
+école** : `scripts/recette-assistant-installation.sh` monte un cluster jetable et
+sa propre API, et mesure les neuf propriétés par leur effet.
+
 ## Provisionnement et administration
 
 > Le **premier** établissement est créé par `install.sh` (voir
@@ -269,6 +365,157 @@ quelques notices) existent pour ne pas démarrer sur un catalogue vide. Elles ne
 contiennent aucun compte utilisable, et rien ne les distingue de données réelles
 une fois l'école en service : retirez-les avant la mise en production si l'école
 ne veut pas les voir.
+
+## Rotation des secrets — instance EN SERVICE
+
+> ⚠ **L'ORDRE DES GESTES COMPTE, et certains invalident les sessions en cours.**
+> Lisez la séquence entière avant de commencer : deux de ces rotations exigent
+> que le service soit arrêté, et une seule d'entre elles est réversible sans
+> perte.
+
+⚠ **Depuis le 06/10/2026, l'API REFUSE DE DÉMARRER** sur un secret faible,
+vide, ou portant un marqueur d'exemple (`change_me`, `À REMPLIR`, `dev_`…). Le
+refus nomme chaque variable fautive **et ce qu'un attaquant en obtiendrait**, et
+il les nomme TOUTES d'un coup. Si votre instance tourne depuis avant cette date,
+le prochain redémarrage peut donc refuser : vérifiez `.env.prod` d'abord.
+
+```bash
+# Ce que l'API exige, sans la redémarrer : longueur et absence de marqueur
+grep -E '^(JWT_SECRET|ADMIN_API_KEY|POSTGRES_PASSWORD|MEILI_MASTER_KEY|MINIO_ROOT_PASSWORD|OFFLINE_CONTENT_KEK)=' .env.prod \
+  | while IFS='=' read -r nom valeur; do
+      printf '%-24s %3d caractères %s\n' "$nom" "${#valeur}" \
+        "$(printf '%s' "$valeur" | grep -qiE 'change_me|à remplir|a remplir|dev_|example' && echo '⚠ MARQUEUR D’EXEMPLE' || echo '')"
+    done
+```
+
+### Avant toute rotation
+
+```bash
+bash scripts/backup/backup.sh          # et VÉRIFIEZ-LA (voir scripts/backup/README.md)
+cp .env.prod .env.prod.avant-rotation  # hors du dépôt, et à détruire ensuite
+```
+
+⚠ **Gardez l'ANCIENNE valeur jusqu'à la vérification finale.** Une rotation de
+`OFFLINE_CONTENT_KEK` faite sans l'ancienne clé est **irréversible** : voir
+ci-dessous.
+
+### Les six, par ordre de COÛT croissant
+
+| Secret | Ce que la rotation casse | Service à arrêter |
+|---|---|---|
+| `ADMIN_API_KEY` | rien — les scripts d'exploitation la relisent | non |
+| `JWT_SECRET` | **toutes les sessions** : chacun se reconnecte | non |
+| `MEILI_MASTER_KEY` | la recherche, jusqu'à réindexation | `api` |
+| `MINIO_ROOT_PASSWORD` | l'accès aux fichiers, jusqu'au redémarrage | `api`, `minio` |
+| `POSTGRES_PASSWORD` | tout, jusqu'au redémarrage | `api`, `web` |
+| ⚠ `OFFLINE_CONTENT_KEK` | **irréversible sans l'ancienne clé** | voir plus bas |
+
+#### 1. `ADMIN_API_KEY` — sans conséquence
+
+```bash
+NOUVELLE=$(openssl rand -base64 32)
+sed -i "s|^ADMIN_API_KEY=.*|ADMIN_API_KEY=$NOUVELLE|" .env.prod
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d api
+```
+
+#### 2. `JWT_SECRET` — déconnecte tout le monde
+
+```bash
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 40)|" .env.prod
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d api
+```
+
+⚠ **Prévenez avant.** Chacun devra se reconnecter — y compris la personne au
+guichet, au milieu d'un prêt. Et ceux qui ont perdu leur mot de passe ne le
+retrouveront pas par là : voir « Reprendre l'accès » ci-dessous.
+
+#### 3. `MEILI_MASTER_KEY` — réindexer après
+
+```bash
+C="docker compose --env-file .env.prod -f docker/docker-compose.prod.yml"
+$C stop api
+sed -i "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=$(openssl rand -base64 32)|" .env.prod
+$C up -d meilisearch api
+$C exec api node scripts/reindex.mjs <slug>   # pour CHAQUE école
+```
+
+⚠ **La clé est posée dans le conteneur Meilisearch au DÉMARRAGE** : changer
+`.env.prod` sans recréer le conteneur laisse l'ancienne clé côté moteur et la
+nouvelle côté API — la recherche tombe, et rien ne dit pourquoi. C'est l'accord
+par coïncidence mesuré le 12/09/2026.
+
+#### 4. `MINIO_ROOT_PASSWORD`
+
+```bash
+C="docker compose --env-file .env.prod -f docker/docker-compose.prod.yml"
+$C stop api web
+sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=$(openssl rand -base64 24)|" .env.prod
+$C up -d minio && sleep 5 && $C up -d api web
+```
+
+⚠ Vérifiez **avant** de détruire la copie de `.env.prod` : ouvrez un document
+numérique dans l'application. Un MinIO joignable mais aux mauvais identifiants
+rend des 403 sur les couvertures, et la page s'affiche quand même.
+
+#### 5. `POSTGRES_PASSWORD` — deux systèmes, une seule variable
+
+```bash
+C="docker compose --env-file .env.prod -f docker/docker-compose.prod.yml"
+NOUVEAU=$(openssl rand -base64 32)
+$C stop api web
+# a) dans PostgreSQL lui-même — le serveur ne lit pas .env.prod
+$C exec -T db psql -U "$POSTGRES_USER" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$NOUVEAU'"
+# b) dans .env.prod — UNE seule ligne
+sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$NOUVEAU|" .env.prod
+$C up -d api web
+```
+
+⚠ **DEUX SYSTÈMES À CHANGER, PAS DEUX VARIABLES.** Le serveur PostgreSQL porte
+le mot de passe dans son propre catalogue (`ALTER USER`) ; `.env.prod` le porte
+pour les clients. Ne faire que le `sed` donne une API qui ne se connecte plus ;
+ne faire que l'`ALTER USER` donne la même chose au redémarrage suivant.
+
+⚠ *Vérifié avant d'écrire cette ligne, parce que j'allais affirmer le contraire :
+`DATABASE_URL` n'est PAS une variable de `.env.prod`. Elle est COMPOSÉE dans
+`docker/docker-compose.prod.yml` depuis `${POSTGRES_PASSWORD}` — il n'y a donc
+rien à y changer, et un `sed` dessus ne trouverait rien. Une explication
+plausible non mesurée est une supposition habillée en consigne, et une consigne
+différée est le pire endroit pour ça.*
+
+#### 6. ⚠ `OFFLINE_CONTENT_KEK` — NE LA TOURNEZ PAS SANS LIRE CECI
+
+🔴 **Cette clé enveloppe la CEK de CHAQUE document chiffré.** La tourner sans
+réenvelopper rend **tous les documents protégés définitivement illisibles** :
+les octets restent, la clé pour les ouvrir est perdue. Aucune sauvegarde de base
+ne rattrape cela — le dump contient les CEK enveloppées sous l'ANCIENNE clé.
+
+Il n'existe **aucun script de réenveloppement à ce jour.** Si la clé doit être
+tournée — fuite constatée, départ d'un administrateur système —, la séquence est :
+
+1. sauvegarder, et **vérifier la sauvegarde** ;
+2. conserver l'ancienne clé **hors du serveur**, dans un coffre ;
+3. demander un script de réenveloppement : il doit, pour chaque document,
+   désenvelopper sous l'ancienne KEK et réenvelopper sous la nouvelle, **dans
+   une transaction par document**, et refuser de commencer si une seule CEK ne
+   se désenveloppe pas ;
+4. ne détruire l'ancienne clé qu'après avoir **ouvert un document** dans
+   l'application.
+
+⚠ Tant que ce script n'existe pas, la rotation de cette clé est une **perte de
+données assumée**, pas une opération d'exploitation.
+
+### Après la rotation
+
+```bash
+curl -s https://<API_DOMAIN>/health          # l'API démarre, et dit sa version
+# puis, dans l'application : une connexion, une recherche, l'ouverture d'un document
+shred -u .env.prod.avant-rotation            # une fois tout vérifié
+```
+
+⚠ **Ne détruisez la copie qu'après avoir ouvert un document.** C'est le seul
+geste qui exerce à la fois PostgreSQL, MinIO et la KEK.
+
+---
 
 ### ⚠ Reprendre l'accès à un compte dont le mot de passe est perdu
 

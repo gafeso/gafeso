@@ -1,6 +1,6 @@
 {
   "name": "@gafeso/web",
-  "version": "0.1.0",
+  "version": "0.0.0-non-publie",
   "private": true,
   "description": "Gafeso — Frontend Next.js (App Router)",
   "license": "AGPL-3.0",

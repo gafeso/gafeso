@@ -33,6 +33,7 @@ import { SruModule } from './sru/sru.module';
 import { LabelsModule } from './labels/labels.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { HealthModule } from './health/health.module';
+import { InstallationModule } from './installation/installation.module';
 import { OfflineLicensingModule } from './offline-licensing/offline-licensing.module';
 import { UploadSizeMiddleware } from './common/upload-size.middleware';
 import { ClientCacheKeyMiddleware } from './common/client-cache-key.middleware';
@@ -79,6 +80,7 @@ import { ClientCacheKeyMiddleware } from './common/client-cache-key.middleware';
     LabelsModule,
     InventoryModule,
     HealthModule,
+    InstallationModule,
     OfflineLicensingModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

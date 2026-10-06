@@ -181,6 +181,31 @@ export class MailService {
   }
 
   /** Envoie le lien de définition de mot de passe (usage unique, 24 h). */
+  /**
+   * LE MESSAGE D'ESSAI DE L'ASSISTANT D'INSTALLATION.
+   *
+   * ⚠ Il ne contient AUCUN secret et aucune donnée de l'instance — ni jeton
+   * d'amorçage, ni lien de mot de passe, ni nom d'établissement. Un courriel
+   * d'essai part, par construction, vers une adresse que personne n'a encore
+   * vérifiée : c'est le seul envoi du produit dont le destinataire n'est pas
+   * établi, donc le seul qui ne doit rien emporter.
+   */
+  async sendInstallationTest(to: string): Promise<MailOutcome> {
+    return this.send(
+      to,
+      'Gafeso — essai de configuration du courrier',
+      [
+        'Ce message confirme que votre serveur de courrier accepte les envois de Gafeso.',
+        '',
+        'Si vous le lisez, la configuration SMTP fonctionne pour cette adresse.',
+        'Vous pouvez poursuivre l’installation.',
+      ].join('\n'),
+      '<p>Ce message confirme que votre serveur de courrier accepte les envois de Gafeso.</p>' +
+        '<p>Si vous le lisez, la configuration SMTP fonctionne pour cette adresse. ' +
+        'Vous pouvez poursuivre l’installation.</p>',
+    );
+  }
+
   async sendSetPasswordLink(email: string, url: string): Promise<MailOutcome> {
     const subject = 'Définissez votre mot de passe — Gafeso';
     const text =

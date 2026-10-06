@@ -90,6 +90,14 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
+      # LA VERSION QUI TOURNE — posée par `eval "$(scripts/version-du-depot.sh --exporter)"`
+      # AVANT le build. Absente, le Dockerfile rend « non étiquetée », qui est la
+      # réponse honnête — jamais un numéro plausible.
+      # ⚠ La web n'en reçoit PAS : elle lit `GET /health`. Deux sources pour une
+      # même valeur s'accordent PAR COÏNCIDENCE jusqu'au jour où l'une bouge.
+      args:
+        GAFESO_VERSION: ${GAFESO_VERSION:-non étiquetée}
+        GAFESO_COMMIT: ${GAFESO_COMMIT:-inconnu}
     restart: unless-stopped
     depends_on:
       db:

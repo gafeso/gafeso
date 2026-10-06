@@ -29,7 +29,36 @@ import { join } from 'node:path';
 
 const RACINE = join(__dirname, '..');
 
-type Discipline = 'lecture-seule' | 'transaction-annulee' | 'nettoyage-recense';
+type Discipline =
+  | 'lecture-seule'
+  | 'transaction-annulee'
+  | 'nettoyage-recense'
+  | 'nettoyage-marque';
+
+/**
+ * ⚠ `nettoyage-marque` — QUATRIÈME DISCIPLINE, ajoutée le 26/09/2026.
+ *
+ * Elle nettoie par un PRÉFIXE que la recette a posé elle-même, sans capturer
+ * d'état antérieur. Ce n'est pas un raccourci de `nettoyage-recense` : c'est une
+ * discipline différente, et elle est PLUS SÛRE là où elle s'applique — un
+ * recensement pris avant peut se périmer si une autre session écrit pendant la
+ * recette ; une marque, non.
+ *
+ * ⚠ ET ELLE NE S'APPLIQUE PAS PARTOUT. Ce contre quoi `nettoyage-recense`
+ * protège est le nettoyage « par sa propre empreinte » — la recette des rappels
+ * du 13 septembre, qui visait SON prêt quand le moteur avait écrit
+ * trente-sept lignes. **L'entrée et la sortie n'étaient pas le même ensemble.**
+ *
+ * Une marque n'est légitime que quand elles le SONT : quand l'action produit
+ * exactement ce que la recette crée, sans qu'aucun moteur ne fane à côté. Créer
+ * une collection produit une collection, et rien d'autre. Déclencher un moteur de
+ * rappels produit ce qu'il veut — là, il faut un recensement.
+ *
+ * > ⭐ La question qui décide : **mon action peut-elle écrire des lignes que je
+ * > n'ai pas nommées ?** Si oui, la marque ne les couvre pas : il faut le
+ * > recensement.
+ */
+const MARQUE_ATTENDUE = /const MARQUE = /;
 
 /**
  * Chaque spec qui construit un vrai `PrismaClient`, et ce qu'elle promet.
@@ -59,6 +88,15 @@ const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
     motif:
       'demande au SERVEUR si du texte décomposé est entré dans les colonnes qui ' +
       'décident (la classe) ou identifient (nom, titre). Elle ne fait que lire.',
+  },
+  'collections/nom-de-collection-en-base.spec.ts': {
+    discipline: 'nettoyage-marque',
+    motif:
+      'crée des collections témoins pour OBTENIR le refus de l’index d’unicité — ' +
+      'lire sa définition ne prouverait pas qu’il refuse. Toutes portent le ' +
+      'préfixe `ZZ-temoin-unicite-`, et le nettoyage se fait par ce PRÉFIXE, dans ' +
+      'un `afterAll` qui tourne même si un cas a levé au milieu. Le contrôle final ' +
+      'compte ce qui reste sous la marque, jamais un total.',
   },
   'admin/deprovision-en-base.spec.ts': {
     discipline: 'nettoyage-recense',
@@ -129,7 +167,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT douze — une treizième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT treize — une quatorzième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.
@@ -210,6 +248,34 @@ describe('⚠ Et ce qui se VÉRIFIE, est vérifié', () => {
       'Une transaction qui ne LÈVE pas est une transaction qui COMMITE. ' +
         'C’est le faux dispositif qui a laissé deux dépôts dans la base le ' +
         '13 septembre 2026 : toutes les pièces étaient là sauf une ligne.',
+    ).toEqual([]);
+  });
+
+  it('⚠ `nettoyage-marque` porte sa MARQUE, et nettoie PAR elle', () => {
+    // La marque doit être déclarée UNE fois et servir au nettoyage : une recette
+    // qui poserait un préfixe puis supprimerait par identifiant retomberait dans
+    // le nettoyage par sa propre empreinte, sous un autre nom.
+    const fautives: string[] = [];
+    for (const { cle, source } of recettes()) {
+      if (DISCIPLINES[cle]?.discipline !== 'nettoyage-marque') continue;
+      if (!MARQUE_ATTENDUE.test(source)) {
+        fautives.push(`${cle} — aucune \`const MARQUE\` déclarée`);
+        continue;
+      }
+      if (!/afterAll\s*\(/.test(source)) {
+        fautives.push(`${cle} — aucun \`afterAll\` : un cas qui lève laisserait tout`);
+        continue;
+      }
+      // ⚠ Le nettoyage doit employer la marque, pas un identifiant.
+      if (!/deleteMany\([^)]*startsWith:\s*MARQUE/s.test(source)) {
+        fautives.push(`${cle} — le nettoyage n’emploie pas MARQUE`);
+      }
+    }
+    expect(
+      fautives,
+      'Une marque qui ne sert pas au nettoyage est un nettoyage par empreinte ' +
+        'sous un autre nom — c’est ce qui a laissé trente-six lignes `SENT` en ' +
+        'base le 13 septembre 2026.',
     ).toEqual([]);
   });
 

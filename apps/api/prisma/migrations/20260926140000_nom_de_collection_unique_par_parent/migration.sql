@@ -1,0 +1,53 @@
+-- DEUX COLLECTIONS FRÈRES NE PORTENT PLUS LE MÊME NOM.
+--
+-- `Collection` est le SEUL modèle du produit qui soit un ARBRE, et son `name`
+-- n'avait aucune unicité, à aucune échelle. Deux frères homonymes sont
+-- indiscernables à l'écran — seule l'indentation les distingue — et les règles
+-- d'accès étant un OU dont la plus LARGE gagne, rattacher une notice à la
+-- mauvaise ÉLARGIT un accès en silence : la règle restrictive reste affichée,
+-- lisible, rassurante, et n'interdit plus rien.
+--
+-- ⚠ POURQUOI PAS `@@unique([tenantId, parentId, name])` EN PRISMA, qui est la
+-- forme évidente et qui NE SUFFIT PAS. Mesuré sur PostgreSQL 16.14 :
+--
+--     CREATE UNIQUE INDEX t_u ON t (tenant, parent, name);
+--     INSERT INTO t VALUES ('ecole', NULL, 'Thèses');
+--     INSERT INTO t VALUES ('ecole', NULL, 'Thèses');   -- ACCEPTÉ
+--
+-- `parent_id` est NULLABLE, et PostgreSQL traite chaque NULL comme DISTINCT dans
+-- un index unique. Or `AccessControlService.createCollection` ne pose PAS de
+-- `parentId` — son DTO ne le déclare même pas : **toute collection créée par
+-- l'écran est une RACINE**. Un index ordinaire serait donc hors de portée du seul
+-- cas que le produit sait produire, sous une contrainte qui a l'air de le
+-- couvrir. C'est la correction fautive que le problème appelle, et elle compile.
+--
+-- D'où `NULLS NOT DISTINCT` (PostgreSQL 15+), que Prisma 5.22 n'exprime pas.
+--
+-- ⚠ `WHERE tenant_id IS NOT NULL` : les collections COMMERCIAL et EXTERNAL sont
+-- PARTAGÉES (tenant_id null) et n'appartiennent à aucune école. Les contraindre
+-- ensemble mélangerait les catalogues de tous les éditeurs — deux éditeurs ont le
+-- droit d'avoir chacun une collection « Sciences humaines ».
+--
+-- ⚠ UN SEUL INDEX, PAS UN PAR ÉCOLE : les collections vivent dans `public`
+-- seulement (schéma partagé, isolation MANUELLE par `tenant_id` — voir le
+-- commentaire d'en-tête d'`AccessControlService`). Pas de boucle sur les schémas
+-- tenant, contrairement aux migrations qui touchent une table par-école.
+--
+-- ⚠ IDEMPOTENT : rejouable sans erreur. Le conteneur `api` applique les
+-- migrations en attente à CHAQUE démarrage ; un `CREATE INDEX` nu échouerait au
+-- second boot et empêcherait l'API de démarrer.
+--
+-- ⚠ ET PRISMA NE LE CRÉERA PAS EN DÉVELOPPEMENT. `db push` ne pose que ce que le
+-- schéma modélise : cet index n'existe donc QUE par ce fichier. C'est la
+-- divergence silencieuse que `nom-de-collection-en-base.spec.ts` (garde vivant,
+-- gaté PG_LIVE=1) existe pour attraper — il demande au SERVEUR si l'index est là
+-- ET s'il est `NULLS NOT DISTINCT`.
+--
+-- ⚠ AUCUNE DONNÉE N'EST TOUCHÉE, et rien n'est à nettoyer : mesuré le
+-- 26/09/2026, zéro collision sur les 8 collections des deux écoles de
+-- développement. Un script de déduplication écrit sans cas réel se tromperait sur
+-- des données qu'il n'a jamais vues.
+
+CREATE UNIQUE INDEX IF NOT EXISTS collections_nom_unique_par_parent
+  ON public.collections (tenant_id, parent_id, name) NULLS NOT DISTINCT
+  WHERE tenant_id IS NOT NULL;

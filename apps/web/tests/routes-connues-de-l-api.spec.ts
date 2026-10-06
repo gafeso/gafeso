@@ -97,7 +97,14 @@ const EXCEPTIONS: Exception[] = [
 // des défauts semés, et aucune école ne pouvait en changer autrement qu'en
 // base. Quatre appels d'un coup, c'est le signe d'une collection entière restée
 // sans porte, pas d'une route oubliée.
-const NOMBRE_D_APPELS = 146;
+/*
+ * ⚠ 147 le 6 octobre 2026 : `GET /health`, pour LA VERSION QUI TOURNE au pied de
+ * page public et dans la coque. Le compte a fait son office — il a convoqué au
+ * bon moment, et la question posée était la bonne : cette route est-elle
+ * légitimement appelée sans session ? Oui, et l'API l'écrit : « publique et sans
+ * authentification, c'est la première chose qu'un support demande ».
+ */
+const NOMBRE_D_APPELS = 147;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
@@ -295,6 +302,16 @@ function liensVersLApi(): Appel[] {
  * infermable, elle n'avait pas été essayée.
  */
 const CHEMINS_DU_RENDU_SERVEUR = [
+  /*
+   * ⚠ `GET /health` — ajouté le 6 octobre 2026 avec la VERSION QUI TOURNE au
+   * pied de page. C'est la seule entrée de cette liste qui ne serve pas à
+   * rendre du contenu : elle sert à dire QUEL LOGICIEL le rend.
+   *
+   * Elle est publique et sans session par conception côté API — « c'est la
+   * première chose qu'un support demande, et elle doit être joignable avant
+   * toute session ». Elle ne révèle rien d'une école : ni slug, ni compte.
+   */
+  'GET /health',
   'GET /opac/authors/*',
   'GET /opac/chiffres',
   'GET /opac/constellation',
@@ -419,8 +436,14 @@ describe('les appels du front', () => {
     // n'y est jamais appelé. C'est exactement le faux que le relevé risque —
     // et c'est celui qui avait pollué la liste tenue à la main.
     expect(chemins).not.toContain('GET /opac/search');
-    // COMPTE : six, et un septième convoque quelqu'un.
-    expect(chemins).toHaveLength(6);
+    // COMPTE : sept, et un huitième convoque quelqu'un.
+    //
+    // ⚠ IL A CONVOQUÉ, le 6 octobre 2026 : `GET /health` est le septième, et
+    // c'est exactement ce qu'un compte exact fait — il ne dit pas que le code
+    // est juste, il oblige à revenir le regarder. La question posée était la
+    // bonne : cette route est-elle légitimement appelée sans session ? Oui, et
+    // c'est écrit côté API.
+    expect(chemins).toHaveLength(7);
   });
 
 

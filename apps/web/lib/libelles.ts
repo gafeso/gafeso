@@ -460,6 +460,18 @@ export const LIBELLES = {
    * trop.
    */
   administration: {
+    /**
+     * LA VERSION QUI TOURNE, dans la coque professionnelle — avec le COMMIT.
+     *
+     * ⚠ Le commit est ici et PAS dans le pied public, parce que ce n'est pas le
+     * même lecteur : un visiteur n'a rien à faire d'un SHA, et c'est la première
+     * chose qu'un support demande.
+     *
+     * ⚠ `'inconnu'` est affiché TEL QUEL quand l'API le dit. C'est une réponse,
+     * pas un trou : elle apprend au support que l'instance ne sait pas d'où elle
+     * vient, ce qui l'envoie demander la version plutôt que lire le mauvais code.
+     */
+    version: (v: string, commit: string) => `Gafeso ${v} · commit ${commit}`,
     titre: 'Administration',
     intro:
       'Le paramétrage de l’établissement. Chaque réglage dit ce qu’il change ; ' +
@@ -655,6 +667,19 @@ export const LIBELLES = {
    * pas de lien. Un lien mort dit à l'utilisateur qu'il a mal cliqué.
    */
   pied: {
+    /**
+     * LA VERSION QUI TOURNE.
+     *
+     * ⚠ Elle n'est affichée QUE si l'API l'a dite — voir
+     * `lib/version-qui-tourne.ts`. Pas de valeur par défaut, pas de « version
+     * inconnue » : un pied de page public muet vaut mieux qu'un numéro inventé,
+     * qui enverrait un support lire le mauvais code.
+     *
+     * ⚠ Le COMMIT n'est pas ici, et c'est une décision : un visiteur de
+     * bibliothèque n'a rien à faire d'un SHA. Il est dans la coque
+     * professionnelle, auprès de qui diagnostique.
+     */
+    version: (v: string) => `Gafeso version ${v}`,
     bibliotheque: 'LA BIBLIOTHÈQUE',
     catalogue: 'Catalogue',
     constellation: 'Constellation',

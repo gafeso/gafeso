@@ -31,6 +31,33 @@ model Tenant {
   @@map("tenants")
 }
 
+/// L'ÉTAT D'INSTALLATION DE L'INSTANCE — une seule ligne, dans `public`.
+///
+/// ⚠ EN BASE ET PAS DANS UN FICHIER, et le motif est mesuré : une restauration
+/// de sauvegarde PARTIELLE — base restaurée, fichier du conteneur perdu —
+/// réouvrirait l'assistant sur une instance qui porte déjà des données, et le
+/// premier venu y créerait un administrateur. L'état doit voyager AVEC les
+/// données qu'il décrit.
+///
+/// ⚠ Le jeton d'amorçage n'est stocké que HACHÉ (SHA-256). Son clair n'existe
+/// qu'une fois, dans un fichier 0600 que l'API efface à la fin de
+/// l'installation — voir `docs/conception-assistant-installation.md`.
+model Installation {
+  /// Toujours `unique` : cette table ne porte qu'une ligne, par construction.
+  id          String    @id @default("unique")
+  /// SHA-256 du jeton d'amorçage, en hexadécimal. Null = jeton consommé.
+  jetonHash   String?   @map("jeton_hash")
+  /// Posé dans la MÊME transaction que la création de l'école et du compte.
+  termineeLe  DateTime? @map("terminee_le")
+  /// Combien de jetons faux ont été présentés depuis le démarrage de l'API.
+  /// ⚠ Persisté : un attaquant qui ferait redémarrer l'API ne doit pas remettre
+  /// le compteur à zéro.
+  essaisRates Int       @default(0) @map("essais_rates")
+  creeeLe     DateTime  @default(now()) @map("creee_le")
+
+  @@map("installation")
+}
+
 model Domain {
   id        String  @id @default(uuid())
   tenantId  String  @map("tenant_id")
@@ -234,6 +261,20 @@ model Collection {
   accessRules AccessRule[]
   createdAt   DateTime          @default(now()) @map("created_at")
 
+  // ⚠ DEUX FRÈRES NE PORTENT PAS LE MÊME NOM, et la contrainte N'EST PAS ICI :
+  // `collections_nom_unique_par_parent`, posé par la migration
+  // 20260926140000. Prisma 5.22 n'exprime ni `NULLS NOT DISTINCT` ni les index
+  // partiels, et les deux sont nécessaires :
+  //  · `NULLS NOT DISTINCT` parce que `parentId` est nullable et que PostgreSQL
+  //    traite chaque NULL comme distinct — un `@@unique` ordinaire laisserait
+  //    passer deux RACINES de même nom, c'est-à-dire le seul cas que la route de
+  //    création sait produire (elle ne pose pas de `parentId`) ;
+  //  · `WHERE tenant_id IS NOT NULL` parce que les collections partagées
+  //    (COMMERCIAL/EXTERNAL) n'appartiennent à aucune école.
+  //
+  // ⚠ `db push` NE LE CRÉE PAS. Il n'existe que par la migration, donc dev et
+  // production divergeraient en silence : `nom-de-collection-en-base.spec.ts`
+  // demande au SERVEUR s'il est là, et s'il est bien `NULLS NOT DISTINCT`.
   @@index([tenantId])
   @@index([parentId])
   @@map("collections")
@@ -1057,22 +1098,22 @@ model Checkout {
 }
 
 model Hold {
-  id         String       @id @default(uuid())
-  recordId   String       @map("record_id")
-  patronId   String       @map("patron_id")
-  status     HoldStatus   @default(PENDING)
-  priority   Int          @default(0)
-  expiryDate DateTime?    @map("expiry_date")
+  id                  String       @id @default(uuid())
+  recordId            String       @map("record_id")
+  patronId            String       @map("patron_id")
+  status              HoldStatus   @default(PENDING)
+  priority            Int          @default(0)
+  expiryDate          DateTime?    @map("expiry_date")
   // Idempotence de l'email « réservation disponible » : posé au moment de l'envoi.
   // NULLable (table tenant) → le rattrapage sync-schema l'ajoute sans défaut.
   /// ⚠ UN ÉVÉNEMENT, PAS UN ÉTAT. « la tentative de notification est SOLDÉE »
   /// — posée même quand personne n'a pu être prévenu (aucune adresse
   /// exploitable : retrait au guichet). Renommée depuis `notifiedAt` le
   /// 22/09/2026 : le nom affirmait « a été notifié », et se relisait faux.
-  notificationTenteeA DateTime? @map("notification_tentee_a")
-  createdAt  DateTime     @default(now()) @map("created_at")
-  record     BiblioRecord @relation(fields: [recordId], references: [id])
-  patron     Patron       @relation(fields: [patronId], references: [id])
+  notificationTenteeA DateTime?    @map("notification_tentee_a")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  record              BiblioRecord @relation(fields: [recordId], references: [id])
+  patron              Patron       @relation(fields: [patronId], references: [id])
 
   // Table interrogée ~16× dans circulation.service, presque toujours par
   // (recordId, status) — file d'attente d'une notice — ou par patronId.

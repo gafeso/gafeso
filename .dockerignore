@@ -29,3 +29,16 @@ docs/
 
 *.log
 .DS_Store
+
+# ⚠ DOCUMENTS INTERNES — ils ne doivent jamais pouvoir atteindre une image de
+# production. Trouvé le 6 octobre 2026 par le contrôle « arbre SALE » du script
+# de version, qui les a nommés : ils sont NON SUIVIS, donc absents de l'archive
+# qu'on étiquette, et pourtant présents dans le contexte de build.
+#
+# Aucun `COPY` ne les prend aujourd'hui — c'est donc une ceinture, pas une
+# correction de fuite. Mais c'est la même famille que la liste blanche de
+# publication : un document interne qui part est irréversible, un document
+# interne qui reste ne coûte rien. On choisit la direction d'échec.
+brief-*.md
+recette-*.md
+.claude/

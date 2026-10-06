@@ -100,7 +100,23 @@ POSTGRES_DB="$(grep -E '^POSTGRES_DB=' .env.prod 2>/dev/null | cut -d= -f2- || e
 # ── 1. PostgreSQL ────────────────────────────────────────────────────────
 FICHIER_DB="$DEST/db_${STAMP}.sql.gz"
 echo "→ Sauvegarde PostgreSQL (${POSTGRES_DB})…"
-$COMPOSE exec -T db pg_dump -U "${POSTGRES_USER:-bibliocloud}" "${POSTGRES_DB:-bibliocloud}" \
+# ⚠ `--clean --if-exists` — AJOUTÉ le 06/10/2026, et ce n'est pas une option de
+# confort : c'est ce qui fait qu'une restauration RESTAURE.
+#
+# Sans elle, le dump ne contient que des `CREATE` et des `COPY`. Versé dans la
+# base EXISTANTE — ce que `scripts/backup/README.md` documentait —, il produit
+# un « relation already exists » sur chaque table, et les `COPY` s'ajoutent aux
+# lignes déjà là : l'état final est un MÉLANGE d'ancien et de restauré.
+#
+# ⚠ ET `psql` SORT EN 0. Mesuré par `scripts/recette-sauvegarde-restauree.sh` :
+# quatre erreurs SQL, code de sortie zéro. L'exploitant lit un succès et croit
+# son instance rétablie. C'est le pire des deux cas — pire qu'un échec franc.
+#
+# ⚠ `--if-exists` et pas seulement `--clean` : sans lui, les `DROP` échouent sur
+# une base NEUVE (rien à supprimer), et une première restauration se plaindrait
+# pour une raison qui n'en est pas une.
+$COMPOSE exec -T db pg_dump -U "${POSTGRES_USER:-bibliocloud}" --clean --if-exists \
+  "${POSTGRES_DB:-bibliocloud}" \
   | gzip > "$FICHIER_DB" \
   || echouer "$FICHIER_DB" "pg_dump a échoué (base arrêtée ? identifiants ?)"
 
