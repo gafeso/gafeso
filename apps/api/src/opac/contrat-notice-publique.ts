@@ -122,6 +122,41 @@ export const CLES_DU_CONTRAT: string[] = [
    * compare des octets lise un AJOUT et non une permutation.
    */
   'provenance',
+  /**
+   * ⚠ DEUX BOOLÉENS, ET PAS UN — mesuré le 8 octobre 2026 avant de les écrire.
+   *
+   * Les deux passations clientes demandaient « `hasDigital` », et elles n'en
+   * donnaient PAS le même sens : le front « l'EXISTENCE d'une version en ligne,
+   * publique », le mobile « `digital_copies.enc_status = 'ready'` ». En base,
+   * les deux prédicats s'accordent sur **155 copies sur 155** — donc leur
+   * divergence est invisible, et c'est « deux sources qui s'accordent PAR
+   * COÏNCIDENCE ».
+   *
+   * Elle naît par CONSTRUCTION, et deux chemins du produit la produisent :
+   *   · un EPUB téléversé — `fichier-numerique.ts` l'accepte, et l'ingestion
+   *     est gardée par `if (format === DigitalFormat.PDF)` : `enc_status` reste
+   *     **null** et la lecture EN LIGNE marche ;
+   *   · un PDF à xref irréparable — `encStatus: 'failed'`, avec la lecture en
+   *     ligne **conservée** (`digital-copy.service.ts` l'écrit : « ne casse
+   *     JAMAIS la lecture en ligne »).
+   *
+   * Un seul booléen mentirait donc à l'un des deux clients, et les deux
+   * mensonges ne coûtent pas la même chose :
+   *   · `enc_status='ready'` seul → l'OPAC public dit « aucun document » sur un
+   *     EPUB qui se lit en ligne. Faux NÉGATIF qui cache ce qui existe, c'est-à-
+   *     dire l'inverse exact de la raison pour laquelle ce champ est public ;
+   *   · `digitalCopy != null` seul → le mobile promet une lecture hors ligne qui
+   *     échoue au téléchargement, « au pire moment » (leurs mots).
+   *
+   * D'où deux noms qui DISENT ce qu'ils portent. Aucun des deux clients n'a
+   * encore livré sa lecture — les deux passations écrivent « l'app l'attend » —
+   * donc c'est le moment, et le seul, où les nommer juste ne casse rien.
+   *
+   * ⚠ EN DERNIER, après `provenance`, pour la raison déjà écrite : un filet qui
+   * compare des octets doit lire un AJOUT, jamais une permutation.
+   */
+  'hasDigital',
+  'offlineReady',
 ];
 
 /**
@@ -152,7 +187,10 @@ export function selectNoticePublique() {
     contributors: { orderBy: { position: 'asc' as const } },
     keywords: { select: { keyword: { select: { name: true } } } },
     items: true,
-    // Seul le format : voir RELATION_PROJETEE.
-    digitalCopy: { select: { fileFormat: true } },
+    // Le format, et `encStatus` qui est LU sans être servi : il décide
+    // `offlineReady`. La forme de `digitalCopy` ne change pas d'un octet —
+    // l'ajouter à l'objet servi serait une modification de contrat, et ce n'est
+    // pas ce qu'on a décidé.
+    digitalCopy: { select: { fileFormat: true, encStatus: true } },
   };
 }

@@ -72,6 +72,17 @@ function segmentsPublics(): string[] {
 
 /** Pages dont le titre doit porter un segment PROPRE, déclaré sous la racine. */
 const TITRE_PROPRE = [
+  /*
+   * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — et il est ici pour un motif
+   * qui lui est propre : son titre ne nomme AUCUNE école, parce que sur une
+   * instance neuve il n'en existe pas encore. Hériter du gabarit racine ferait
+   * apparaître un nom vide.
+   *
+   * Il déclare donc un titre PROPRE (`app/installation/layout.tsx`), et c'est le
+   * seul du dépôt à le faire sans passer par `metadonneesDeSection` — qui va
+   * chercher le nom de l'établissement, ce qu'on ne veut précisément pas.
+   */
+  '/installation',
   '/definir-mot-de-passe',
   '/inscription',
   '/login',

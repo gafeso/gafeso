@@ -16,7 +16,11 @@ import { StatsService } from './stats.service';
 describe('Export d’activité — l’en-tête dit la période réellement mesurée', () => {
   function service() {
     // Toutes les sections rendent du vide : ce fichier n'éprouve QUE l'en-tête.
-    const svc = new StatsService({ forTenant: () => ({}) } as never);
+    const svc = new StatsService({ forTenant: () => ({}) } as never, {
+      // ⚠ La circulation est déclarée ACTIVE : ce fichier n'éprouve QUE l'en-tête
+      // de période, et un volet de prêts absent changerait ce qu'il mesure.
+      estActif: async () => true,
+    } as never);
     vi.spyOn(svc, 'datasetCsv').mockResolvedValue({ filename: 'x', csv: '' } as never);
     return svc;
   }

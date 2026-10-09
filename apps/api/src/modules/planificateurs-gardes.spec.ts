@@ -48,6 +48,18 @@ const PLANIFICATEURS: {
   motif: string;
 }[] = [
   {
+    fichier: 'stats/purge-usage.scheduler.ts',
+    module: null,
+    garde: 'sans-objet',
+    motif:
+      'une PURGE n’est pas une fonctionnalité, c’est une OBLIGATION. La règle ' +
+      'd’activation porte sur ce qu’un module MONTRE et ce qu’il ÉMET ; une purge ' +
+      'ne fait ni l’un ni l’autre. ⚠ Et la garder par `statistiques` serait un ' +
+      'défaut : une école qui éteindrait les statistiques conserverait alors des ' +
+      'NOMS indéfiniment. Le module décide de ce qu’on EXPOSE, jamais de ce qu’on ' +
+      'CONSERVE.',
+  },
+  {
     fichier: 'moissonnage/moissonnage.scheduler.ts',
     module: 'moissonnage',
     garde: 'dans-le-planificateur',
@@ -195,7 +207,15 @@ describe('⭐ L’INVARIANT : la garde EXISTE là où la déclaration la promet'
       DU_CODE.length,
       'Le nombre de planificateurs a changé. Ce n’est pas un échec : c’est une ' +
         'convocation. Le nouveau dépend-il d’un module activable ?',
-    ).toBe(4);
+    // ⚠ 4 → 5 le 6 octobre 2026 : `stats/purge-usage.scheduler.ts`.
+    //
+    // Et je réponds à la question que ce témoin pose — « le nouveau dépend-il
+    // d'un module activable ? » : NON, et c'est un choix. Une purge n'est pas
+    // une fonctionnalité, c'est une OBLIGATION. La garder par `statistiques`
+    // serait un défaut : une école qui éteindrait les statistiques conserverait
+    // alors des NOMS indéfiniment. Le module décide de ce qu'on EXPOSE, jamais
+    // de ce qu'on CONSERVE.
+    ).toBe(5);
   });
 });
 

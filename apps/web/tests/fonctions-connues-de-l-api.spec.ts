@@ -112,7 +112,11 @@ describe('l’administrateur voit TOUT', () => {
     // ⚠ 26 le 22 septembre 2026 : `/admin/regles-de-circulation` (dette
     // n° 15). Entrée NEUVE, pas un déménagement — ses quatre routes existaient
     // et aucun écran ne les appelait.
-    expect(toutes.length).toBe(26);
+    // ⚠ 27 depuis le 8 octobre 2026 : /admin/pages-legales, les mentions légales
+    // et la politique de confidentialité rédigées par l'établissement. Elle
+    // porte `etablissement.apparence`, une fonction qui avait déjà sa porte —
+    // donc aucun droit neuf, seulement une seconde porte sur le même droit.
+    expect(toutes.length).toBe(27);
     expect(vues.map((e) => e.href).sort()).toEqual(toutes.map((e) => e.href).sort());
   });
 

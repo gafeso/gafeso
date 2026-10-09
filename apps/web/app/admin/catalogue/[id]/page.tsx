@@ -21,6 +21,7 @@ import {
   toApiContributors,
 } from '@/components/contributors-editor';
 import { KeywordsInput } from '@/components/keywords-input';
+import { useModulesActifs } from '@/lib/modules-actifs';
 
 interface Item {
   id: string;
@@ -105,6 +106,13 @@ const STATUS_LABELS: Record<string, string> = {
 const emptyItem = { barcode: '', callNumber: '', location: '', itemType: 'livre' };
 
 export default function AdminRecordPage() {
+  /*
+   * ⚠ Module `circulation` — 8 octobre 2026. `null` (pas encore su) LAISSE
+   * PASSER : masquer sur une information qu'on n'a pas retirerait la saisie
+   * d'exemplaire à une école qui y a droit, le temps d'un aller-retour réseau.
+   */
+  const { modulesActifs } = useModulesActifs();
+  const circulation = modulesActifs === null || modulesActifs.includes('circulation');
   const { id } = useParams<{ id: string }>();
   const [record, setRecord] = useState<RecordDetail | null>(null);
   const [item, setItem] = useState(emptyItem);
@@ -730,6 +738,19 @@ export default function AdminRecordPage() {
         )}
       </Card>
 
+      {/*
+        ⚠ LA SAISIE D'EXEMPLAIRE ET LA LISTE DISPARAISSENT AVEC LE MODULE.
+        8 octobre 2026, Université Virtuelle : saisir un code-barres pour un
+        document qui n'existe pas en rayon n'a aucun sens, et la route de
+        création est refusée par l'API quand le module est éteint — le
+        formulaire serait un geste sans effet.
+
+        ⚠ Et la liste part AVEC le formulaire : son état vide dit « Aucun
+        exemplaire. Ajoutez-en un ci-dessus. » — un vide qui invite à agir,
+        pointant vers un formulaire qui n'est plus là.
+      */}
+      {circulation && (
+      <>
       <Card className="mt-5">
         <h2 className="font-serif text-lg font-bold">Ajouter un exemplaire</h2>
         <form onSubmit={addItem} className="mt-3 flex flex-wrap items-end gap-3">
@@ -805,6 +826,8 @@ export default function AdminRecordPage() {
           </Card>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

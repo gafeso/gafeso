@@ -410,6 +410,60 @@ export const LIBELLES = {
     badgeIndisponible: 'Indisponible',
     /** Il n'y en a aucun — ce qui ne dit RIEN de la lecture en ligne. */
     badgeSansExemplaire: 'Sans exemplaire',
+
+    /**
+     * ⭐ LE REFUS ASSUMÉ — remplace « SI une version numérique existe pour ce
+     * document, elle est réservée aux membres ».
+     *
+     * ⚠ Ce « si » était honnête et coûtait cher. Mesuré le 8 octobre 2026 : la
+     * charge publique masque `digitalCopy` pour un anonyme (`member = false`,
+     * globalement et non par notice), donc l'écran ne SAVAIT pas. Mais sur une
+     * université à distance, un étudiant qui ne peut pas savoir avant de créer
+     * un compte si ce catalogue contient quoi que ce soit de lisible n'a aucune
+     * raison d'en créer un : le « si » masquait la seule chose qui compte.
+     *
+     * Tranché : le fait qu'une version en ligne EXISTE devient public
+     * (`hasDigital`), jamais le format ni l'URL. En attendant le champ, le
+     * libellé cesse de spéculer et assume le refus.
+     */
+    lectureReserveeAuxMembres: 'La lecture en ligne est réservée aux membres.',
+
+    /**
+     * ⭐ LE BADGE PUBLIC QUAND `hasDigital` EST VRAI.
+     *
+     * ⚠ Il dit la DISPONIBILITÉ D'UN MODE DE LECTURE, pas un droit : l'accès
+     * reste gouverné par la classe et l'abonnement, et un membre peut très bien
+     * se voir refuser ce document. « Disponible » porte donc sur l'existence
+     * d'une version en ligne — ce qui est exactement ce qu'un étudiant à
+     * distance cherche à savoir avant de s'inscrire.
+     *
+     * ⚠ Et il ne promet PAS le téléchargement : lire en ligne et emporter hors
+     * connexion sont deux droits distincts dans ce produit.
+     */
+    badgeLectureEnLigne: 'Lecture en ligne disponible',
+
+    /**
+     * ⭐ LA NOTICE DE RÉFÉRENCE — module `circulation` ÉTEINT, et aucun fichier.
+     *
+     * ⚠ SANS PHRASE NÉGATIVE, et c'est la décision. Avec la circulation
+     * éteinte, « Aucun exemplaire physique » et « Pas de version numérique »
+     * sont deux négations qui n'ouvrent sur rien : elles décrivent ce que
+     * l'établissement n'a pas, à quelqu'un qui ne pouvait de toute façon rien
+     * emprunter. La notice reste ce qu'elle est — une référence
+     * bibliographique, utile à citer et à demander ailleurs.
+     */
+    referenceSeule:
+      'Cette notice décrit un document que la bibliothèque référence sans en proposer de version en ligne.',
+
+    /**
+     * L'absence de version en ligne, quand la circulation est ACTIVE.
+     *
+     * ⚠ Elle reste une information UTILE dans ce cas, et c'est pourquoi les deux
+     * textes existent : il y a des rayons, et la section du dessus dit où. Le
+     * jour où la circulation est éteinte, cette même phrase devient une négation
+     * qui n'ouvre sur rien — c'est `referenceSeule` qui prend le relais.
+     */
+    sansVersionNumerique: 'Pas de version numérique disponible pour ce document.',
   },
 
   titres: {
@@ -459,6 +513,196 @@ export const LIBELLES = {
    * l'autre. Si un sous-menu répète le nom de son parent, il y a un niveau de
    * trop.
    */
+  /**
+   * L'ESPACE LECTEUR D'UNE BIBLIOTHÈQUE NUMÉRIQUE.
+   *
+   * Décision de Jean du 8 octobre 2026 : « Mes consultations » et « Mes
+   * documents hors ligne » quand le backend livre les routes. **Avant ça, un
+   * écran qui le dit ; jamais un écran vide.**
+   *
+   * ⚠ POURQUOI UN ÉCRAN PLUTÔT QUE RIEN. Avec la circulation éteinte, « Mes
+   * prêts » disparaît et le menu du compte ne garde que « Mon compte » : un
+   * étudiant à distance n'a plus aucun endroit où chercher ses documents. Un
+   * écran qui dit honnêtement ce qui n'est pas encore là vaut mieux qu'une
+   * absence qu'il prendra pour une erreur de sa part.
+   *
+   * ⚠ ET CES TEXTES DATENT LEUR PROPRE PÉREMPTION — « pas encore » est
+   * exactement la forme que ce dépôt traque depuis le 12 septembre. Ils sont
+   * donc gardés par `tests/espace-lecteur-pas-encore.spec.ts`, qui ÉCHOUE le
+   * jour où l'API expose une route de consultation ou de licence hors ligne pour
+   * le lecteur. Le texte explique ; seul le test se souvient.
+   */
+  espaceLecteur: {
+    consultations: {
+      titre: 'Mes consultations',
+      /** ⚠ Dit ce qui MANQUE et à qui s'adresser — jamais « revenez plus tard ». */
+      pasEncore:
+        'L’historique de vos lectures en ligne n’est pas encore disponible sur cette installation.',
+      sortie:
+        'Vos documents restent accessibles depuis le catalogue : cherchez-les par titre ou par auteur.',
+    },
+    horsLigne: {
+      titre: 'Mes documents hors ligne',
+      pasEncore:
+        'La liste des documents que vous avez emportés hors connexion n’est pas encore disponible sur cette installation.',
+      /**
+       * ⚠ NE PROMET PAS l'application mobile : elle existe, elle n'est pas
+       * publiée, et ce dépôt ne publie rien. Le texte dit ce qu'on sait — où la
+       * lecture hors ligne se fait — sans annoncer un téléchargement.
+       */
+      sortie:
+        'La lecture hors connexion se fait depuis l’application de lecture, sur votre appareil.',
+    },
+  },
+
+  /**
+   * L'ASSISTANT D'INSTALLATION — première ouverture d'une instance.
+   *
+   * Contrat : `docs/conception-assistant-installation.md`, routes livrées en
+   * rc5 (`apps/api/src/installation/`). Les textes suivent le contrat, pas la
+   * conception : c'est le CODE qui dit ce que l'API rend.
+   */
+  /**
+   * LES PAGES LÉGALES — rédigées par l'ÉTABLISSEMENT, jamais par nous.
+   *
+   * ⚠ Ces libellés sont la CHARPENTE (titres, aides de saisie, refus de
+   * publication). Le CONTENU, lui, vient de l'école : il vit dans
+   * `TenantSettings.pagesLegales`, et son modèle de blocs dans
+   * `lib/pages-legales.ts`.
+   */
+  pagesLegales: {
+    mentions: 'Mentions légales',
+    confidentialite: 'Politique de confidentialité',
+    publieeLe: (d: Date) =>
+      `Publiée le ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+
+    editeurTitre: 'Mentions légales et confidentialité',
+    editeurAide:
+      'Ces deux pages sont rédigées par votre établissement : il en est l’éditeur et le ' +
+      'responsable du traitement. Les blocs pré-remplis décrivent ce que le logiciel ' +
+      'fait — relisez-les ; les autres n’attendent que vous.',
+    natureMesure: 'Proposition mesurée — à relire',
+    natureARemplir: 'À remplir par l’établissement',
+
+    /**
+     * ⚠ LE REFUS DE PUBLIER, et il NOMME ce qui manque. « Complétez la page »
+     * renverrait chercher quoi ; la liste des titres manquants dit où aller.
+     */
+    refusPublication: (manquants: string[]) =>
+      `Cette page ne peut pas être publiée : ${manquants.length} bloc(s) à remplir — ${manquants.join(', ')}.`,
+    /**
+     * ⚠ POURQUOI ON REFUSE, dit une fois : une page publique portant « à
+     * compléter » serait pire que son absence.
+     */
+    refusMotif:
+      'Tant qu’un bloc obligatoire est vide, la page n’est pas publiée et son lien ' +
+      'n’apparaît pas : une page légale incomplète en ligne engage votre établissement ' +
+      'sur ce qu’elle ne dit pas.',
+    publier: 'Publier cette page',
+    depublier: 'Retirer de la ligne',
+    enregistrer: 'Enregistrer',
+    nonPubliee: 'Non publiée — invisible du public, et son lien n’est pas affiché.',
+  },
+
+  installation: {
+    titre: 'Installer Gafeso',
+    /**
+     * ⚠ DIT CE QU'IL FAUT ALLER CHERCHER, ET OÙ. Le jeton n'est pas un mot de
+     * passe qu'on choisit : il a été engendré au premier démarrage, et il est à
+     * DEUX endroits. Un écran qui demanderait « votre jeton » sans dire où le
+     * lire enverrait chercher dans un fichier de configuration.
+     */
+    jetonTitre: 'Le jeton d’amorçage',
+    jetonAide:
+      'Il a été engendré au premier démarrage de l’API et écrit à deux endroits : ' +
+      'dans le journal du conteneur (docker compose logs api) et dans le fichier ' +
+      '/var/lib/gafeso/amorcage du volume de données.',
+    jetonChamp: 'Jeton d’amorçage',
+    jetonValider: 'Ouvrir l’assistant',
+    /**
+     * ⚠ POURQUOI LE JETON EXISTE, dit à celui qui le saisit. Sans cette phrase,
+     * l'étape ressemble à une formalité qu'on contournerait volontiers.
+     */
+    jetonMotif:
+      'Posséder ce jeton prouve l’accès au serveur — c’est exactement l’autorisation ' +
+      'qu’« installer cette instance » demande. Sans lui, le premier venu à cette ' +
+      'adresse prendrait l’instance.',
+
+    constatTitre: 'Ce que l’environnement porte déjà',
+    /**
+     * ⚠ L'ASSISTANT NE PEUT PAS TOUT RÉGLER, et il le dit AVANT qu'on le
+     * découvre. Ces valeurs vivent dans l'environnement du conteneur : les
+     * corriger demande d’éditer .env.prod et de redémarrer.
+     */
+    horsPorteeTitre: 'Ce que l’assistant ne peut pas changer',
+    horsPorteeAide:
+      'Ces réglages vivent dans l’environnement du conteneur. L’assistant les CONSTATE ; ' +
+      'pour les corriger, éditez .env.prod puis redémarrez le conteneur api.',
+    smtpConfigure: 'Serveur SMTP configuré',
+    smtpAbsent: 'Aucun serveur SMTP configuré',
+
+    courrielTitre: 'Éprouver l’envoi de courriel',
+    courrielChamp: 'Adresse de test',
+    courrielEnvoyer: 'Envoyer un message de test',
+    /**
+     * ⚠⚠ « ACCEPTÉ » N'EST PAS « ARRIVÉ », et c'est le libellé le plus important
+     * de cet écran. Un serveur SMTP qui prend le message ne garantit pas la
+     * livraison : il peut le jeter, le classer en indésirable, ou le refuser en
+     * différé. Dire « envoyé » ferait croire une vérification qui n'a pas eu
+     * lieu — et l'installateur ne regarderait pas sa boîte.
+     */
+    courrielAide:
+      'Un serveur qui accepte un message ne garantit pas sa livraison. Le résultat ' +
+      'dira s’il a été ACCEPTÉ ; c’est à vous de vérifier la boîte de réception.',
+
+    modulesTitre: 'Les modules à activer',
+    modulesAide:
+      'Un module éteint retire ses écrans de l’interface et fait refuser ses routes. ' +
+      'Tout se rallume plus tard sans perte de données.',
+    moduleNoyau: 'Requis — ne se désactive pas',
+
+    etablissementTitre: 'L’établissement et son administrateur',
+    champNom: 'Nom de l’établissement',
+    champSlug: 'Identifiant court (slug)',
+    champDomaine: 'Domaine servi',
+    champEmail: 'Courriel de l’administrateur',
+    champPrenom: 'Prénom',
+    champNom2: 'Nom',
+
+    /**
+     * ⚠ SECOND GESTE EXPLICITE. Ce qui suit n'est pas défaisable : l'école est
+     * créée, l'administrateur existe, le jeton est consommé. La case n'est pas
+     * une formalité — c'est la seule chose entre l'installateur et un état
+     * qu'il ne pourra pas reprendre.
+     */
+    confirmer: 'Je confirme : créer l’établissement et son administrateur',
+    confirmerAide:
+      'Ce geste n’est pas défaisable. L’école et son compte administrateur sont créés, ' +
+      'et le jeton d’amorçage est consommé.',
+    terminer: 'Terminer l’installation',
+    enCours: 'Installation en cours…',
+
+    finiTitre: 'Installation terminée',
+    /**
+     * ⚠⚠ LE LIEN EST AFFICHÉ UNE SEULE FOIS, et il faut le DIRE dans le même
+     * souffle. Sans SMTP, c'est le SEUL chemin vers le seul compte de
+     * l'instance : une page rechargée sans l'avoir copié laisse l'installateur
+     * dehors. C'est le faux qui RETIRE LE SEUL RECOURS, et ce dépôt l'a déjà
+     * payé une fois sur l'inscription publique.
+     */
+    lienTitre: 'Lien de définition du mot de passe',
+    lienAvertissement:
+      'Copiez ce lien MAINTENANT : il n’est affiché qu’une fois, et cette page ne ' +
+      'pourra pas le réafficher. C’est le seul chemin vers le compte administrateur.',
+    courrielParti: 'Un courriel a été accepté par le serveur SMTP pour cette adresse.',
+    courrielPasParti:
+      'Aucun courriel n’a pu être envoyé : le lien ci-dessus est le seul chemin vers ce compte.',
+
+    /** ⚠ Une instance DÉJÀ installée : on ne propose pas de la réinstaller. */
+    dejaInstallee: 'Cette instance est déjà installée.',
+    dejaInstalleeSortie: 'Connectez-vous avec votre compte.',
+  },
+
   administration: {
     /**
      * LA VERSION QUI TOURNE, dans la coque professionnelle — avec le COMMIT.
@@ -711,9 +955,29 @@ export const LIBELLES = {
    * références » serait une affirmation, pas un défaut.
    */
   defauts: {
+    /**
+     * LES TEXTES SERVIS QUAND L'ÉCOLE N'A RIEN ÉCRIT — donc sur TOUTE
+     * installation neuve, le premier jour, avant que personne n'édite.
+     *
+     * ⭐ LA RÈGLE QUI LES GOUVERNE, et elle vient d'une mesure du 8 octobre
+     * 2026 : **un texte par défaut doit être vrai sur CHAQUE instance**, parce
+     * qu'il part sur toutes. Il ne peut donc affirmer aucun MODE D'ACCÈS — ni
+     * l'emprunt, ni la venue sur place, ni le campus, ni les rayons.
+     *
+     * ⚠ CE QUE CELUI-CI DISAIT, et il était servi en vrai (`app/page.tsx`,
+     * `identity.lead || LIBELLES.defauts.presentation`) : « Cherchez,
+     * EMPRUNTEZ et lisez les ressources de votre bibliothèque, SUR PLACE comme
+     * hors connexion. » Sur une université à distance — étudiants dispersés,
+     * aucun rayon physique — la première phrase de la page d'accueil envoyait
+     * emprunter sur place. Ce n'était pas le contenu d'une école : c'était le
+     * NÔTRE, par défaut.
+     *
+     * ⚠ Et ce n'est pas un vide qui invite à agir : c'est un PLEIN qui affirme.
+     * Personne ne va vérifier une phrase d'accueil qui se lit bien.
+     */
     accroche: 'Le savoir, à portée de main',
     presentation:
-      'Cherchez, empruntez et lisez les ressources de votre bibliothèque, sur place comme hors connexion.',
+      'Cherchez et consultez les ressources de votre bibliothèque.',
     indiceRecherche: 'Titre, auteur, sujet ou ISBN — la recherche porte sur tout le catalogue.',
   },
 
@@ -932,6 +1196,16 @@ export const LIBELLES = {
      * impasse, et pour un Bibliothécaire qui vient de perdre cet écran, c'est
      * la seule sortie.
      */
+    /**
+     * ⚠ NOMME LA FONCTION ET SON DESTINATAIRE. Ces pages engagent
+     * l'établissement : leur rédaction suit la même permission que son identité
+     * publique (`etablissement.apparence`), parce que c'est le même métier —
+     * ce que l'établissement dit de lui-même.
+     */
+    pagesLegales:
+      'La rédaction des mentions légales n’est pas ouverte à votre compte ' +
+      '(fonction « etablissement.apparence »). Demandez-la à l’administrateur de ' +
+      'votre établissement.',
     reglesDeCirculation:
       'Le réglage des durées et des plafonds n’est pas ouvert à votre compte ' +
       '(fonction « etablissement.regles », réservée à l’administrateur). ' +

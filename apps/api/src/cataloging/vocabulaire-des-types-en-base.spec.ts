@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { estUnTypeDeNotice } from './description-profiles';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
@@ -35,6 +36,21 @@ describe.runIf(process.env.PG_LIVE === '1')('Le vocabulaire, tel que la base le 
           WHERE schema_name = 'public' OR schema_name LIKE 'tenant_%' ORDER BY 1`,
       );
       schemas = lignes.map((l) => l.schema_name);
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ. Un garde par-école muet sur
+      // ses écoles laisse son lecteur supposer qu’il les a toutes vues —
+      // exigé par `gardes-vivants.spec.ts` depuis le 8 octobre 2026.
+        //
+        // ⚠ ET `public` N'EST PAS UNE ÉCOLE : c'est le GABARIT, et ce garde le
+        // mesure exprès — le vocabulaire y est copié dans chaque école neuve,
+        // donc une dérive du gabarit est une dérive à venir pour tout le monde.
+        // L'annoncer comme « école mesurée » serait un faux dans une ligne
+        // écrite pour être lue : il est nommé à part.
+        console.log(
+          ecolesMesurees(
+            'vocabulaire-des-types',
+            schemas.filter((x) => x !== 'public').map((x) => x.replace('tenant_', '')),
+          ) + (schemas.includes('public') ? ' · + le GABARIT `public`' : ''),
+        );
     } catch {
       joignable = false;
     }

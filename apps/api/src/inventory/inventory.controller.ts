@@ -17,6 +17,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
 import { FONCTIONS } from '../auth/functions';
+import { ModuleRequis } from '../modules/module-requis.decorator';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { ClientIp } from '../audit/client-ip.decorator';
@@ -35,8 +37,18 @@ import { CreateSessionDto, PaginationRecolementDto, ScanDto } from './dto/invent
  * catalogue (statuts d'exemplaires). Tenant-scopé par le Host.
  */
 @ApiTags('inventory')
+// 🔴 TOUTES LES ROUTES DE CE CONTRÔLEUR SUIVENT LE MODULE `circulation`.
+//
+// *Bascule du 8 octobre 2026 : `circulation` passe de NOYAU à activable, pour le
+// profil « bibliothèque numérique » — une université virtuelle n'a aucun rayon.*
+//
+// ⚠ GARDE SUR LA CLASSE, et non route par route : une route écrite demain
+// l'hérite. C'est la forme que `depot` et `moissonnage` emploient déjà, et celle
+// que le registre attend — il énumère les routes pour que leur COMPTE oblige à
+// revenir le jour où l'une change de nom, pas pour porter la garde.
+@ModuleRequis('circulation')
 @Controller('inventory')
-@UseGuards(JwtAuthGuard, FunctionsGuard)
+@UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
 @RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
 @ApiBearerAuth()
 export class InventoryController {

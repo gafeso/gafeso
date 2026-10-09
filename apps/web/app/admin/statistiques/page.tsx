@@ -63,6 +63,17 @@ export default function StatsPage() {
   // Module `rappels` — P4-4. `null` = pas encore su : on garde l'affichage d'avant.
   const { modulesActifs } = useModulesActifs();
   const rappelsActifs = modulesActifs === null ? null : modulesActifs.includes('rappels');
+  /*
+   * ⚠ Module `circulation` — 8 octobre 2026. `null` (pas encore su) LAISSE
+   * PASSER : masquer sur une information qu'on n'a pas ferait disparaître des
+   * volets auxquels l'école a droit, le temps d'un aller-retour réseau. La
+   * garantie reste l'API, qui refuse les routes d'un module inactif.
+   *
+   * ⚠ Et il lit le MÊME appel de hook que `rappelsActifs`, juste au-dessus. Un
+   * second `useModulesActifs()` dans la même fonction compilait mal — et aurait
+   * de toute façon été une seconde source pour une même valeur.
+   */
+  const circulation = modulesActifs === null || modulesActifs.includes('circulation');
   const canView = functions?.includes('statistiques.voir');
   const params = useSearchParams();
   const router = useRouter();
@@ -184,40 +195,65 @@ export default function StatsPage() {
         <>
           {/* Rangée KPI */}
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <KpiTile
-              label="Prêts (période)"
-              value={data.activity.loans.current}
-              spark={data.timeseries.map((t) => t.loans)}
-              variationPct={data.activity.loans.variationPct}
-            />
-            <KpiTile
-              label="Retours (période)"
-              value={data.activity.returns.current}
-              spark={data.timeseries.map((t) => t.returns)}
-              variationPct={data.activity.returns.variationPct}
-            />
-            <KpiTile label="Prêts en cours" value={data.kpis.openLoans} />
-            <KpiTile label="En retard" value={data.kpis.overdues} emphasis />
-            <KpiTile label="Réservations en attente" value={data.kpis.pendingHolds} />
+            {/*
+              ⚠ LES CINQ TUILES DE CIRCULATION disparaissent avec le module, et
+              « Exemplaires » avec elles : une bibliothèque sans rayon n'a pas
+              d'exemplaire à compter. Ce qui RESTE a un sens pour elle — notices,
+              comptes actifs, documents numériques.
+
+              ⚠ Et on les RETIRE plutôt que de les mettre à zéro. Un « Prêts en
+              cours : 0 » est un FAUX : il se lit comme « personne n'emprunte »
+              alors que personne ne PEUT emprunter. C'est le défaut que ce dépôt
+              traque depuis le 8 septembre — une non-réponse écrite comme un fait.
+            */}
+            {circulation && (
+              <>
+                <KpiTile
+                  label="Prêts (période)"
+                  value={data.activity.loans.current}
+                  spark={data.timeseries.map((t) => t.loans)}
+                  variationPct={data.activity.loans.variationPct}
+                />
+                <KpiTile
+                  label="Retours (période)"
+                  value={data.activity.returns.current}
+                  spark={data.timeseries.map((t) => t.returns)}
+                  variationPct={data.activity.returns.variationPct}
+                />
+                <KpiTile label="Prêts en cours" value={data.kpis.openLoans} />
+                <KpiTile label="En retard" value={data.kpis.overdues} emphasis />
+                <KpiTile label="Réservations en attente" value={data.kpis.pendingHolds} />
+              </>
+            )}
             <KpiTile label="Notices" value={data.kpis.records} />
-            <KpiTile label="Exemplaires" value={data.kpis.items} />
+            {circulation && <KpiTile label="Exemplaires" value={data.kpis.items} />}
             <KpiTile label="Comptes actifs" value={data.kpis.activeAccounts} />
             <KpiTile label="Documents numériques" value={data.kpis.digital} />
           </div>
 
           {/* Courbe + donut */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <ChartCard title="Prêts et retours dans le temps" action={<CsvLink href={exportUrl('timeseries')} />}>
-                <AreaLineChart data={data.timeseries} />
-              </ChartCard>
-            </div>
+            {/* ⚠ La courbe est entièrement faite de prêts et de retours : elle
+                n'a rien à montrer sans circulation. Le donut du FONDS, lui,
+                reste — il compte des notices. */}
+            {circulation && (
+              <div className="lg:col-span-2">
+                <ChartCard title="Prêts et retours dans le temps" action={<CsvLink href={exportUrl('timeseries')} />}>
+                  <AreaLineChart data={data.timeseries} />
+                </ChartCard>
+              </div>
+            )}
             <ChartCard title="Fonds par domaine" action={<CsvLink href={exportUrl('fund-by-category')} />}>
               <Donut rows={data.fundByCategory} />
             </ChartCard>
           </div>
 
           {/* Palmarès */}
+          {/* ⚠ LES QUATRE PALMARÈS SE COMPTENT EN PRÊTS — leur unité est «  prêts »,
+              écrite dans chaque `valueSuffix`. Sans circulation ils seraient
+              quatre classements vides, c'est-à-dire quatre titres surmontant le
+              vide : une page qui se lit comme cassée. */}
+          {circulation && (
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <ChartCard title="Documents les plus empruntés" action={<CsvLink href={exportUrl('most-borrowed')} />}>
               <HorizontalBars rows={data.rankings.mostBorrowed} valueSuffix=" prêts" />
@@ -232,8 +268,15 @@ export default function StatsPage() {
               <HorizontalBars rows={data.rankings.topClasses} accent valueSuffix=" prêts" />
             </ChartCard>
           </div>
+          )}
 
           {/* Désherbage + système */}
+          {/* ⚠ « Jamais empruntés » est un outil de DÉSHERBAGE : il sert à
+              retirer des rayons ce que personne n'emprunte. Sans rayon il n'y a
+              rien à désherber, et « tous les documents sans aucun prêt »
+              désignerait le fonds ENTIER — un conseil de retrait sur tout le
+              catalogue. */}
+          {circulation && (
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <ChartCard
               title={`Jamais empruntés (${data.rankings.neverBorrowed.count})`}
@@ -296,6 +339,7 @@ export default function StatsPage() {
               </div>
             </ChartCard>
           </div>
+          )}
         </>
       )}
     </div>

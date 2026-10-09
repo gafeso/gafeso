@@ -22,8 +22,20 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/functions', () => ({
   useMyFunctions: () => ({ functions: ['document.lire', 'catalogue.gerer'] }),
 }));
+/*
+ * ⚠ `{ modulesActifs }`, ET PAS `{ actifs, chargement }` — c'est la forme RÉELLE
+ * du hook (`lib/modules-actifs.ts` rend `{ modulesActifs }`). Ma première
+ * doublure inventait deux champs qui n'existent pas, et le défaut a dormi
+ * jusqu'au 8 octobre 2026 : ce jour-là le menu de compte a commencé à appeler
+ * `moduleEteint()`, qui fait `modulesActifs !== null && !modulesActifs.includes(…)`.
+ * Sur `undefined`, `!== null` est VRAI et `.includes` lève.
+ *
+ * ⭐ « Une doublure est une hypothèse » : celle-ci décrivait un hook qui n'existe
+ * pas, et rien ne pouvait la démentir tant que personne ne lisait son retour.
+ * `null` est la valeur juste — « on ne sait pas encore », qui laisse tout passer.
+ */
 vi.mock('@/lib/modules-actifs', () => ({
-  useModulesActifs: () => ({ actifs: [], chargement: false }),
+  useModulesActifs: () => ({ modulesActifs: null }),
 }));
 
 import { AdminShell } from '@/components/admin-shell';

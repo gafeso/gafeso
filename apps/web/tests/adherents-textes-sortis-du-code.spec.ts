@@ -201,6 +201,16 @@ describe('l’instrument, avant ce qu’il mesure', () => {
   });
 });
 
+/**
+ * La SOURCE d'un écran — pour prouver qu'il a été OUVERT.
+ *
+ * ⚠ Distinct de `chainesLitterales` : un écran conforme peut n'avoir aucun
+ * littéral, et c'est l'idéal. Ce qui doit être non vide est le FICHIER.
+ */
+function sourceDe(fichier: string): string {
+  return readFileSync(join(process.cwd(), fichier), 'utf-8');
+}
+
 describe('aucun écran neuf ne porte de texte visible en dur', () => {
   for (const fichier of FICHIERS) {
     it(`${fichier} : le fichier est bien lu`, () => {
@@ -213,7 +223,19 @@ describe('aucun écran neuf ne porte de texte visible en dur', () => {
       // juste ailleurs. Ce qu'on veut savoir est « ce fichier a-t-il été LU »,
       // pas « est-il gros » ; le volume se garde une fois, plus bas, sur la
       // population entière.
-      expect(chainesLitterales(fichier).length).toBeGreaterThan(0);
+      //
+      // ⚠⚠ ET LE TÉMOIN MESURAIT LA MAUVAISE CHOSE — corrigé le 8 octobre 2026.
+      // Il prouvait « le fichier a été lu » en comptant ses littéraux. Or un
+      // écran PARFAITEMENT conforme n'en a AUCUN : tout son texte vient des
+      // libellés. `/mes-consultations` et `/mes-documents-hors-ligne` sont
+      // exactement ce cas, et le témoin a crié sur les deux fichiers les plus
+      // conformes du dépôt.
+      //
+      // ⭐ Un témoin dont la condition de succès est l'existence d'une forme
+      // FAUTIVE punit celui qui fait bien. Ce qu'on veut savoir est « ce
+      // fichier a-t-il été ouvert », et ça se mesure sur la SOURCE — pas sur ce
+      // qu'elle contient.
+      expect(sourceDe(fichier).length).toBeGreaterThan(50);
     });
 
     it(`${fichier} : aucune phrase écrite en dur`, () => {

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
 import { DEFENSE_RECORD_TYPES } from './description-profiles';
@@ -34,6 +35,46 @@ import { ETATS_DEPOT } from '../depots/etats';
 
 const prisma = new PrismaClient();
 
+/**
+ * ⚠ LES POPULATIONS LÉGITIMEMENT VIDES — déclarées, avec leur motif.
+ *
+ * Un témoin de non-vacuité est juste : une règle vérifiée sur un ensemble VIDE
+ * ne mesure rien, et son vert se lit comme une garantie. Mais il a un prix,
+ * mesuré le 6 octobre 2026 : il lie la verdeur du tamis à une population
+ * TRANSITOIRE. Les licences hors-ligne sont des BAUX — ils expirent, ils se
+ * révoquent — et le nettoyage d’un essai mobile a rendu le tamis ROUGE sur un
+ * état parfaitement légitime, bloquant le push de tout le monde.
+ *
+ * ⭐ LA FORME QUI TIENT N’EST NI LE ROUGE NI LE VERT SILENCIEUX : c’est une
+ * OBLIGATION. Une population qui peut légitimement être vide est DÉCLARÉE ici
+ * avec son motif ; toute autre population vide reste un échec.
+ *
+ * ⚠⚠ ET J'AI CORRIGÉ MON PROPRE DESSIN DANS L'HEURE. Ma première version faisait
+ * EXPIRER la déclaration — « dès que la population n'est plus vide, retirez-la ».
+ * L'intention était bonne (ne pas laisser un vert vide s'installer) et l'effet
+ * était mauvais : la table s'est remplie quand une autre session a joué un essai
+ * mobile, le garde est redevenu ROUGE, et il l'aurait été de nouveau au
+ * nettoyage suivant. **Un garde qui oscille au rythme d'une autre session se
+ * fait contourner** — et il ne sert plus le jour où il a raison.
+ *
+ * ⭐ Ce qu'on déclare n'est donc PAS « cette table est vide aujourd'hui » — un
+ * fait qui change — mais « cette population est TRANSITOIRE par nature ». Un
+ * bail expire et se révoque : c'est vrai indépendamment de ce que la base porte
+ * à l'instant du test, donc la déclaration ne se périme pas.
+ *
+ * ⚠ Le prix, assumé et écrit : quand la table est vide, cette règle ne mesure
+ * rien, et elle passe. C'est « dégrade en le DISANT » — le cas est NOMMÉ ici, pas
+ * découvert plus tard dans un vert silencieux.
+ */
+const POPULATIONS_LEGITIMEMENT_VIDES: Record<string, string> = {
+  offline_licenses:
+    'un bail hors-ligne est TRANSITOIRE : il expire, il se révoque, et une base ' +
+    'de développement n’en porte que si quelqu’un a joué un essai mobile ' +
+    'récemment. Exiger qu’il y en ait une liait la verdeur du tamis au passage ' +
+    'd’une autre session. ⚠ La règle redevient mesurée dès la première licence : ' +
+    'cette déclaration est alors REFUSÉE comme périmée.',
+};
+
 describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produit', () => {
   let joignable = false;
   let ecoles: string[] = [];
@@ -47,6 +88,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
         FROM information_schema.tables
         WHERE table_name = 'biblio_records' AND table_schema LIKE 'tenant\\_%'`;
       ecoles = provisionnees.map((p) => p.slug);
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ. Un garde par-école muet sur
+      // ses écoles laisse son lecteur supposer qu’il les a toutes vues —
+      // exigé par `gardes-vivants.spec.ts` depuis le 8 octobre 2026.
+      console.log(ecolesMesurees('fonds-conforme', ecoles));
     } catch {
       joignable = false;
     }
@@ -405,7 +450,16 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
       examinees += n.total;
       fautifs.push(...lignes.map((l) => `${slug} · licence ${l.id}`));
     }
-    expect(examinees, 'aucune licence : le tamis ne mesure rien ici').toBeGreaterThan(0);
+      if (examinees === 0) {
+        // ⚠ On ne passe PAS en silence : la vacuité doit être DÉCLARÉE.
+        expect(
+          POPULATIONS_LEGITIMEMENT_VIDES.offline_licenses,
+          'aucune licence hors-ligne en base : cette règle ne mesure RIEN. Si ' +
+            'la population est TRANSITOIRE par nature, déclarez-le dans ' +
+            'POPULATIONS_LEGITIMEMENT_VIDES avec son motif ; sinon, cherchez ' +
+            'pourquoi la table est vide.',
+        ).toBeTruthy();
+      }
     expect(
       fautifs,
       'Des licences hors-ligne expirent avant d’être émises :\n' +
@@ -759,5 +813,30 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
         'ETD-MS rend du Dublin Core déguisé — et cette distinction est sa seule ' +
         'valeur propre.',
     ).toEqual([]);
+  }, 60_000);
+
+  it('⚠ chaque population déclarée TRANSITOIRE porte un motif, et la table EXISTE', async () => {
+    expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
+    const vues: string[] = [];
+    for (const [table, motif] of Object.entries(POPULATIONS_LEGITIMEMENT_VIDES)) {
+      expect(
+        motif.length,
+        `le motif de ${table} est trop court pour être un motif`,
+      ).toBeGreaterThan(60);
+      // ⚠ ON NE VÉRIFIE PAS QU'ELLE EST VIDE — c'était mon erreur : un fait qui
+      // change ne se déclare pas. On vérifie que la TABLE EXISTE, sans quoi la
+      // déclaration nommerait une table disparue et la règle qu'elle couvre
+      // serait morte sans que rien ne le dise.
+      for (const slug of ecoles) {
+        const [n] = await prisma.$queryRawUnsafe<{ total: number }[]>(
+          `SELECT count(*)::int AS total FROM information_schema.tables
+             WHERE table_schema = 'tenant_${slug}' AND table_name = $1`,
+          table,
+        );
+        expect(n.total, `la table ${table} doit exister dans tenant_${slug}`).toBe(1);
+      }
+      vues.push(table);
+    }
+    expect(vues).toEqual(Object.keys(POPULATIONS_LEGITIMEMENT_VIDES));
   }, 60_000);
 });

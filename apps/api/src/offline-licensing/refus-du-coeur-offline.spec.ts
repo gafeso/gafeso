@@ -76,6 +76,8 @@ function service(db: unknown, aLaFonctionLire = true) {
     CLES,
     { log: vi.fn() } as never,
     { getSignedDownloadUrl: vi.fn(async () => 'https://exemple/blob') } as never,
+    // doublure de la trace d'usage : elle NE DOIT PAS faire échouer le geste
+    { enregistrer: async () => true } as never,
   );
 }
 

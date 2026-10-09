@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { TENANT_TABLES } from './tenant-schema';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
@@ -53,6 +54,9 @@ describe.runIf(process.env.PG_LIVE === '1')('La dérive des schémas d’école,
           `SELECT nspname FROM pg_namespace WHERE nspname LIKE 'tenant_%' ORDER BY 1`,
         )
       ).map((r) => r.nspname);
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ : la dérive se juge école par
+      // école, et un schéma absent du relevé est précisément ce qu'on cherche.
+      console.log(ecolesMesurees('derive-des-schemas', schemas.map((s) => s.replace('tenant_', ''))));
       duGabarit = await prisma.$queryRawUnsafe<Colonne[]>(
         `SELECT table_name, column_name FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = ANY($1::text[])`,

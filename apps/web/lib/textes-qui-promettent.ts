@@ -37,6 +37,37 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'refusDeDroit.pagesLegales',
+    nature: 'promet',
+    raison:
+      'Un refus qui adresse la personne à quelqu’un d’autre est un RECOURS, et un ' +
+      'recours sans destinataire est une impasse. Il doit NOMMER la fonction ' +
+      'réellement exigée (etablissement.apparence) et dire à qui s’adresser. ' +
+      '⚠ Ces pages engagent juridiquement l’établissement : quelqu’un qui ne peut ' +
+      'pas les rédiger doit savoir QUI peut, sans quoi elles ne seront jamais ' +
+      'publiées et le pied de page restera muet.',
+  },
+  {
+    cle: 'espaceLecteur.consultations.sortie',
+    nature: 'promet',
+    raison:
+      'C’est la SORTIE d’un écran qui annonce une absence — et une information ' +
+      'sans issue ne sert à rien. Elle doit dire OÙ le lecteur retrouve ses ' +
+      'documents en attendant que l’historique existe : le catalogue, et par ' +
+      'quoi l’y chercher. ⚠ Elle ne doit promettre aucune date ni aucune ' +
+      'livraison — « bientôt » daterait sa propre péremption.',
+  },
+  {
+    cle: 'espaceLecteur.horsLigne.sortie',
+    nature: 'promet',
+    raison:
+      'Même office, et une interdiction de plus : elle ne doit PAS promettre ' +
+      'l’application mobile. Elle existe, elle n’est pas publiée, et ce dépôt ne ' +
+      'publie rien — annoncer un téléchargement que personne ne peut obtenir ' +
+      'serait le faux qui retire le seul recours. Elle dit OÙ la lecture hors ' +
+      'connexion se fait, sans annoncer comment l’obtenir.',
+  },
+  {
     cle: 'refusDeDroit.reglesDeCirculation',
     nature: 'promet',
     raison:
@@ -172,8 +203,13 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
     cle: 'defauts.presentation',
     nature: 'ressemblance',
     raison:
-      'Prose d’accueil : « Cherchez, empruntez et lisez… » emploie l’impératif ' +
-      'd’invitation, pas de consigne de secours. Rien n’y est promis.',
+      'Prose d’accueil : un impératif d’INVITATION, pas une consigne de ' +
+      'secours. Rien n’y est promis. ⚠ Mais il est SERVI sur toute instance ' +
+      'où l’école n’a rien écrit, donc il doit être vrai partout : il ne peut ' +
+      'affirmer aucun MODE D’ACCÈS. Il disait « empruntez […] sur place » ' +
+      'jusqu’au 8 octobre 2026 — faux sur une université à distance, et c’est ' +
+      'la première phrase qu’un étudiant y lisait. La propriété est éprouvée ' +
+      'dans tests/defauts-vrais-partout.spec.ts.',
   },
   {
     cle: 'monDepot.retirerConfirmation',

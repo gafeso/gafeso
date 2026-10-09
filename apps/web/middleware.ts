@@ -40,7 +40,18 @@ const PUBLIC_EXACT = ['/', '/login', '/inscription', '/definir-mot-de-passe'];
 // HTML les mentionne de toute façon — la balise <img> est présente dans les
 // deux cas, seule la REQUÊTE diffère. Lire le DOM ne pouvait donc pas le
 // montrer ; seul un appel sans cookie le montre.
-const PUBLIC_PREFIXES = ['/opac', '/e/', '/.well-known/', '/marque/', '/demo/'];
+/*
+ * ⚠ `/installation` EST PUBLIC PAR NÉCESSITÉ, 8 octobre 2026. Sur une instance
+ * NEUVE il n'existe aucun compte : rediriger l'assistant vers /login le rendrait
+ * inatteignable, et l'instance ne pourrait jamais être installée.
+ *
+ * Ce qui protège l'assistant n'est donc pas le middleware : c'est le JETON
+ * D'AMORÇAGE, engendré au premier démarrage et lisible seulement par qui a accès
+ * au serveur. Et l'API refuse toutes ses routes — sauf `etat` — sans la session
+ * que ce jeton ouvre. « Cacher sans refuser laisserait une porte ouverte » ; ici
+ * on ne cache rien, et c'est l'API qui refuse.
+ */
+const PUBLIC_PREFIXES = ['/opac', '/e/', '/.well-known/', '/marque/', '/demo/', '/installation'];
 
 /**
  * Exposé pour le test. Cette liste est la seule chose qui sépare un fichier

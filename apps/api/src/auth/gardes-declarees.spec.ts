@@ -138,6 +138,18 @@ const LIBRE_SERVICE: Record<string, string> = {
   'access-control/access-control.controller.ts :: Get me/titles/:titleId/access': 'son propre droit sur un titre',
   'access-control/access-control.controller.ts :: Get me/records/:recordId/access': 'son propre droit sur une notice',
 
+  // ── MON USAGE NUMÉRIQUE (6 octobre 2026, profil « bibliothèque numérique »)
+  //
+  // ⚠ SANS FONCTION, comme tout l'espace lecteur : l'identité vient du JETON et
+  // la route ne prend AUCUN identifiant d'utilisateur. Exiger une fonction
+  // n'ajouterait rien — il n'existe aucun paramètre par lequel demander
+  // l'historique d'autrui — et en ajouter une donnerait l'idée qu'on pourrait
+  // l'élargir. La propriété est gardée par la POPULATION des appelants du
+  // nominatif : voir `stats/usage-nominatif-reserve.spec.ts`.
+  'reader/reader.controller.ts :: Get consultations':
+    'MES consultations — identité du jeton, aucun paramètre d’utilisateur',
+  'reader/reader.controller.ts :: Get hors-ligne':
+    'MES documents emportés hors ligne — identité du jeton, aucun paramètre',
   'reader/reader.controller.ts :: Get card': 'sa propre carte',
   'reader/reader.controller.ts :: Get loans': 'ses propres prêts',
   'reader/reader.controller.ts :: Post loans/:id/renew': 'son propre prêt — la propriété est vérifiée dans le service',
@@ -393,7 +405,7 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     expect(perimees, 'exceptions périmées').toEqual([]);
   });
 
-  it('⚠ l’inventaire COMPTE juste — 68 routes sans fonction, pas « au moins une »', () => {
+  it('⚠ l’inventaire COMPTE juste — 70 routes sans fonction, pas « au moins une »', () => {
     // Un témoin qui COMPTE, et non qui constate : c'est la forme qui signale ce
     // à quoi on n'a pas pensé. Si ce nombre bouge, quelqu'un a ajouté ou retiré
     // une route joignable sans fonction — et doit le dire.
@@ -420,8 +432,8 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
       //
     // ⚠ Les DEUX comptes bougent ensemble : l'un mesure ce qui EST, l'autre ce
     // qui est DÉCLARÉ. N'en changer qu'un rendrait le second silencieux.
-    expect(sansFonction.length).toBe(68);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(68);
+    expect(sansFonction.length).toBe(70);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(70);
   });
 });
 

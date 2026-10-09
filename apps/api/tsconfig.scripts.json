@@ -1,0 +1,29 @@
+{
+  // ⚠ `scripts/` N'ÉTAIT TYPE-VÉRIFIÉ PAR RIEN — mesuré le 8 octobre 2026.
+  //
+  // `tsconfig.json` n'inclut que `src/**/*.ts`, et c'est lui que `npm test`
+  // compile. Les scripts d'exploitation de ce dossier étaient donc hors de
+  // TOUTE vérification depuis leur écriture : une population qui n'était dans
+  // l'inventaire de rien — pas mal gardée, INVISIBLE PAR CONSTRUCTION.
+  //
+  // Le signe qui l'a désigné : un `tsc --noEmit` muet sur un fichier que je
+  // venais de refondre. Muet parce qu'il ne l'avait jamais LU, et
+  // `--listFiles | grep` l'a dit.
+  //
+  // ⚠ Ils IMPORTENT du code de `src/` (ici `CatalogingService`, pour écrire par
+  // les règles du produit) : un script qui se désynchronise d'une signature
+  // casse à l'exécution, sur une machine de recette, dans la main de quelqu'un
+  // qui ne cherchait pas là.
+  //
+  // Mesuré avant de câbler, parce que la taille décide si c'est tenable :
+  // 1 script, 0 erreur.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Le programme couvre deux dossiers : la racine doit les contenir tous deux.
+    "rootDir": ".",
+    "incremental": false
+  },
+  "include": ["scripts/**/*.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

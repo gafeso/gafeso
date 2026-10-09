@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AccessControlModule } from '../access-control/access-control.module';
+import { StatsModule } from '../stats/stats.module';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { ContentIngestionService } from './content-ingestion.service';
@@ -19,6 +20,11 @@ import { OfflineLicensingController } from './offline-licensing.controller';
     StorageModule, // dépôt du blob chiffré
     AuthModule, // JwtAuthGuard + FunctionsGuard + AuthzService
     AccessControlModule, // getRecordAccessStatus (droit réutilisé)
+    // ⚠ POUR `UsageService`, et il faut l'importer même si le service est
+    // « juste » injecté : un test unitaire construit le service à la main et ne
+    // dit RIEN de ce que le conteneur saura résoudre. C'est le défaut du
+    // 12 septembre — 1051 tests verts pendant que l'API refusait de démarrer.
+    StatsModule,
   ],
   controllers: [OfflineLicensingController],
   providers: [

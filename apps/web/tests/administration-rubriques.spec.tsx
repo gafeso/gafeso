@@ -108,7 +108,8 @@ describe('la structure de la navigation', () => {
     // arrivé de Guichet avec sa fonction (`etablissement.regles`). Un compte
     // exact ne dit pas que le code est juste — il oblige à revenir le regarder,
     // et c'est ce qu'il a fait.
-    expect(admin.entrees.length).toBe(8);
+    // ⚠ 9 le 8 octobre 2026 : « Mentions et confidentialité ».
+    expect(admin.entrees.length).toBe(9);
   });
 });
 

@@ -4,6 +4,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
+import { ModuleRequis } from '../modules/module-requis.decorator';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
 import { FONCTIONS } from '../auth/functions';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
@@ -35,8 +37,26 @@ export class LabelsController {
    * ou filtre (location / nouveaute). Grille paramétrable (columns × rows) +
    * départ décalé (start) pour finir une planche entamée. Réservé au personnel.
    */
+  // 🔴 LES ÉTIQUETTES SUIVENT LE MODULE `circulation`.
+  //
+  // *Décision de Jean du 8 octobre 2026 : « range la route des étiquettes sous
+  // circulation dans ce même lot (garde ou déplacement, motivé) ».*
+  //
+  // ⭐ GARDE, ET NON DÉPLACEMENT — et le motif est un CONTRAT PUBLIÉ. La route
+  // vit sous la base `/cataloging` ; la déplacer sous `/circulation` changerait
+  // son URL, que le front consomme déjà et que `routes-connues-de-l-api.spec.ts`
+  // énumère. On obtiendrait le même effet au prix d'une rupture de contrat — et
+  // d'une migration de l'écran qui l'appelle, pour un bénéfice purement
+  // cosmétique sur l'arborescence.
+  //
+  // ⚠ ET L'INCOHÉRENCE DE RANGEMENT RESTE, je l'écris plutôt que de la taire :
+  // une route qui imprime des étiquettes d'EXEMPLAIRES sous une base
+  // « cataloging » se lit de travers. Le jour où une rupture de contrat est
+  // acceptable (une v2 d'API), elle se déplace. D'ici là, la garde dit la
+  // vérité : ce geste appartient à la circulation physique.
   @Get('labels')
-  @UseGuards(JwtAuthGuard, FunctionsGuard)
+  @UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
+  @ModuleRequis('circulation')
   @RequiresFunctions(FONCTIONS.OUTILS_CATALOGUE)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Générer une planche PDF d’étiquettes code-barres' })

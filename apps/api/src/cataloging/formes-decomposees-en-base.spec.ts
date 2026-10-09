@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
 
@@ -62,6 +63,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Aucune forme décomposée en base',
       await prisma.$queryRaw`SELECT 1`;
       joignable = true;
       ecoles = (await prisma.tenant.findMany({ select: { slug: true } })).map((t) => t.slug);
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ. Un garde par-école muet sur
+      // ses écoles laisse son lecteur supposer qu’il les a toutes vues —
+      // exigé par `gardes-vivants.spec.ts` depuis le 8 octobre 2026.
+      console.log(ecolesMesurees('formes-decomposees', ecoles));
     } catch {
       joignable = false;
     }

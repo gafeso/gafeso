@@ -435,9 +435,15 @@ export default async function HomePage() {
                 « Constellation » et « Horaires » pointent vers des ancres de
                 cette page : si la section ne se rend pas, l'ancre n'existe pas
                 et le lien mènerait nulle part. La maquette proposait aussi
-                « Application mobile », « À propos de Gafeso », « Mentions
-                légales » et « Politique de confidentialité » : aucune de ces
-                pages n'existe, aucun de ces liens n'est affiché. */}
+                « Application mobile » et « À propos de Gafeso » : ces pages
+                n'existent pas, ces liens ne sont pas affichés.
+
+                ⚠ MENTIONS LÉGALES ET CONFIDENTIALITÉ EXISTENT DEPUIS LE
+                8 OCTOBRE 2026 — et leurs liens ne s'affichent que si
+                l'établissement les a PUBLIÉES. L'API ne laisse sortir que ce
+                dont `publieeLe` est posé : un lien vers une page que son
+                `notFound()` refuse serait un lien mort dans un pied de page,
+                c'est-à-dire la forme la plus visible d'une porte sans écran. */}
             <div>
               {/*
                 ⚠ h2, PAS h5. Les colonnes du pied venaient après un h3 : un
@@ -462,6 +468,16 @@ export default async function HomePage() {
               {content.hours.lines.length > 0 && (
                 <a className={styles.flink} href="#horaires">
                   {LIBELLES.pied.horaires}
+                </a>
+              )}
+              {home.pagesLegales?.mentions.publieeLe && (
+                <a className={styles.flink} href="/mentions-legales">
+                  {LIBELLES.pagesLegales.mentions}
+                </a>
+              )}
+              {home.pagesLegales?.confidentialite.publieeLe && (
+                <a className={styles.flink} href="/confidentialite">
+                  {LIBELLES.pagesLegales.confidentialite}
                 </a>
               )}
             </div>

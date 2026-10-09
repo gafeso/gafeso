@@ -25,6 +25,7 @@ import { Header } from '@/components/header';
 import { NAVIGATION_PERSONNEL } from '@/lib/navigation';
 import { fermerSession, ouvrirSession } from './aide-session';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
+import { reponseModules } from './aide-modules';
 import { oublierEtablissement } from '@/lib/etablissement';
 
 vi.mock('next/navigation', () => ({
@@ -45,7 +46,10 @@ function brancher({ ecole = 'Université d’Exemple' }: { ecole?: string | null
       if (u.includes('/modules')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([{ id: 'depot', actif: true }]),
+          // ⚠ La réponse COMPLÈTE de l'API, pas un module isolé — voir
+          // `reponseModules` : une doublure qui omet les autres modules masque
+          // des entrées que le vrai produit affiche.
+          json: () => Promise.resolve(reponseModules()),
         } as Response);
       }
       if (u.includes('/functions')) {

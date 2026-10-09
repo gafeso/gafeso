@@ -43,7 +43,7 @@ describe('Rapport annuel — ce qu’il affirme', () => {
     // pensé à regarder. Un nom qui apparaîtrait dans un libellé de catégorie,
     // dans un motif ou dans une réserve serait attrapé ici — pas par une
     // relecture des types.
-    const rapport = await service(fauxDb()).produire('zinda', 'Lycée Zinda', annee(2026));
+    const rapport = await service(fauxDb()).produire('zinda', 'Lycée Zinda', annee(2026), true);
     const texte = JSON.stringify(rapport);
 
     for (const interdit of [
@@ -62,7 +62,7 @@ describe('Rapport annuel — ce qu’il affirme', () => {
     // Un zéro se lirait « personne ne nous moissonne », ce qui est une
     // AFFIRMATION que nous ne pouvons pas faire. Et c'est précisément le
     // chiffre qui prouverait la valeur DICAMES de l'école.
-    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026), true);
     expect(rapport.diffusion.etat).toBe('non_calculable');
     if (rapport.diffusion.etat === 'non_calculable') {
       expect(rapport.diffusion.motif).toMatch(/OAI/);
@@ -73,7 +73,7 @@ describe('Rapport annuel — ce qu’il affirme', () => {
   });
 
   it('⚠ le seuil s’applique AUSSI au fonds : une catégorie de 3 n’est pas publiée', async () => {
-    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026), true);
     expect(rapport.fonds.etat).toBe('calcule');
     if (rapport.fonds.etat !== 'calcule') return;
     const medecine = rapport.fonds.valeurs.parCategorie.find((l) => l.libelle === 'Médecine');
@@ -85,7 +85,7 @@ describe('Rapport annuel — ce qu’il affirme', () => {
     // Sans `distinct`, un lecteur assidu vaudrait dix — et le rapport
     // annoncerait plus d'actifs que d'inscrits.
     const db = fauxDb();
-    const rapport = await service(db).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(db).produire('zinda', 'Zinda', annee(2026), true);
     expect(db.checkout.findMany.mock.calls[0][0]).toMatchObject({ distinct: ['patronId'] });
     if (rapport.lecteurs.etat !== 'calcule') throw new Error('bloc absent');
     expect(rapport.lecteurs.valeurs.actifsDansLAnnee).toBe(2);
@@ -96,7 +96,7 @@ describe('Rapport annuel — ce qu’il affirme', () => {
     // et dans les VALIDÉS de 2026. Les compter tous sur `createdAt` aurait
     // rendu un tableau cohérent et FAUX.
     const db = fauxDb();
-    await service(db).produire('zinda', 'Zinda', annee(2026));
+    await service(db).produire('zinda', 'Zinda', annee(2026), true);
     const champs = (db.deposit.count.mock.calls as unknown[][]).map((appel) =>
       Object.keys((appel[0] as { where: Record<string, unknown> }).where)
         .filter((k) => k.endsWith('At'))
@@ -109,13 +109,13 @@ describe('Rapport annuel — ce qu’il affirme', () => {
     // Une division par zéro n'est pas « un taux de 0 » : c'est un taux qui
     // n'existe pas. Zéro se lirait « les documents ne tournent pas ».
     const db = fauxDb({ item: { count: vi.fn().mockResolvedValue(0) } });
-    const rapport = await service(db).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(db).produire('zinda', 'Zinda', annee(2026), true);
     if (rapport.circulation.etat !== 'calcule') throw new Error('bloc absent');
     expect(rapport.circulation.valeurs.tauxDeRotation).toBeNull();
   });
 
   it('⚠ les RÉSERVES sont en tête du document, pas en note de bas de page', async () => {
-    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026), true);
     expect(rapport.reserves.length).toBeGreaterThanOrEqual(3);
     // Ce que le lecteur DOIT savoir pour ne pas se tromper sur les chiffres.
     expect(rapport.reserves.join(' ')).toMatch(/ACQUISITION/);
@@ -150,14 +150,15 @@ describe('Rapport annuel — ce qu’il affirme', () => {
       'horizon',
       'Université Horizon',
       annee(2026),
-    );
+        true,
+      );
 
     expect(slugsDemandes, 'le rapport doit lire le schéma de l’école demandée').toEqual(['horizon']);
     expect(rapport.etablissement).toBe('Université Horizon');
   });
 
   it('la période affichée dit le dernier jour COMPTÉ', async () => {
-    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026));
+    const rapport = await service(fauxDb()).produire('zinda', 'Zinda', annee(2026), true);
     expect(rapport.periode).toEqual({
       debut: '2026-01-01',
       fin: '2026-12-31',

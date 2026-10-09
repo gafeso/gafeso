@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { ROLES_SYSTEME } from '../auth/functions';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
@@ -64,6 +65,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Les rôles système, en base', () =
         `SELECT nspname FROM pg_namespace WHERE nspname LIKE 'tenant\\_%' ORDER BY nspname`,
       );
       schemas = lignes.map((l) => l.nspname);
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ. Un garde par-école muet sur
+      // ses écoles laisse son lecteur supposer qu’il les a toutes vues —
+      // exigé par `gardes-vivants.spec.ts` depuis le 8 octobre 2026.
+      console.log(ecolesMesurees('roles-systeme', schemas.map((s) => s.replace('tenant_', ''))));
     } catch {
       console.warn('[rôles système] base injoignable — scénarios ignorés.');
     }

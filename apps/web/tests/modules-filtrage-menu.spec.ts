@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { moduleDeLaRoute, ROUTES_HORS_MENU, NAVIGATION_PERSONNEL, ongletsVisibles } from '@/lib/navigation';
-import { modulesActivables } from './aide-modules';
+import { modulesActifsCommeLApi, modulesActivables, modulesDuRegistre } from './aide-modules';
 import { toutesLesFonctions } from './aide-roles-systeme';
 
 // ⚠ LU DANS L'API, PLUS RECOPIÉ. Cette liste était écrite à la main, et elle
@@ -32,7 +32,15 @@ const hrefs = (modules: string[] | null) =>
 // trois tests le 14 septembre 2026 en décrivant un monde sans `depot` — et elle
 // l'aurait refait avec `moissonnage`. Un module ajouté côté API arrive ici sans
 // qu'on y touche.
-const TOUS = modulesActivables();
+/*
+ * ⚠ `modulesActifsCommeLApi()` ET PAS `modulesActivables()`. Le second omet le
+ * NOYAU ; `GET /modules` le rend, avec `actif: true` (mesuré sur
+ * `ModulesService.etat()` le 8 octobre 2026). L'écart était invisible tant
+ * qu'aucune entrée ne dépendait d'un module noyau — et il a masqué quatre
+ * entrées que le vrai produit affiche, le jour où `circulation` est devenue un
+ * gate.
+ */
+const TOUS = modulesActifsCommeLApi();
 
 describe('quelles entrées dépendent d’un module', () => {
   it('témoin : exactement huit, et on sait lesquelles', () => {
@@ -48,6 +56,18 @@ describe('quelles entrées dépendent d’un module', () => {
       '/admin/moissonnage',
       '/admin/rappels',
       '/admin/rapport-annuel',
+      /*
+       * ⚠ QUATRE ENTRÉES DE CIRCULATION, le 8 octobre 2026 — pour l'Université
+       * Virtuelle : étudiants à distance, aucun rayon physique. Décision de
+       * Jean : module éteint, aucune entrée de circulation ne reste.
+       *
+       * Le module est encore `noyau: true` côté API, donc ces gates sont
+       * INERTES aujourd'hui. Voir l'exception auto-effaçante plus bas, qui
+       * échoue le jour de la bascule.
+       */
+      '/admin/recolement',
+      '/admin/regles-de-circulation',
+      '/admin/regles-de-pret',
       /*
        * ⚠ `/admin/regles-de-circulation` A QUITTÉ CETTE LISTE le 26 septembre
        * 2026, et c'est le geste que le témoin d'en dessous avait annoncé :
@@ -69,6 +89,10 @@ describe('quelles entrées dépendent d’un module', () => {
       // portait déjà son module dans `ROUTES_HORS_MENU` ; elle le porte
       // désormais comme entrée, à un seul endroit.
       '/depots-a-valider',
+      // ⚠ Le guichet lui-même, 8 octobre 2026. Son onglet disparaît alors en
+      // ENTIER : `ongletsVisibles` retire les onglets sans entrée, et son seul
+      // voisin — « Rappels envoyés » — porte déjà son propre module.
+      '/guichet',
     ]);
   });
 
@@ -162,17 +186,24 @@ describe('⚠ un module éteint retire son entrée', () => {
       expect(restant).not.toContain(href);
     }
 
-    // ⚠ ET L'AFFIRMATION INVERSE, sur l'écran qui a quitté cette liste le
-    // 26 septembre 2026 : `/admin/regles-de-circulation` DOIT RESTER, tous
-    // modules éteints. Sans cette ligne, le retrait ne serait gardé par rien —
-    // une entrée retirée d'une liste d'attendus ne laisse aucune trace, et
-    // c'est exactement la forme « qu'est-ce qui reste écrit sans plus être
-    // vrai ? » prise à l'envers : ici il ne reste RIEN d'écrit.
-    //
-    // Le motif tient en une phrase : le service de circulation lit les durées
-    // et les plafonds DIRECTEMENT, donc ils s'appliquent même module éteint.
-    // Un paramètre qui agit doit rester réglable.
-    expect(restant).toContain('/admin/regles-de-circulation');
+    /*
+     * ⚠ CETTE ASSERTION ÉTAIT POSITIVE LE 26 SEPTEMBRE, ET ELLE S'EST RETOURNÉE
+     * LE 8 OCTOBRE. Elle disait : « `/admin/regles-de-circulation` DOIT RESTER,
+     * tous modules éteints », avec ce motif — « le service de circulation lit
+     * les durées et les plafonds DIRECTEMENT, donc ils s'appliquent même module
+     * éteint ; un paramètre qui agit doit rester réglable ».
+     *
+     * ⭐ LE MOTIF ÉTAIT JUSTE, ET SA PRÉMISSE A CHANGÉ. Il valait quand le
+     * module en cause était `amendes` : éteindre les amendes n'arrêtait pas les
+     * prêts, donc les durées continuaient d'agir. Avec `circulation` éteinte il
+     * n'y a plus de prêt du tout : le paramètre n'agit plus, et son écran n'a
+     * plus rien à régler.
+     *
+     * ⚠ Écrit plutôt que supprimé, parce qu'une assertion qui se retourne se
+     * relit comme une erreur passée — et elle n'en était pas une. C'est la même
+     * nuance qu'un commentaire juste sur le mécanisme et faux sur la cause.
+     */
+    expect(restant).not.toContain('/admin/regles-de-circulation');
     expect(restant).not.toContain('/admin/moissonnage');
     // ⚠ Témoin de COMPTE, et il compare les ÉLÉMENTS, pas seulement le total.
     // Un compte exact sur deux listes ne prouve rien tant qu'on n'a pas comparé
@@ -227,12 +258,36 @@ describe('⚠ l’adresse tapée directement est refusable', () => {
 
   it('une route du noyau n’exige aucun module', () => {
     expect(moduleDeLaRoute('/admin/catalogue')).toBeUndefined();
-    expect(moduleDeLaRoute('/guichet')).toBeUndefined();
   });
 
-  it('⚠ la route la plus PRÉCISE gagne', () => {
-    // `/admin/rappels` et `/admin/r…` pourraient se recouvrir : c'est le même
-    // piège que les clés ambiguës d'une doublure, et il se referme pareil.
-    expect(moduleDeLaRoute('/admin/recolement')).toBeUndefined();
+  /**
+   * ⭐ L'EXCEPTION S'EST EFFACÉE LE 8 OCTOBRE 2026 — le backend a basculé.
+   *
+   * Elle portait : « `circulation` est encore `noyau: true`, le gate est donc
+   * INERTE aujourd'hui, et il s'allumera le jour où le backend le basculera ».
+   * Elle a échoué ce jour-là, exactement comme écrit, et son message disait quoi
+   * faire.
+   *
+   * ⚠ CE QUI RESTE N'EST PLUS UNE EXCEPTION, C'EST UNE PROPRIÉTÉ. Les quatre
+   * routes portent leur module, et elles doivent CONTINUER de le porter — sans
+   * quoi une bibliothèque sans rayon verrait réapparaître le guichet. On garde
+   * donc l'assertion et on retire le DÉCLENCHEUR : effacer le cas entier aurait
+   * emporté la propriété avec la dette.
+   */
+  it('⭐ les quatre routes de circulation portent leur module (bascule faite)', () => {
+    for (const route of [
+      '/guichet',
+      '/admin/recolement',
+      '/admin/regles-de-circulation',
+      '/admin/regles-de-pret',
+    ]) {
+      expect(moduleDeLaRoute(route), `${route} doit porter le module circulation`).toBe(
+        'circulation',
+      );
+    }
+    // ⚠ TÉMOIN D'ABSENCE sur la confusion plausible : une route du NOYAU n'en
+    // porte toujours aucun. Sans lui, un relevé qui rendrait « circulation »
+    // pour tout satisferait les quatre assertions ci-dessus.
+    expect(moduleDeLaRoute('/admin/catalogue')).toBeUndefined();
   });
 });

@@ -27,7 +27,19 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock('@/lib/session', () => ({ getToken: () => 'jeton' }));
+/*
+ * ⚠ `getUser` EN PLUS DE `getToken`, et ce n'est pas du remplissage : depuis le
+ * 8 octobre 2026, cet écran lit l'état du module `circulation` (le bloc de
+ * circulation disparaît avec lui), et `useModulesActifs` appelle `getUser`.
+ *
+ * ⭐ Une doublure incomplète ne se signale pas à l'écriture : elle attend qu'un
+ * chemin la traverse. Celle-ci a fait échouer TREIZE cas de ce fichier d'un
+ * coup, en levant au montage — et aucun des treize ne parlait de modules.
+ */
+vi.mock('@/lib/session', () => ({
+  getToken: () => 'jeton',
+  getUser: () => ({ id: 'u1', email: 'bib@exemple.bf', role: 'LIBRARIAN' }),
+}));
 
 const calcule = <T,>(valeurs: T) => ({ etat: 'calcule' as const, valeurs });
 

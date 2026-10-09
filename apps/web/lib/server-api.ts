@@ -106,6 +106,22 @@ export interface TenantHome {
    * une liste reconstruite au premier PATCH de l'écran /admin/accueil.
    */
   heroSlides: Diapositive[];
+  /**
+   * LES PAGES LÉGALES, telles que l'API les laisse sortir.
+   *
+   * ⚠ `pourLePublic` côté API ne rend QUE les pages dont `publieeLe` est posé —
+   * mesuré dans `apps/api/src/tenancy/pages-legales.ts`. Une page non publiée
+   * arrive donc avec `blocs: {}` et `publieeLe: null`, et le front n'affiche
+   * alors NI la page NI son lien. C'est la décision du 8 octobre 2026 : un
+   * modèle non complété ne se publie pas.
+   *
+   * ⚠ OPTIONNEL côté front, pour que l'absence du champ — une API plus
+   * ancienne — ne casse rien et ne publie rien.
+   */
+  pagesLegales?: {
+    mentions: { blocs: Record<string, string>; publieeLe: string | null };
+    confidentialite: { blocs: Record<string, string>; publieeLe: string | null };
+  };
 }
 
 export interface ConstellationDomain {

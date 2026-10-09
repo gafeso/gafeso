@@ -18,10 +18,13 @@ import { RapportAnnuelService } from './rapport-annuel.service';
 import { RapportAnnuelDto } from './dto/rapport-annuel.dto';
 import { ModuleActifGuard } from '../modules/module-actif.guard';
 import { ModuleRequis } from '../modules/module-requis.decorator';
+import { ModulesService } from '../modules/modules.service';
 import { FONCTIONS } from '../auth/functions';
 import { EXPORT_DATASETS, ExportDataset, StatsService } from './stats.service';
 import { StatsQueryDto } from './dto/stats-query.dto';
 import { CSV_BOM } from './csv';
+import { PrismaService } from '../prisma/prisma.service';
+import { SEUIL_PUBLICATION, UsageService } from './usage.service';
 
 /**
  * Tableau de bord statistiques — réservé à `etablissement.gerer`, tenant-scopé.
@@ -39,8 +42,13 @@ import { CSV_BOM } from './csv';
 @ModuleRequis('statistiques')
 @Controller('stats')
 export class StatsController {
-  constructor(private readonly stats: StatsService,
-    private readonly rapport: RapportAnnuelService,) {}
+  constructor(
+    private readonly stats: StatsService,
+    private readonly rapport: RapportAnnuelService,
+    private readonly usage: UsageService,
+    private readonly modules: ModulesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   private tenant(tenant: ResolvedTenant | null): ResolvedTenant {
     if (!tenant) throw new BadRequestException('Tenant non résolu.');
@@ -104,7 +112,16 @@ export class StatsController {
     @Query() query: RapportAnnuelDto,
   ) {
     const tenant = this.tenant(tenantOrNull);
-    return this.rapport.produire(tenant.slug, tenant.name ?? tenant.slug, annee(query.anneeDemandee()));
+    // ⚠ L'ÉTAT DU MODULE EST RÉSOLU ICI, et passé : le service ne connaît que le
+    // slug, pas le `tenantId`. Le lui faire résoudre créerait une seconde source
+    // pour un état que le contrôleur tient déjà.
+    const circulationActive = await this.modules.estActif(tenant.id, 'circulation');
+    return this.rapport.produire(
+      tenant.slug,
+      tenant.name ?? tenant.slug,
+      annee(query.anneeDemandee()),
+      circulationActive,
+    );
   }
 
   @Get('report')
@@ -118,6 +135,41 @@ export class StatsController {
     const period = query.toPeriod();
     const csv = await this.stats.reportCsv(tenant.slug, tenant.id, period);
     this.sendCsv(res, 'rapport-activite', period.from, csv);
+  }
+
+  @Get('usage')
+  @ApiOperation({
+    summary: 'Usage NUMÉRIQUE agrégé : consultations en ligne et téléchargements',
+    description:
+      '⚠ AGRÉGÉ, et uniquement agrégé. Aucune route d’administration ne restitue ' +
+      'l’historique d’un lecteur nommé — c’est une propriété gardée par ' +
+      '`usage-nominatif-reserve.spec.ts`, qui compte les appelants du nominatif. ' +
+      '⚠ La répartition par FILIÈRE applique un seuil : sous 5 personnes ' +
+      'distinctes, les comptes sont masqués et la ligne le DIT (`publiable: ' +
+      'false`) — une absence muette se lirait comme un zéro. ' +
+      '⚠ Et « consultations » n’est pas « lectures » : on mesure la délivrance ' +
+      'd’une URL, pas qu’un document ait été lu. La lecture hors connexion n’est ' +
+      'pas tracée et ne le sera pas.',
+  })
+  async usageNumerique(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query() query: StatsQueryDto,
+  ) {
+    const resolved = this.tenant(tenant);
+    const db = this.prisma.forTenant(resolved.slug);
+    const periode = query.toPeriod();
+    const [parDocument, parJour, parFiliere] = await Promise.all([
+      this.usage.parDocument(db, periode.from, periode.to),
+      this.usage.parJour(db, periode.from, periode.to),
+      this.usage.parFiliere(db, periode.from, periode.to),
+    ]);
+    return {
+      periode: { du: periode.from, au: periode.to },
+      parDocument,
+      parJour,
+      parFiliere,
+      seuilDePublication: SEUIL_PUBLICATION,
+    };
   }
 }
 

@@ -38,6 +38,7 @@ import FicheAdherent from '@/app/admin/adherents/[id]/page';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
 import { LIBELLES } from '@/lib/libelles';
 import { fermerSession, ouvrirSession } from './aide-session';
+import { reponseModules } from './aide-modules';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/guichet',
@@ -103,10 +104,13 @@ function brancher(r: Reglages) {
       if (url.includes('/auth/me/functions')) return ok({ functions: FONCTIONS });
       if (url.includes('/modules')) {
         if (r.amendes === null) return new Promise<Response>(() => {});
-        return ok([
-          { id: 'circulation', actif: true },
-          { id: 'amendes', actif: r.amendes },
-        ]);
+        /*
+         * ⚠ ON EXPRIME L'INTENTION — « tout allumé, sauf les amendes quand on
+         * le demande » — au lieu d'énumérer deux modules. L'énumération décrit
+         * un établissement qui n'en a que deux, et elle masquait les entrées
+         * dépendant des autres. Voir `reponseModules`.
+         */
+        return ok(reponseModules(r.amendes ? [] : ['amendes']));
       }
       if (url.includes('/circulation/return')) return ok({
         returned: true,

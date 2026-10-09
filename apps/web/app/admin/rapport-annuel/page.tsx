@@ -6,6 +6,7 @@ import { getToken } from '@/lib/session';
 import { Alert, Button, Card, Select } from '@/components/ui';
 import { LIBELLES } from '@/lib/libelles';
 import { formaterDecimal, formaterNombre } from '@/lib/chiffres';
+import { useModulesActifs } from '@/lib/modules-actifs';
 
 const T = LIBELLES.rapportAnnuel;
 
@@ -169,6 +170,13 @@ function Repartition({ lignes }: { lignes: LigneRepartition[] }) {
 }
 
 export default function RapportAnnuelPage() {
+  /*
+   * ⚠ Module `circulation` — 8 octobre 2026. `null` (pas encore su) LAISSE
+   * PASSER : masquer sur une information qu'on n'a pas retirerait un bloc
+   * auquel l'école a droit, le temps d'un aller-retour réseau.
+   */
+  const { modulesActifs } = useModulesActifs();
+  const circulation = modulesActifs === null || modulesActifs.includes('circulation');
   const [annee, setAnnee] = useState<number>(new Date().getUTCFullYear() - 1);
   /** ⚠ `null` TANT QU'ON NE SAIT PAS : un rapport vide se lirait comme un bilan nul. */
   const [rapport, setRapport] = useState<RapportAnnuel | null>(null);
@@ -312,6 +320,17 @@ export default function RapportAnnuelPage() {
             )}
           </BlocDuRapport>
 
+          {/*
+            ⚠ LE BLOC DE CIRCULATION DISPARAÎT AVEC LE MODULE, en entier.
+            8 octobre 2026, Université Virtuelle : une bibliothèque sans rayon
+            n'a ni prêt, ni retour, ni retard, ni taux de rotation. Publier ces
+            quatre chiffres à zéro dans un document remis à une université
+            serait un FAUX — « zéro prêt » se lit « personne n'emprunte », pas
+            « personne ne peut emprunter ». Ce bloc sait déjà dire `null` plutôt
+            que zéro pour le taux de rotation ; ici c'est le bloc entier qui n'a
+            pas de sens.
+          */}
+          {circulation && (
           <BlocDuRapport titre={T.blocs.circulation} bloc={rapport.circulation}>
             {(v) => (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -348,6 +367,7 @@ export default function RapportAnnuelPage() {
               </div>
             )}
           </BlocDuRapport>
+          )}
 
           <BlocDuRapport titre={T.blocs.numerique} bloc={rapport.numerique}>
             {(v) => (

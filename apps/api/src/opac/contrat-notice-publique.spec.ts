@@ -41,11 +41,24 @@ const LIGNE = {
   contributors: [{ id: 'c1', recordId: 'rec-1', name: 'Kaboré, Alain', role: 'AUTEUR_PRINCIPAL', position: 0, authorId: null }],
   keywords: [{ keyword: { name: 'conte' } }],
   items: [{ id: 'i1', barcode: 'EX-1', status: 'AVAILABLE' }],
-  digitalCopy: { fileFormat: 'PDF', objectKey: 'secret/ne-doit-pas-sortir.pdf' },
+  digitalCopy: { fileFormat: 'PDF', objectKey: 'secret/ne-doit-pas-sortir.pdf', encStatus: 'ready' },
 };
 
-function service(provenance: unknown = null) {
-  const findUnique = vi.fn(async () => structuredClone(LIGNE));
+/**
+ * `copie` est un SECOND paramètre optionnel, et son défaut est celui de `LIGNE` :
+ * les appels existants ne changent pas d'un octet. Passer `null` retire le
+ * document ; passer un objet le remplace — c'est ce qui permet d'éprouver l'EPUB
+ * sans toucher au jeu d'essai de référence.
+ */
+function service(
+  provenance: unknown = null,
+  copie: Record<string, unknown> | null | undefined = undefined,
+) {
+  const findUnique = vi.fn(async () => {
+    const ligne = structuredClone(LIGNE) as Record<string, unknown>;
+    if (copie !== undefined) ligne.digitalCopy = copie;
+    return ligne;
+  });
   const db = { biblioRecord: { findUnique } } as never;
   return {
     db,
@@ -67,6 +80,7 @@ const ORDRE_ANONYME = [
   'publicationCity', 'defenseUniversity', 'defensePlace', 'embargoUntil', 'summary', 'coverUrl',
   'category', 'createdAt', 'updatedAt', 'contributors', 'keywords',
   'items', 'availability', 'digitalCopy', 'membersOnly', 'provenance',
+  'hasDigital', 'offlineReady',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
@@ -78,6 +92,19 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
   // ⚠ PUIS DE 27 À 28 le même jour : `provenance` (P7-3). Ajout DÉLIBÉRÉ et
   // additif lui aussi, et placé EN DERNIER pour qu'un filet qui compare des
   // octets lise un ajout et non une permutation.
+  // ⚠ PUIS DE 28 À 30 le 8 octobre 2026 : `hasDigital` et `offlineReady`.
+  //
+  // Ce test a REFUSÉ l'ajout, et c'est exactement son office : il a fallu venir
+  // ici et l'écrire. Les deux sont additifs — un APK qui ignore une clé inconnue
+  // n'est pas affecté — et ils sont DEUX parce que les deux passations clientes
+  // demandaient « hasDigital » sans en donner le même sens. La mesure qui a
+  // tranché (155 copies sur 155 d'accord aujourd'hui, divergence produite par
+  // tout EPUB et par tout xref irréparable) est dans
+  // `contrat-notice-publique.ts`, à côté de la déclaration.
+  //
+  // ⚠ L'ORDRE_ANONYME ci-dessus reste écrit À LA MAIN, et ce n'est pas une
+  // paresse : le dériver de CLES_DU_CONTRAT le ferait SUIVRE n'importe quelle
+  // dérive du code qu'il mesure. C'est un relevé, pas un miroir.
   //
   // Elle est servie au visiteur ANONYME comme au membre : la décision 1 du
   // brief P7 dit que ce qui arrive par moissonnage reste marqué comme tel, et
@@ -233,7 +260,16 @@ describe('contrat public — une colonne ne s’y glisse plus toute seule', () =
   it('⚠ la clé objet du fichier n’est même pas LUE en base', () => {
     // Ce qu'on ne lit pas ne peut pas fuir : le select ne demande que le format.
     const select = selectNoticePublique() as unknown as Record<string, { select?: unknown }>;
-    expect(select.digitalCopy.select).toEqual({ fileFormat: true });
+    // ⚠ `encStatus` est LU, et il ne SORT PAS : il décide `offlineReady`, qui
+    // est un booléen. La distinction « lu / servi » est celle que
+    // COLONNES_LUES_NON_SERVIES porte déjà pour `profileData` — et c'est elle
+    // qui compte ici, parce que ce test existe pour « ce qu'on ne lit pas ne
+    // peut pas fuir », pas pour « on lit le moins possible ».
+    expect(select.digitalCopy.select).toEqual({ fileFormat: true, encStatus: true });
+    // Ce qui ne doit JAMAIS être lu, et le témoin d'absence qui le dit.
+    expect(select.digitalCopy.select).not.toHaveProperty('objectKey');
+    expect(select.digitalCopy.select).not.toHaveProperty('encObjectKey');
+    expect(select.digitalCopy.select).not.toHaveProperty('encWrappedCek');
   });
 });
 
@@ -264,6 +300,49 @@ describe('⚠ P7-3 : la notice DIT d’où elle vient, et dans les DEUX branches
     const { db, service: s } = service(PROVENANCE);
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(r.provenance).toEqual(PROVENANCE);
+  });
+
+  /**
+   * ⚠ LES DEUX BOOLÉENS SE VÉRIFIENT SUR LEURS VALEURS, pas seulement par leur
+   * présence dans les clés. Les tests d'ordre ci-dessus auraient été verts avec
+   * `hasDigital: undefined` servi aux deux — « on ne regarde pas assez large »
+   * est la quatrième lecture d'une mutation qui ne casse rien, et elle s'est
+   * déjà produite sur `provenance` dans ce même fichier.
+   */
+  it('⚠ les deux marqueurs sont servis à l’ANONYME, et ils sont VRAIS', async () => {
+    const { db, service: s } = service();
+    const r = (await s.recordDetail(db, 'rec-1', false)) as Record<string, unknown>;
+    // L'existence est publique ; le format, lui, reste masqué juste au-dessus.
+    expect(r.hasDigital).toBe(true);
+    expect(r.offlineReady).toBe(true);
+    expect(r.digitalCopy, 'le format reste réservé aux membres').toBeNull();
+  });
+
+  it('⚠ TÉMOIN D’ABSENCE : un EPUB a un document et n’est PAS prêt hors ligne', async () => {
+    // Le cas qui FABRIQUE la divergence des deux prédicats, et le seul qui
+    // prouve qu'ils ne sont pas la même chose écrite deux fois : l'ingestion
+    // est gardée par `if (format === DigitalFormat.PDF)`, donc tout EPUB porte
+    // `enc_status` nul et se lit pourtant EN LIGNE.
+    //
+    // Sans ce témoin, servir `enc_status === 'ready'` dans les deux champs
+    // serait indiscernable du code juste.
+    const { db, service: s } = service(null, {
+      fileFormat: 'EPUB',
+      objectKey: 'x.epub',
+      encStatus: null,
+    });
+    const r = (await s.recordDetail(db, 'rec-1', true)) as Record<string, unknown>;
+    expect(r.hasDigital, 'il EXISTE un document — le cacher serait un faux négatif').toBe(true);
+    expect(r.offlineReady, 'promettre sa lecture hors ligne échouerait au téléchargement').toBe(
+      false,
+    );
+  });
+
+  it('une notice SANS document rend les deux à faux', async () => {
+    const { db, service: s } = service(null, null);
+    const r = (await s.recordDetail(db, 'rec-1', true)) as Record<string, unknown>;
+    expect(r.hasDigital).toBe(false);
+    expect(r.offlineReady).toBe(false);
   });
 
   it('une notice catalloguée localement rend `null`', async () => {

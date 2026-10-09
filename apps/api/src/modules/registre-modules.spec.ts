@@ -32,7 +32,6 @@ describe('registre — la déclaration', () => {
       'authentification',
       'usagers',
       'catalogue',
-      'circulation',
       'administration',
     ]);
   });
@@ -55,6 +54,12 @@ describe('registre — la déclaration', () => {
     // ⚠ L'ORDRE EST CELUI DU REGISTRE, pas alphabétique : c'est la déclaration
     // qui fait foi, et l'écran d'activation les affiche dans cet ordre.
     expect(MODULES_ACTIVABLES).toEqual([
+        // ⚠ `circulation` A REJOINT LA LISTE le 8 octobre 2026, et c'est le plus
+        // gros changement qu'elle ait connu : elle était NOYAU depuis P4, avec
+        // ZÉRO écran déclaré. Décision de Jean pour l'Université Virtuelle —
+        // étudiants dispersés, aucun rayon. Première fois qu'un module SORT du
+        // noyau.
+        'circulation',
       'amendes',
       'interoperabilite',
       'depot',
@@ -99,9 +104,17 @@ describe('registre — la déclaration', () => {
   });
 
   it('`dependantsDe` trouve bien les dépendants (témoin)', () => {
-    // ⚠ `statistiques` dépend aussi de la circulation — elle en agrège les
-    // prêts. Le compte exact oblige à revenir le constater.
-    expect(dependantsDe('circulation').sort()).toEqual(['amendes', 'rappels', 'statistiques']);
+    // ⚠ `statistiques` N'EN DÉPEND PLUS depuis le 8 octobre 2026 (décision Q2).
+    //
+    // Elle en dépendait, et c'était cohérent : ~80 % de ses mesures viennent des
+    // prêts. Mais la conséquence ne l'était pas — une bibliothèque sans rayon
+    // perdait ses statistiques ENTIÈRES, y compris celles de son catalogue et de
+    // son usage numérique, qui sont les seules qu'elle ait.
+    //
+    // ⭐ Le compte exact a fait son office : il a obligé à venir ici écrire le
+    // motif du retrait, plutôt qu'à laisser la dépendance disparaître dans un
+    // diff. Son volet de prêts est désormais CONDITIONNEL et rend un refus NOMMÉ.
+    expect(dependantsDe('circulation').sort()).toEqual(['amendes', 'rappels']);
     expect(dependantsDe('amendes')).toEqual([]);
   });
 });
@@ -189,11 +202,25 @@ describe('registre — les refus, côté API et pas seulement côté écran', ()
   });
 
   it('⚠ refuse d’ALLUMER un module dont la dépendance est éteinte', async () => {
-    // Le noyau est toujours actif, donc on éprouve la règle sur une dépendance
-    // activable en la simulant éteinte.
-    const { svc } = service(['circulation']); // ignoré : `circulation` est noyau
-    // `circulation` étant noyau, elle reste active : l'activation passe.
-    await expect(svc.changerActivation(TENANT, 'amendes', true)).resolves.toBeDefined();
+    // ⭐ CE TEST A ENFIN PU ÉPROUVER CE POUR QUOI IL A ÉTÉ ÉCRIT, le 8 octobre
+    // 2026. Il portait : « le noyau est toujours actif, donc on éprouve la règle
+    // sur une dépendance activable en la simulant éteinte » — et il concluait
+    // « `circulation` étant noyau, elle reste active : l'activation passe ».
+    //
+    // La prémisse est tombée avec la BASCULE : `circulation` est activable, donc
+    // la simuler éteinte produit enfin le REFUS que la règle promet. L'ancien
+    // test mesurait le contraire de son intitulé, et son commentaire le disait.
+    const { svc } = service(['circulation']);
+    await expect(svc.changerActivation(TENANT, 'amendes', true)).rejects.toThrow(
+      /Circulation physique/,
+    );
+
+    // ⚠ Et le témoin d'ABSENCE : circulation ALLUMÉE, l'activation passe. Sans
+    // lui, un refus inconditionnel satisferait l'assertion ci-dessus.
+    const { svc: avecCirculation } = service([]);
+    await expect(
+      avecCirculation.changerActivation(TENANT, 'amendes', true),
+    ).resolves.toBeDefined();
   });
 
   it('n’écrit qu’une liste d’identifiants — AUCUNE donnée supprimée', async () => {
@@ -319,13 +346,28 @@ describe('registre — le motif de verrouillage est exploitable, pas seulement l
     const etat = await svc.etat(TENANT);
     const circulation = etat.find((m) => m.id === 'circulation')!;
     // `circulation` est noyau : son motif est `noyau`, pas `requis_par`.
-    expect(circulation.motif!.code).toBe('noyau');
-    // `catalogue` aussi — le cas `requis_par` ne concerne que des activables.
-    const activableRequis = etat.filter(
-      (m) => !m.noyau && m.motif?.code === 'requis_par',
-    );
-    // Aucun aujourd'hui : aucun activable ne dépend d'un autre activable.
-    expect(activableRequis).toEqual([]);
+    // ⚠ `circulation` N'EST PLUS NOYAU depuis le 8 octobre 2026 : son motif est
+    // désormais `requis_par`, parce que `amendes` et `rappels` en dépendent et
+    // sont allumés. C'est exactement ce que ce cas existe pour éprouver — et il
+    // ne pouvait pas le faire tant que le module était noyau.
+    expect(circulation.motif!.code).toBe('requis_par');
+    // ⭐ ET IL NOMME LES DEUX, avec leurs identifiants.
+    expect(
+      (circulation.motif as unknown as { modules: { id: string }[] }).modules
+        .map((m) => m.id)
+        .sort(),
+    ).toEqual(['amendes', 'rappels']);
+      // ⚠ LA PRÉMISSE DE CETTE ASSERTION EST TOMBÉE LE 8 OCTOBRE 2026. Elle
+      // disait « aucun aujourd'hui : aucun activable ne dépend d'un autre
+      // activable » — c'était vrai tant que `circulation` était NOYAU.
+      //
+      // ⭐ Depuis la bascule, elle EST ce cas : un activable dont deux autres
+      // activables dépendent. L'assertion devient donc le contraire de ce
+      // qu'elle affirmait, et c'est le bon sens — elle éprouve enfin le
+      // verrouillage entre activables, qui est exactement ce que l'école
+      // rencontrera en voulant éteindre la circulation.
+      const activableRequis = etat.filter((m) => !m.noyau && m.motif?.code === 'requis_par');
+      expect(activableRequis.map((m) => m.id)).toEqual(['circulation']);
   });
 
   it('« nécessite » nomme la dépendance manquante', async () => {

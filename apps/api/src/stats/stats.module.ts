@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ModulesModule } from '../modules/modules.module';
 import { StatsService } from './stats.service';
 import { UsageService } from './usage.service';
+import { PurgeUsageScheduler } from './purge-usage.scheduler';
 import { RapportAnnuelService } from './rapport-annuel.service';
 import { StatsController } from './stats.controller';
 
@@ -15,7 +16,7 @@ import { StatsController } from './stats.controller';
   // casse AUCUN test — il casse le démarrage de l'API.
   imports: [AuthModule, ModulesModule],
   controllers: [StatsController],
-  providers: [StatsService, UsageService, RapportAnnuelService],
+  providers: [StatsService, UsageService, RapportAnnuelService, PurgeUsageScheduler],
   // ⚠ `UsageService` est EXPORTÉ parce que ses ÉCRIVAINS vivent ailleurs :
   // l'OPAC (lecture en ligne) et le catalogage (téléchargement). Une table de
   // comptage dont personne n'écrit est la famille la plus répétée de ce

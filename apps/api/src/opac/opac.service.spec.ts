@@ -231,7 +231,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
-    const result = await service.getReadUrl(db, 'rec-1', ctx);
+    const result = await service.getReadUrl(db, 'rec-1', ctx, 'u-test');
 
     // ⚠ LE CLIENT TENANT EST PASSÉ, et ce n'est pas un détail d'appel : depuis
     // P6-4, la décision lit l'embargo sur la notice, donc dans le schéma de
@@ -270,9 +270,16 @@ describe('OpacService — URL de lecture en ligne', () => {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null, title: 'Droit foncier' }) },
     } as any;
 
-    await service.getReadUrl(db, 'rec-1', ctx);
+    await service.getReadUrl(db, 'rec-1', ctx, 'u-test');
     expect(enregistrer).toHaveBeenCalledTimes(1);
-    expect(enregistrer).toHaveBeenCalledWith(db, 'rec-1', 'LECTURE');
+    // ⚠ L'AUTEUR EST PASSÉ, et la filière vient du CONTEXTE d'accès — donc sans
+    // aucune requête de plus. C'est ce qui rend l'agrégat par filière possible
+    // sans coût, et ce qui le rend JUSTE : la classe est celle du MOMENT, pas
+    // celle d'aujourd'hui.
+    expect(enregistrer).toHaveBeenCalledWith(db, 'rec-1', 'CONSULTATION', {
+      userId: 'u-test',
+      className: ctx.className,
+    });
 
     // ── Et le refus : on ne compte pas une lecture qui n'a pas eu lieu.
     const refus = makeAccessControl({ granted: false, message: 'refusé' });
@@ -284,7 +291,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       { provenance: async () => null } as never,
       { enregistrer } as never,
     );
-    await expect(bloque.getReadUrl(db, 'rec-1', ctx)).rejects.toThrow();
+    await expect(bloque.getReadUrl(db, 'rec-1', ctx, 'u-test')).rejects.toThrow();
     expect(enregistrer, 'un accès REFUSÉ a été compté comme une lecture').toHaveBeenCalledTimes(1);
   });
 
@@ -293,8 +300,32 @@ describe('OpacService — URL de lecture en ligne', () => {
     const service = new OpacService(makeSearch() as any, digitalCopy as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
     const db = { biblioRecord: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
 
-    await expect(service.getReadUrl(db, 'ghost', ctx)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getReadUrl(db, 'ghost', ctx, 'u-test')).rejects.toBeInstanceOf(NotFoundException);
     expect(digitalCopy.getDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('⚠ PERSONNEL (ctx null) : la ligne est comptée SANS AUTEUR', async () => {
+    // ⚠ Un bibliothécaire qui ouvre un document pour vérifier une notice ne doit
+    // pas gonfler la filière de personne — et la CONSULTATION doit être comptée
+    // quand même : le document a bien été consulté. Les deux à la fois, c'est
+    // exactement ce que `SANS_AUTEUR` dit.
+    const enregistrer = vi.fn().mockResolvedValue(true);
+    const service = new OpacService(
+      makeSearch() as any,
+      makeDigitalCopyService() as any,
+      makeAccessControl() as any,
+      fauxPrisma() as any,
+      { provenance: async () => null } as never,
+      { enregistrer } as never,
+    );
+    const db = {
+      biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null, title: 'T' }) },
+    } as any;
+    await service.getReadUrl(db, 'rec-1', null, 'u-biblio');
+    expect(enregistrer).toHaveBeenCalledWith(db, 'rec-1', 'CONSULTATION', {
+      userId: null,
+      className: null,
+    });
   });
 
   it('personnel (ctx null) : lecture sans contrôle de classe/abonnement', async () => {
@@ -305,7 +336,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
-    const result = await service.getReadUrl(db, 'rec-1', null);
+    const result = await service.getReadUrl(db, 'rec-1', null, 'u-test');
 
     // Aucune évaluation de règles pour le personnel, URL délivrée.
     expect(accessControl.getRecordAccessStatus).not.toHaveBeenCalled();
@@ -325,10 +356,10 @@ describe('OpacService — URL de lecture en ligne', () => {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
 
-    await expect(service.getReadUrl(db, 'rec-1', ctx)).rejects.toBeInstanceOf(
+    await expect(service.getReadUrl(db, 'rec-1', ctx, 'u-test')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
-    await expect(service.getReadUrl(db, 'rec-1', ctx)).rejects.toMatchObject({
+    await expect(service.getReadUrl(db, 'rec-1', ctx, 'u-test')).rejects.toMatchObject({
       message: 'Réservé aux étudiants de L1_DROIT.',
     });
     // Jamais d'URL signée délivrée sans accès accordé.

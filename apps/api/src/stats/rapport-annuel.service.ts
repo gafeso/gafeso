@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EtatDepot } from '../depots/etats';
-import { USAGE_LECTURE, USAGE_TELECHARGEMENT } from './usage.service';
+import { USAGE_CONSULTATION, USAGE_TELECHARGEMENT } from './usage.service';
 import {
   Bloc,
   LigneRepartition,
@@ -92,14 +92,42 @@ export interface RapportAnnuel {
 export class RapportAnnuelService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async produire(slug: string, nom: string, p: PeriodeAnnuelle): Promise<RapportAnnuel> {
+  /**
+   * @param circulationActive l'état du module `circulation` pour cette école.
+   *
+   * ⚠ PASSÉ, et non lu ici : ce service ne connaît pas le `tenantId`, seulement
+   * le slug. Le faire résoudre ici ajouterait une SECONDE source pour un état que
+   * l'appelant tient déjà — et deux sources s'accordent par coïncidence.
+   */
+  async produire(
+    slug: string,
+    nom: string,
+    p: PeriodeAnnuelle,
+    circulationActive: boolean,
+  ): Promise<RapportAnnuel> {
     const db = this.prisma.forTenant(slug) as unknown as TenantDb;
     const dans = { gte: p.debut, lt: p.fin };
 
     const [fonds, lecteurs, circulation, numerique, depot] = await Promise.all([
       this.fonds(db, dans),
       this.lecteurs(db, dans),
-      this.circulation(db, p),
+      // 🔴 LE VOLET DE PRÊTS N'EXISTE QUE SI LA CIRCULATION EST ACTIVE.
+      //
+      // Décision de Jean du 8 octobre 2026 (Q2) : « sinon refus explicite nommé,
+      // jamais des zéros ». Et `Bloc<T>` portait DÉJÀ la forme qu'il faut —
+      // `non_calculable` avec son motif. Un rapport remis à une université ne
+      // doit pas dire « 0 prêt » là où il n'y a pas de rayon : un zéro se lit
+      // comme une mesure, et il se recopie.
+      circulationActive
+        ? this.circulation(db, p)
+        : Promise.resolve(
+            nonCalculable<BlocCirculation>(
+              'Le module « Circulation physique » est éteint pour cet ' +
+                'établissement : il n’y a ni prêt, ni retour, ni réservation à ' +
+                'mesurer. Ce n’est pas un résultat nul — c’est une mesure qui ' +
+                'n’a pas lieu d’être. Pour l’allumer : Administration › Modules.',
+            ),
+          ),
       this.numerique(db, dans),
       this.depot(db, dans),
     ]);
@@ -115,6 +143,17 @@ export class RapportAnnuelService {
         libelle: libellePeriode(p),
       },
       reserves: [
+        // ⚠ EN TÊTE plutôt qu'en note de bas : une directrice qui lit un rapport
+        // sans volet de prêts doit savoir POURQUOI avant d'arriver au bloc vide,
+        // pas après.
+        ...(circulationActive
+          ? []
+          : [
+              'Ce rapport NE COUVRE PAS les prêts : le module « Circulation ' +
+                'physique » est éteint pour cet établissement. Aucun chiffre de ' +
+                'prêt, de retour ou de réservation n’y figure — et leur absence ' +
+                'n’est pas un zéro.',
+            ]),
         'La date d’ACQUISITION d’un exemplaire n’est pas enregistrée : le bloc ' +
           '« fonds » compte les documents CATALOGUÉS dans l’année, ce qui peut ' +
           'différer de plusieurs mois des acquisitions réelles.',
@@ -220,7 +259,7 @@ export class RapportAnnuelService {
 
   private async numerique(db: TenantDb, dans: { gte: Date; lt: Date }): Promise<Bloc<BlocNumerique>> {
     const [lectures, telechargements, horsLigne] = await Promise.all([
-      db.usageEvent.count({ where: { kind: USAGE_LECTURE, occurredAt: dans } }),
+      db.usageEvent.count({ where: { kind: USAGE_CONSULTATION, occurredAt: dans } }),
       db.usageEvent.count({ where: { kind: USAGE_TELECHARGEMENT, occurredAt: dans } }),
       // Une licence émise = un document emporté hors ligne.
       db.offlineLicense.count({ where: { issuedAt: dans } }),

@@ -72,7 +72,21 @@ describe('gardes de module — aucune route de module sans son garde', () => {
     // exactement le cas auquel il était aveugle il y a deux jours.
     // 33 → 38 le 15 septembre 2026 : les cinq routes de `rappels`, qui
     // n'étaient gardées par aucun module.
-    expect(declarees.length).toBe(34);
+    // ⚠ 34 → 35 le 6 octobre 2026 : `GET /stats/usage` (usage numérique agrégé).
+    // Le compte a fait son office — il a obligé à venir la déclarer au registre,
+    // donc à écrire que la COLLECTE, elle, n'est jamais gardée par le module.
+    // ⚠ 35 → 70 le 8 octobre 2026 : la BASCULE DE `circulation` en module
+    // activable (décision de Jean pour l'Université Virtuelle). TRENTE-CINQ
+    // routes entrent d'un coup — c'est le plus gros saut de ce compteur, et de
+    // loin.
+    //
+    // ⭐ Le compte a fait son office : il a obligé à les ÉNUMÉRER au registre,
+    // donc à constater lesquelles ne devaient PAS y être. Deux l'ont été
+    // exprès : `reader/consultations` et `reader/hors-ligne`. L'espace personnel
+    // d'un étudiant d'université virtuelle doit RESTER quand il n'y a pas de
+    // rayon — une garde de classe sur le contrôleur lecteur les aurait
+    // emportées, et le profil numérique aurait livré un espace vide.
+    expect(declarees.length).toBe(70);
     // ⚠ 38 → 34 le 26/09/2026 : les QUATRE routes `/circulation/rules` ne sont
     // plus des routes du module `amendes`. Elles gouvernent les durées de prêt
     // et les plafonds — trois champs sur quatre n'ont rien à voir avec les

@@ -29,6 +29,8 @@ import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
+import { ModuleRequis } from '../modules/module-requis.decorator';
+import { ModuleActifGuard } from '../modules/module-actif.guard';
 import { FONCTIONS } from '../auth/functions';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
@@ -53,7 +55,7 @@ import { DigitalCopyService } from './digital-copy.service';
 
 @ApiTags('cataloging')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, FunctionsGuard)
+@UseGuards(JwtAuthGuard, FunctionsGuard, ModuleActifGuard)
 @Controller('cataloging')
 export class CatalogingController {
   constructor(
@@ -283,7 +285,30 @@ export class CatalogingController {
   }
 
   // ── Exemplaires ─────────────────────────────────────────────
+  //
+  // 🔴 LES TROIS GESTES D'EXEMPLAIRE SUIVENT LE MODULE `circulation`.
+  //
+  // *Décision de Jean du 8 octobre 2026 (Q1 = A).*
+  //
+  // ⚠ ILS VIVENT DANS LE CONTRÔLEUR DU CATALOGUE, QUI EST NOYAU — la garde est
+  // donc posée sur les MÉTHODES, pas sur la classe. C'est volontaire et c'est le
+  // seul endroit possible : une bibliothèque sans rayon catalogue des documents,
+  // elle n'en possède pas d'exemplaires.
+  //
+  // ⭐ POURQUOI (A) PLUTÔT QUE LAISSER LA SAISIE AU CATALOGUE : notre propre
+  // règle — « refuser d'afficher une entrée sans écran, un bouton sans effet ».
+  // Une université virtuelle verrait « ajouter un exemplaire » sur un fonds sans
+  // rayon : un geste possible et inutile, qui crée des données que rien
+  // n'exploite ensuite.
+  //
+  // ⚠ ET LA GARDE HTTP SUFFIT ICI, mesuré et non supposé : chacune des trois
+  // méthodes de service a EXACTEMENT UN appelant — cette classe — et rien
+  // d'autre ne crée d'exemplaire (l'import MARC n'en crée pas). La leçon de
+  // `rappels` dit qu'une propriété défendue au seul niveau HTTP gagne une porte
+  // dès qu'un appelant apparaît ; `exemplaires-suivent-circulation.spec.ts`
+  // COMPTE donc ces appelants et refuse le second.
   @Post('records/:id/items')
+  @ModuleRequis('circulation')
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Ajouter un exemplaire à une notice' })
   async addItem(
@@ -296,6 +321,7 @@ export class CatalogingController {
   }
 
   @Patch('items/:itemId')
+  @ModuleRequis('circulation')
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Modifier un exemplaire' })
   async updateItem(
@@ -308,6 +334,7 @@ export class CatalogingController {
   }
 
   @Delete('items/:itemId')
+  @ModuleRequis('circulation')
   @RequiresFunctions(FONCTIONS.CATALOGUE_GERER)
   @ApiOperation({ summary: 'Supprimer un exemplaire (refusé si prêts rattachés)' })
   async deleteItem(

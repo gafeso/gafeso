@@ -32,6 +32,7 @@ import { LIBELLES } from '@/lib/libelles';
 import { fermerSession, ouvrirSession } from './aide-session';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
 import { oublierEtablissement } from '@/lib/etablissement';
+import { reponseModules } from './aide-modules';
 
 vi.mock('next/navigation', () => ({ useRouter: () => routeur }));
 const routeur = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() };
@@ -49,7 +50,10 @@ function brancher(fonctions: string[]) {
       if (u.includes('/modules')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([{ id: 'depot', actif: true }]),
+          // ⚠ La réponse COMPLÈTE de l'API — voir `reponseModules`. Troisième
+          // doublure à n'avoir nommé qu'un module : l'écart s'est vu quand
+          // « Mes prêts » a reçu `module: 'circulation'`.
+          json: () => Promise.resolve(reponseModules()),
         } as Response);
       }
       if (u.includes('/functions')) {

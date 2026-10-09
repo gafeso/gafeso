@@ -53,6 +53,35 @@ interface RecordDetail {
   availability: { totalItems: number; available: number; borrowable: boolean } | null;
   digitalCopy: { fileFormat: 'PDF' | 'EPUB' } | null;
   membersOnly: boolean;
+  /**
+   * ⭐ L'EXISTENCE d'une version en ligne, PUBLIQUE — jamais le format ni l'URL.
+   *
+   * Tranché le 8 octobre 2026 : un étudiant à distance qui ne peut pas savoir,
+   * avant de créer un compte, si ce catalogue contient quoi que ce soit de
+   * lisible n'a aucune raison d'en créer un. `digitalCopy` reste masqué pour un
+   * anonyme ; ce booléen dit seulement qu'il y a quelque chose à lire.
+   *
+   * ⚠ OPTIONNEL TANT QUE L'API NE LE SERT PAS, et c'est délibéré : absent, rien
+   * ne s'affiche — l'écran ne spécule pas. Il s'allumera le jour où le champ
+   * arrive, sans autre changement.
+   */
+  hasDigital?: boolean;
+  /**
+   * ⭐ L'ÉTAT DU MODULE `circulation`, dans la charge PUBLIQUE.
+   *
+   * ⚠ POURQUOI ICI ET PAS PAR LE HOOK. Mesuré le 8 octobre 2026 :
+   * `GET /modules` rend **401 sans jeton**. La fiche publique ne peut donc pas
+   * connaître l'état du module autrement que par sa propre charge utile — et
+   * sans lui, une bibliothèque sans rayon afficherait « Exemplaires &
+   * disponibilité » à des étudiants qui n'ont pas de rayon.
+   *
+   * ⚠ UN BOOLÉEN ET PAS UNE ABSENCE, parce que `availability: null` veut DÉJÀ
+   * dire « vous êtes anonyme ». Les deux cas n'appellent pas le même écran :
+   * l'un dit « réservé aux membres », l'autre ne doit RIEN dire.
+   *
+   * ⚠ OPTIONNEL : absent, on garde le comportement d'aujourd'hui.
+   */
+  circulationActive?: boolean;
 }
 
 type RecordAccessStatus = { granted: true } | { granted: false; message: string };
@@ -177,7 +206,22 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         <h1 className="font-serif text-3xl font-bold">
           {formatTitle(record.title, record.titleComplement)}
         </h1>
-        {record.membersOnly ? (
+        {/*
+          ⚠ L'ORDRE DES BRANCHES PORTE LA DÉCISION, et il se lit de haut en bas.
+          Le module ÉTEINT passe AVANT tout le reste : une bibliothèque sans
+          rayon ne doit pas même voir le cadenas « disponibilité réservée aux
+          membres », qui parle d'une disponibilité qui n'existe pas chez elle.
+        */}
+        {record.circulationActive === false ? (
+          record.hasDigital ? (
+            <Badge tone="green">{LIBELLES.ficheNotice.badgeLectureEnLigne}</Badge>
+          ) : null
+        ) : record.hasDigital && record.membersOnly ? (
+          /* ⚠ Pour un ANONYME dont on SAIT qu'il y a une version en ligne : on
+             le dit, au lieu d'un cadenas qui parle de rayons. Décision du
+             8 octobre 2026 — l'existence est publique, l'accès reste gardé. */
+          <Badge tone="green">{LIBELLES.ficheNotice.badgeLectureEnLigne}</Badge>
+        ) : record.membersOnly ? (
           <MemberLock hint={LIBELLES.ficheNotice.membresDisponibilite} />
         ) : record.availability?.borrowable ? (
           <Badge tone="green">{LIBELLES.ficheNotice.badgeDisponible}</Badge>
@@ -292,6 +336,14 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         </div>
       )}
 
+      {/*
+        ⚠ TOUTE LA SECTION DISPARAÎT AVEC LE MODULE, titre compris. La masquer
+        « sauf le titre » laisserait un en-tête surmontant le vide — ce qui se
+        lit comme une page cassée, pas comme une information absente. C'est la
+        règle déjà appliquée à CONTACT dans le pied de la page d'accueil.
+      */}
+      {record.circulationActive !== false && (
+      <>
       {record.membersOnly ? (
         <>
           <h2 className="mt-8 flex items-center gap-2 font-serif text-xl font-bold">
@@ -380,6 +432,9 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         </>
       )}
 
+      </>
+      )}
+
       <h2 className="mt-8 flex items-center gap-2 font-serif text-xl font-bold">
         Lecture en ligne
         {record.membersOnly && (
@@ -388,8 +443,15 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
       </h2>
       {record.membersOnly ? (
         <p className="mt-2 text-sm text-muted">
-          Si une version numérique existe pour ce document, elle est réservée aux
-          membres.{' '}
+          {/* ⚠ DISAIT « SI une version numérique existe pour ce document, elle
+              est réservée aux membres ». Le « si » était honnête — la charge
+              publique masque `digitalCopy` pour un anonyme — et il coûtait la
+              seule information qui décide : un étudiant à distance qui ne peut
+              pas savoir avant de s'inscrire si ce catalogue contient quoi que
+              ce soit de lisible n'a aucune raison de s'inscrire. L'existence
+              devient publique (`hasDigital`) ; le libellé, lui, cesse de
+              spéculer et assume le refus. */}
+          {LIBELLES.ficheNotice.lectureReserveeAuxMembres}{' '}
           <Link href="/login" className="font-semibold text-ocre underline">
             Connectez-vous
           </Link>{' '}
@@ -431,7 +493,18 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         <p className="mt-2 text-sm text-muted">Vérification de l’accès…</p>
       ) : (
         <p className="mt-2 text-sm text-muted">
-          Pas de version numérique disponible pour ce document.
+          {/* ⚠ DEUX TEXTES, ET C'EST LE MODULE QUI DÉCIDE.
+              · circulation ACTIVE — « pas de version numérique » est une
+                information utile : il reste les rayons, et la section du dessus
+                dit où.
+              · circulation ÉTEINTE — cette phrase devient une négation qui
+                n'ouvre sur rien. Elle décrit ce que l'établissement n'a pas, à
+                quelqu'un qui ne pouvait de toute façon rien emprunter. La notice
+                est alors ce qu'elle est : une RÉFÉRENCE, utile à citer et à
+                demander ailleurs. */}
+          {record.circulationActive === false
+            ? LIBELLES.ficheNotice.referenceSeule
+            : LIBELLES.ficheNotice.sansVersionNumerique}
         </p>
       )}
     </main>

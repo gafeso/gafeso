@@ -104,7 +104,17 @@ const EXCEPTIONS: Exception[] = [
  * légitimement appelée sans session ? Oui, et l'API l'écrit : « publique et sans
  * authentification, c'est la première chose qu'un support demande ».
  */
-const NOMBRE_D_APPELS = 147;
+/*
+ * ⚠ 149 le 8 octobre 2026 : l'ASSISTANT D'INSTALLATION. Six routes, dont DEUX
+ * seulement sont des appels nouveaux pour ce relevé — les quatre autres passent
+ * par un emballage (`avecSession`) qui porte l'en-tête de session, et le relevé
+ * les compte à leur site d'appel.
+ *
+ * ⚠ Et c'est la limite connue de ce garde, écrite ailleurs dans ce fichier : il
+ * suit les chemins LITTÉRAUX, pas les variables. On factorise le CORPS, jamais
+ * l'ADRESSE — et ici l'adresse est bien restée au point d'appel.
+ */
+const NOMBRE_D_APPELS = 149;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —
@@ -122,7 +132,22 @@ const NOMBRE_D_APPELS = 147;
 // des effets ; la distinction est dans le nom des deux routes, pas ici.
 // ⚠ 88 le 22 septembre 2026 : POST, PATCH et DELETE des règles de circulation.
 // Le GET de la même collection est compté plus haut, dans les appels.
-const NOMBRE_D_ECRITURES = 88;
+/*
+ * ⚠ 89 le 8 octobre 2026 : `POST /installation/jeton` est la seule ÉCRITURE de
+ * l'assistant que ce relevé voit au site d'appel — les trois autres (`terminer`,
+ * `test-courriel`, et les lectures sous session) passent par l'emballage
+ * `avecSession`, dont le relevé lit l'adresse mais pas toujours le verbe.
+ *
+ * ⚠ CE N'EST PAS UN TROU QU'ON LAISSE : c'est la borne connue d'un garde qui lit
+ * la SOURCE, écrite ici plutôt que découverte. Ce qui tient la propriété est que
+ * l'adresse reste au point d'appel — « on factorise le CORPS, jamais l'ADRESSE ».
+ */
+/*
+ * ⚠ 90 le 8 octobre 2026 : `PATCH /tenancy/settings` depuis l'écran des pages
+ * légales. La route existait déjà — c'est un site d'APPEL de plus, et le relevé
+ * les compte par site.
+ */
+const NOMBRE_D_ECRITURES = 90;
 
 /** Un chemin normalisé en segments : les paramètres deviennent `*`. */
 function normaliser(chemin: string): string {

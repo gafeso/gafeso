@@ -155,6 +155,8 @@ describe('⚠ LA LICENCE HORS-LIGNE — la surface qui ne se rattrape pas', () =
       {} as never,
       {} as never,
       {} as never,
+      // doublure de la trace d'usage : elle NE DOIT PAS faire échouer le geste
+      { enregistrer: async () => true } as never,
     );
     // `droitHorsLigne` est privée : on l'atteint par son nom, c'est elle qu'on
     // éprouve. ⚠ ELLE RENDAIT UN BOOLÉEN jusqu'au 16 septembre 2026 — d'où le

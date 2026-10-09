@@ -25,6 +25,7 @@ import { Header } from '@/components/header';
 import { LIBELLES } from '@/lib/libelles';
 import { fermerSession, ouvrirSession } from './aide-session';
 import { invaliderModulesActifs } from '@/lib/modules-actifs';
+import { modulesDuRegistre, reponseModules } from './aide-modules';
 import { oublierEtablissement } from '@/lib/etablissement';
 
 vi.mock('next/navigation', () => ({
@@ -47,7 +48,24 @@ function brancher(modules: string[] | null) {
         if (modules === null) return Promise.reject(new Error('injoignable'));
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(modules.map((id) => ({ id, actif: true }))),
+          /*
+           * ⚠ `reponseModules` PLUTÔT QU'UNE LISTE D'ACTIFS. Ce test nommait les
+           * modules ACTIFS ; l'API, elle, rend TOUS les modules déclarés avec un
+           * booléen. L'écart s'est vu le 8 octobre 2026, quand « Mes prêts » a
+           * reçu `module: 'circulation'` : la doublure ne nommant que `depot`,
+           * la circulation passait pour éteinte et le test accusait le produit.
+           *
+           * On exprime donc ce que le test veut vraiment dire — « tout est
+           * allumé sauf ceci » — au lieu d'énumérer ce qui est allumé.
+           */
+          json: () =>
+            Promise.resolve(
+              reponseModules(
+                modulesDuRegistre()
+                  .map((m) => m.id)
+                  .filter((id) => !modules.includes(id)),
+              ),
+            ),
         } as Response);
       }
       if (String(url).includes('/functions')) {
@@ -102,7 +120,11 @@ afterEach(() => {
 
 describe('L’en-tête et le module `depot`', () => {
   it('⚠ module ÉTEINT : « Mon dépôt » disparaît du menu de compte', async () => {
-    brancher(['amendes']); // le dépôt n'y est pas
+    // ⚠ `circulation` AJOUTÉE le 8 octobre 2026 : le backend l'a basculée en
+    // module activable, et le TÉMOIN de ce cas vérifie que `/mes-prets` reste
+    // dans le menu. Sans elle, le témoin échouait — en accusant l'en-tête alors
+    // que la doublure était en cause.
+    brancher(['amendes', 'circulation']); // le dépôt n'y est pas
     render(<Header fonctions={FONCTIONS} />);
     await repos();
     ouvrirLeMenuDeCompte();

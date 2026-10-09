@@ -49,7 +49,18 @@ describe('Un garde de module doit être RÉSOLVABLE là où il est posé', () =>
     readFileSync(join(SRC, f), 'utf-8').includes('@ModuleRequis('),
   );
 
-  it('⚠ TÉMOIN DE COMPTE : il en trouve exactement SIX', () => {
+  it('⚠ TÉMOIN DE COMPTE : il en trouve exactement ONZE', () => {
+    // ⚠ 6 → 11 le 8 octobre 2026 : la BASCULE de `circulation` en module
+    // activable. Cinq contrôleurs gagnent une garde de module — deux sur leur
+    // CLASSE (circulation, inventory), trois ROUTE PAR ROUTE (reader,
+    // cataloging, labels), parce que ces trois portent AUSSI des routes qui ne
+    // sont pas de la circulation.
+    //
+    // ⭐ Et ce compte a évité un refus de DÉMARRAGE : les quatre modules
+    // correspondants n'importaient pas `ModulesModule`, donc
+    // `Nest can't resolve dependencies of the ModuleActifGuard`. Aucun test
+    // unitaire ne pouvait le voir — c'est le défaut du 12 septembre, 1051 tests
+    // verts pendant que l'API refusait de démarrer.
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le septième, écrit demain par quelqu'un qui n'aura pas lu ceci.
     //
@@ -60,9 +71,14 @@ describe('Un garde de module doit être RÉSOLVABLE là où il est posé', () =>
     // Le compte a fait son office : il a obligé à venir dire POURQUOI un
     // contrôleur a cessé d'être gardé, ce qu'un `toBeGreaterThan` aurait tu.
     expect(gardes.map((f) => f.replace(/\\/g, '/')).sort()).toEqual([
+      'cataloging/cataloging.controller.ts',
+      'circulation/circulation.controller.ts',
       'depots/depots.controller.ts',
+      'inventory/inventory.controller.ts',
+      'labels/labels.controller.ts',
       'moissonnage/moissonnage.controller.ts',
       'oai/oai.controller.ts',
+      'reader/reader.controller.ts',
       'reminders/reminders.controller.ts',
       'sru/sru.controller.ts',
       'stats/stats.controller.ts',

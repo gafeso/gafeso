@@ -238,6 +238,23 @@ export const PERMISSIONS_CIBLES: Record<string, CorrespondancePermission> = {
     cible: 'modules.gerer',
     nature: 'inchangee',
   },
+  /**
+   * ⚠ NI TRANSFERT NI ÉLARGISSEMENT : l'écran est NEUF (8 octobre 2026), et il
+   * reprend la fonction de l'identité publique — `etablissement.apparence`.
+   * Personne ne gagne un droit : qui pouvait déjà écrire ce que l'établissement
+   * dit de lui-même peut désormais écrire ses mentions légales.
+   *
+   * ⚠ Et ce n'est PAS `etablissement.regles` : celle-là gouverne les durées de
+   * prêt, un métier de circulation. Une fonction PROPRE aurait créé un droit que
+   * personne ne porte — et une fonction sans porte est ce que
+   * `couverture-des-roles` refuse.
+   */
+  '/admin/pages-legales': {
+    actuelle: ['etablissement.apparence'],
+    cible: 'etablissement.apparence',
+    nature: 'inchangee',
+    note: "Écran neuf du 8 octobre 2026 : les mentions légales et la politique de confidentialité, rédigées par l'établissement (décision de Jean — sur l'instance d'un client, l'éditeur et le responsable du traitement sont l'ÉTABLISSEMENT, pas ResurgiTech). Même fonction que l'identité publique, sans élargissement.",
+  },
   '/admin/etablissement': {
     actuelle: ['etablissement.apparence'],
     cible: 'etablissement.apparence',

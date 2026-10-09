@@ -251,7 +251,11 @@ describe('nouveautés — cas 1 : le tri par récence', () => {
     expect(hits.map((h: { id: string }) => h.id)).toEqual(['r3', 'r2', 'r1']);
   });
 
-  it('sert les six champs du contrat, et seulement eux', async () => {
+  it('sert les six champs du contrat, plus la copie LUE sans être servie', async () => {
+    // ⚠ PASSÉ DE SIX À SEPT le 8 octobre 2026, et le septième n'est pas servi :
+    // `digitalCopy.encStatus` est lu pour calculer `hasDigital` / `offlineReady`,
+    // deux booléens. Ce test refuse qu'une colonne entre dans la projection sans
+    // décision — il a refusé celle-ci, et c'est pourquoi cette ligne est écrite.
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
     await serviceCatalogue(prisma).nouveautes('amani', 6);
     const appel = findMany.mock.calls[0][0];
@@ -259,11 +263,35 @@ describe('nouveautés — cas 1 : le tri par récence', () => {
     expect(Object.keys(appel.select ?? {}).sort()).toEqual([
       'author',
       'coverUrl',
+      'digitalCopy',
       'id',
       'publishYear',
       'recordType',
       'title',
     ]);
+    // Et ce qu'on va chercher DANS la relation : l'état, jamais la clé objet.
+    expect(appel.select?.digitalCopy).toEqual({ select: { encStatus: true } });
+  });
+
+  it('⚠ les deux marqueurs sortent sur CHAQUE nouveauté, et `digitalCopy` ne sort PAS', async () => {
+    // La liste et la fiche doivent dire la même chose du même document : une
+    // bibliothèque qui annonce « oui » sur la fiche et « non » dans la liste est
+    // le genre d'écart que personne ne diagnostique. La définition est donc
+    // unique (`marqueursNumeriques`), et ce test l'éprouve ICI.
+    const { prisma } = fauxCatalogue([
+      { ...notice(1), digitalCopy: { encStatus: 'ready' } },
+      { ...notice(2), digitalCopy: { encStatus: null } },
+      { ...notice(3), digitalCopy: null },
+    ]);
+    const { hits } = await serviceCatalogue(prisma).nouveautes('amani', 6);
+    expect(hits.map((h) => [h.id, h.hasDigital, h.offlineReady])).toEqual([
+      ['r1', true, true],
+      // Témoin d'absence : un document existe, il n'est pas prêt hors ligne.
+      ['r2', true, false],
+      ['r3', false, false],
+    ]);
+    // La relation LUE ne doit pas se retrouver dans la charge servie.
+    expect(hits[0]).not.toHaveProperty('digitalCopy');
   });
 });
 

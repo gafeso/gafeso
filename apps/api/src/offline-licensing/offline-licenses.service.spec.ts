@@ -66,7 +66,9 @@ function makeDeps(overrides: { granted?: boolean; readsAll?: boolean } = {}) {
     keys as never,
     audit as never,
     storage as never,
-  );
+      // doublure de la trace d'usage : elle NE DOIT PAS faire échouer le geste
+      { enregistrer: async () => true } as never,
+    );
   return { service, authz, access, audit, storage };
 }
 

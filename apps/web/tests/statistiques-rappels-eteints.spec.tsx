@@ -60,8 +60,13 @@ function monter(rappelsActif: boolean | null, rappels = ENVOYES) {
       rappelsActif === null
         ? null
         : rappelsActif
-          ? ['statistiques', 'rappels']
-          : ['statistiques', 'amendes'],
+            // ⚠ `circulation` AJOUTÉE le 8 octobre 2026 : le backend l'a basculée en
+            // module activable, donc elle doit être LISTÉE pour que l'écran montre
+            // ses blocs de prêt. Sans elle, les huit cas de ce fichier échouaient
+            // sur « Réservations introuvable » — et le message accusait l'écran,
+            // pas la doublure.
+            ? ['statistiques', 'circulation', 'rappels']
+            : ['statistiques', 'circulation', 'amendes'],
     reponses: { '/stats/dashboard': tableauDeBord(rappels) },
   });
 }

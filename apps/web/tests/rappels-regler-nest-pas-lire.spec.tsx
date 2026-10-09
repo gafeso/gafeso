@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import PageRappels from '@/app/admin/rappels/page';
 import { fermerSession, ouvrirSession } from './aide-session';
+import { reponseModules } from './aide-modules';
 
 const ROUTEUR = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() };
 vi.mock('next/navigation', () => ({
@@ -64,7 +65,9 @@ function brancher(fonctions: string[]) {
           smtpConfigured: true,
         });
       }
-      if (u.includes('/modules')) return ok([{ id: 'rappels', actif: true }]);
+      // ⚠ Tout allumé — y compris le noyau, que l'API rend. Un littéral à un
+      // seul module masquait les entrées dépendant des autres.
+      if (u.includes('/modules')) return ok(reponseModules());
       return ok({});
     }),
   );

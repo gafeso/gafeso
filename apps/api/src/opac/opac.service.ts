@@ -15,7 +15,7 @@ import { OpacSearchDto } from './dto/opac-search.dto';
 import { NOUVEAUTES_PAR_DEFAUT } from './dto/nouveautes.dto';
 import { PARCOURIR_PAR_DEFAUT } from './dto/parcourir.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { USAGE_LECTURE, UsageService } from '../stats/usage.service';
+import { SANS_AUTEUR, USAGE_CONSULTATION, UsageService } from '../stats/usage.service';
 import { CacheMemoireTTL } from './cache-memoire';
 
 /**
@@ -85,6 +85,37 @@ export interface NoticeRecente {
   publishYear: number | null;
   recordType: string;
   coverUrl: string | null;
+  /** Il existe un document numérique — rien de plus. Voir `marqueursNumeriques`. */
+  hasDigital: boolean;
+  /** Ce document est préparé pour la lecture HORS LIGNE. Voir `marqueursNumeriques`. */
+  offlineReady: boolean;
+}
+
+/**
+ * LES DEUX PRÉDICATS NUMÉRIQUES, DÉFINIS UNE SEULE FOIS.
+ *
+ * ⚠ Ils vivent ici et nulle part ailleurs. Quatre surfaces les servent — la
+ * fiche, la recherche, le parcours, les nouveautés — et deux définitions tenues
+ * d'accord à la main finiraient par divergier : une bibliothèque dirait « oui »
+ * sur la fiche et « non » dans la liste, pour le même document.
+ *
+ * Le sens exact de chacun, et pourquoi ils sont DEUX, est écrit dans
+ * `contrat-notice-publique.ts` — avec la mesure qui l'a décidé.
+ */
+export function marqueursNumeriques(
+  copie: { encStatus: string | null } | null | undefined,
+): { hasDigital: boolean; offlineReady: boolean } {
+  return {
+    // L'EXISTENCE. Publique par décision : un étudiant à distance qui ne peut
+    // pas savoir si ce catalogue contient quoi que ce soit de lisible n'a
+    // aucune raison de s'inscrire.
+    hasDigital: copie != null,
+    // LA PRÉPARATION. `'ready'` et rien d'autre : `null` (jamais tenté — tout
+    // EPUB), `'pending'` et `'failed'` sont tous les trois des documents que
+    // l'application ne peut PAS ouvrir hors ligne. Les confondre avec `ready`
+    // produirait un échec au téléchargement, c'est-à-dire au pire moment.
+    offlineReady: copie?.encStatus === 'ready',
+  };
 }
 
 /**
@@ -269,11 +300,15 @@ export class OpacService {
           publishYear: true,
           recordType: true,
           coverUrl: true,
+          // Lu, jamais servi tel quel : seuls les deux booléens sortent.
+          digitalCopy: { select: { encStatus: true } },
         },
       });
       // On rend ce qu'il y a : moins de `limit` notices n'est pas une erreur, et
       // rien ne complète la liste. Une liste vide est une liste vide.
-      return { hits };
+      return {
+        hits: hits.map(({ digitalCopy, ...n }) => ({ ...n, ...marqueursNumeriques(digitalCopy) })),
+      };
     });
   }
 
@@ -324,13 +359,56 @@ export class OpacService {
             publishYear: true,
             recordType: true,
             coverUrl: true,
+            // Lu, jamais servi tel quel : seuls les deux booléens sortent.
+            digitalCopy: { select: { encStatus: true } },
           },
         }),
       ]);
       // Une page au-delà de la fin rend une liste vide avec le VRAI total :
       // « il n'y a rien ici » et « il n'y a rien du tout » restent distincts.
-      return { hits, totalHits, page, totalPages: Math.ceil(totalHits / limit) };
+      return {
+        hits: hits.map(({ digitalCopy, ...n }) => ({ ...n, ...marqueursNumeriques(digitalCopy) })),
+        totalHits,
+        page,
+        totalPages: Math.ceil(totalHits / limit),
+      };
     });
+  }
+
+  /**
+   * Pose `hasDigital` / `offlineReady` sur des résultats venus du MOTEUR.
+   *
+   * ⚠ POURQUOI PAS DANS L'INDEX. Le document indexé ne porte aucune notion de
+   * fichier numérique, et l'y ajouter coûterait une réindexation de chaque
+   * école PLUS une synchronisation au téléversement et à la suppression qui
+   * n'existe pas — le commentaire de `nouveautes` le dit déjà pour le filtre
+   * « a un fichier ». Et ce serait un attribut de plus à tenir d'accord entre
+   * les deux moteurs (voir `search-parity.spec.ts`).
+   *
+   * Le coût est donc UNE requête par page, bornée par `hitsPerPage` : on ne
+   * demande que les identifiants qui sont déjà dans la main.
+   *
+   * ⚠ ET ELLE NE DÉGRADE PAS. Si la base refuse, la méthode LÈVE — elle ne rend
+   * pas `hasDigital: false` partout. Un faux négatif ici dirait « ce catalogue
+   * ne contient rien de lisible » à un visiteur anonyme, c'est-à-dire
+   * exactement le faux que ces deux champs existent pour éviter ; et c'est la
+   * même raison pour laquelle cette route rend 503 quand le moteur est
+   * injoignable au lieu d'un catalogue vide.
+   */
+  private async marquerLesResultats<T extends { id: string }>(
+    slug: string,
+    hits: T[],
+  ): Promise<(T & { hasDigital: boolean; offlineReady: boolean })[]> {
+    if (hits.length === 0) return [];
+    const copies = await this.prisma.forTenant(slug).digitalCopy.findMany({
+      where: { recordId: { in: hits.map((h) => h.id) } },
+      select: { recordId: true, encStatus: true },
+    });
+    const parNotice = new Map(copies.map((c) => [c.recordId, c]));
+    // ⚠ Une notice ABSENTE de la table n'a pas de copie : `undefined` passe donc
+    // par la définition unique, qui en fait `hasDigital: false`. C'est le même
+    // chemin que `null` — et non une branche à part qui pourrait divergier.
+    return hits.map((h) => ({ ...h, ...marqueursNumeriques(parNotice.get(h.id)) }));
   }
 
   /**
@@ -416,7 +494,7 @@ export class OpacService {
       result.totalHits === 0 ? await this.valeursHorsCatalogue(slug, query) : undefined;
 
     return {
-      hits: result.hits,
+      hits: await this.marquerLesResultats(slug, result.hits),
       totalHits: result.totalHits,
       page: result.page,
       totalPages: result.totalPages,
@@ -545,7 +623,7 @@ export class OpacService {
     const ligne = found as unknown as Record<string, unknown> & {
       keywords: { keyword: { name: string } }[];
       items: { status: ItemStatus }[];
-      digitalCopy: { fileFormat: string } | null;
+      digitalCopy: { fileFormat: string; encStatus: string | null } | null;
     };
 
     // ⚠ P3-3 : les trois champs de PROFIL viennent de `profileData`, plus des
@@ -579,6 +657,18 @@ export class OpacService {
     // ici, et l'écrire.
     const provenance = await this.provenances.provenance(db, id);
 
+    // ⚠ CALCULÉS UNE FOIS, SERVIS AUX DEUX — la décision est que l'EXISTENCE
+    // d'un document est publique (un étudiant à distance qui ne peut pas savoir
+    // si ce catalogue contient quoi que ce soit de lisible n'a aucune raison de
+    // s'inscrire), et que le format, la taille, l'URL et le fichier restent
+    // réservés aux membres.
+    //
+    // 🔴 Et ils ne se déduisent PAS l'un de l'autre, ni de l'absence de
+    // `digitalCopy` : `digitalCopy: null` veut déjà dire « vous êtes anonyme »
+    // dans la branche ci-dessous. Trois états dans un champ qui n'en admet que
+    // deux est une ambiguïté qu'aucun client ne peut lever.
+    const { hasDigital, offlineReady } = marqueursNumeriques(ligne.digitalCopy);
+
     if (!member) {
       reponse.items = [];
       reponse.availability = null;
@@ -590,6 +680,10 @@ export class OpacService {
       // dépend pas de qui regarde — et c'est le visiteur anonyme qu'on renvoie
       // vers l'école d'origine.
       reponse.provenance = provenance;
+      // Les deux booléens EN DERNIER, et dans les deux branches : leur valeur
+      // ne dépend pas de qui regarde, seule la finesse du reste en dépend.
+      reponse.hasDigital = hasDigital;
+      reponse.offlineReady = offlineReady;
       return reponse;
     }
 
@@ -610,6 +704,8 @@ export class OpacService {
       : null;
     reponse.membersOnly = false;
     reponse.provenance = provenance;
+    reponse.hasDigital = hasDigital;
+    reponse.offlineReady = offlineReady;
     return reponse;
   }
 
@@ -623,7 +719,20 @@ export class OpacService {
    * sans restriction de classe/abonnement (le téléchargement, lui, reste
    * réservé à l'admin — cataloging.controller).
    */
-  async getReadUrl(db: TenantDb, id: string, ctx: StudentAccessContext | null) {
+  async getReadUrl(
+    db: TenantDb,
+    id: string,
+    ctx: StudentAccessContext | null,
+    /**
+     * L'identité de l'appelant, pour la trace d'usage.
+     *
+     * ⚠ OBLIGATOIRE, et non optionnelle : un paramètre facultatif aurait laissé
+     * les appelants l'oublier en silence, et la trace serait anonyme sans que
+     * rien ne le dise. Le compilateur énumère les sites — c'est ainsi qu'on
+     * trouve TOUS les appelants, pas par un balayage.
+     */
+    auteurId: string | null,
+  ) {
     const record = await db.biblioRecord.findUnique({
       where: { id },
       select: { title: true },
@@ -649,7 +758,20 @@ export class OpacService {
     // ⚠ ET C'EST ICI, PAS AILLEURS : `getReadUrl` n'est appelé qu'UNE FOIS par
     // séance de lecture — les deux lecteurs chargent le fichier entier à
     // l'ouverture, aucune requête ensuite. Une ligne = une lecture réelle.
-    void this.usage.enregistrer(db, id, USAGE_LECTURE);
+    // ⚠ L'AUTEUR EST CELUI DU CONTEXTE, et il n'en coûte AUCUNE requête : la
+    // classe est déjà dans `ctx`, construite pour la décision d'accès.
+    //
+    // ⚠ `ctx === null` signifie PERSONNEL (fonction `document.lire`) : il n'y a
+    // pas d'étudiant à nommer, et un bibliothécaire qui ouvre un document pour
+    // vérifier une notice ne doit pas gonfler la filière de personne. On écrit
+    // donc SANS AUTEUR — la ligne compte quand même, ce qui est juste : le
+    // document a bien été consulté.
+    void this.usage.enregistrer(
+      db,
+      id,
+      USAGE_CONSULTATION,
+      ctx === null ? SANS_AUTEUR : { userId: auteurId, className: ctx.className },
+    );
 
     return { url, fileFormat, expiresInSeconds, title: record.title };
   }

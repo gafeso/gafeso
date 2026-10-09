@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { LIGNES_PARTAGEES, proprietePrisma } from './lignes-partagees-d-une-ecole';
@@ -182,6 +183,10 @@ describe.runIf(process.env.PG_LIVE === '1')('Déprovision : ce qu’elle LAISSE 
       expect(disparues, `${modele} : la déprovision a emporté des lignes d’AUTRES écoles`).toEqual([]);
     }
 
+      // ⚠ LA SORTIE NOMME L'ÉCOLE JETABLE. Elle n'existe que le temps de ce
+      // garde : sans son nom, un schéma oublié en base n'est rattachable à
+      // rien — et c'est exactement le défaut que ce fichier cherche.
+      console.log(ecolesMesurees('deprovision (école jetable)', [SLUG]));
     expect(await prisma.tenant.findUnique({ where: { slug: SLUG } })).toBeNull();
     const schemas = await prisma.$queryRawUnsafe<{ nspname: string }[]>(
       `SELECT nspname FROM pg_namespace WHERE nspname = 'tenant_${SLUG}'`,

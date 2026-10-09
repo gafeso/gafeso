@@ -67,7 +67,37 @@ export function useCompteCourant(fonctionsConnues?: string[] | null): CompteCour
   const entrees: EntreeCompte[] = user
     ? [
         { href: '/profil', label: 'Mon compte', title: 'Mon compte (informations, mot de passe, sécurité)' },
-        { href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' },
+        /*
+         * ⚠ « MES PRÊTS » SUIT LE MODULE `circulation`. Une bibliothèque sans
+         * rayon n'a ni prêt ni réservation : l'entrée mènerait à un écran que
+         * l'API refuse, c'est-à-dire exactement l'entrée inerte que ce produit
+         * s'interdit.
+         */
+        ...(moduleEteint('circulation')
+          ? []
+          : [{ href: '/mes-prets', label: 'Mes prêts', title: 'Mes prêts et réservations' }]),
+        /*
+         * ⚠ L'ESPACE NUMÉRIQUE DU LECTEUR, et il est là MÊME quand la
+         * circulation est allumée : lire en ligne et emprunter ne s'excluent
+         * pas. Ce qui change avec la circulation éteinte, c'est qu'il devient le
+         * SEUL endroit où un étudiant à distance cherche ses documents — sans
+         * lui, le menu ne garderait que « Mon compte ».
+         *
+         * ⚠ Leurs écrans disent honnêtement que l'historique n'est pas encore
+         * servi, et un garde échoue le jour où l'API expose la route. Une entrée
+         * qui mène à une phrase utile n'est pas une entrée inerte ; une entrée
+         * qui mène à un écran VIDE en serait une.
+         */
+        {
+          href: '/mes-consultations',
+          label: LIBELLES.espaceLecteur.consultations.titre,
+          title: 'Les documents que j’ai lus en ligne',
+        },
+        {
+          href: '/mes-documents-hors-ligne',
+          label: LIBELLES.espaceLecteur.horsLigne.titre,
+          title: 'Les documents emportés hors connexion sur mon appareil',
+        },
         ...(effectives?.includes('depot.deposer') && !moduleEteint('depot')
           ? [
               {

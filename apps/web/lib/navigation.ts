@@ -221,6 +221,14 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
     entrees: [
       {
         href: '/guichet',
+        /*
+         * ⚠ MODULE `circulation` — le guichet lui-même. L'onglet Guichet disparaît
+         * alors en entier : `ongletsVisibles` retire les onglets sans entrée.
+         * Décision de Jean du 8 octobre 2026 : une bibliothèque sans rayon ne
+         * garde aucune entrée de circulation. Sans ce gate, l'entrée mènerait à
+         * un écran que l'API refuse : une entrée inerte.
+         */
+        module: 'circulation',
         libelle: 'Prêt et retour',
         fonctions: ['circulation.faire'],
         description: 'Prêter, rendre, encaisser une amende — au code-barres.',
@@ -263,6 +271,13 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/recolement',
+        /*
+         * ⚠ MODULE `circulation` — le récolement compte des EXEMPLAIRES en rayon.
+         * Décision de Jean du 8 octobre 2026 : une bibliothèque sans rayon ne
+         * garde aucune entrée de circulation. Sans ce gate, l'entrée mènerait à
+         * un écran que l'API refuse : une entrée inerte.
+         */
+        module: 'circulation',
         description: 'L’inventaire au code-barres : ce qui manque, ce qui est mal rangé.',
         libelle: 'Récolement',
         fonctions: ['outils.catalogue'],
@@ -334,6 +349,22 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
         groupe: 'Établissement',
       },
       {
+        href: '/admin/pages-legales',
+        /*
+         * ⚠ MÊME FONCTION QUE L'IDENTITÉ (`etablissement.apparence`), et c'est
+         * un choix : ces deux pages sont ce que l'établissement DIT DE LUI-MÊME
+         * publiquement. Les rattacher à `etablissement.regles` les mettrait avec
+         * les durées de prêt, qui sont un métier de circulation ; leur donner
+         * une fonction PROPRE créerait un droit que personne ne porte — et une
+         * fonction sans porte est ce que `couverture-des-roles` refuse.
+         */
+        libelle: 'Mentions et confidentialité',
+        fonctions: ['etablissement.apparence'],
+        description:
+          'Les mentions légales et la politique de confidentialité, rédigées par l’établissement.',
+        groupe: 'Établissement',
+      },
+      {
         href: '/admin/etablissement',
         description: 'Nom, logo, couleurs et coordonnées de l’établissement.',
         libelle: 'Identité',
@@ -342,6 +373,13 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/regles-de-circulation',
+        /*
+         * ⚠ MODULE `circulation` — durées, plafonds et amende d'un prêt.
+         * Décision de Jean du 8 octobre 2026 : une bibliothèque sans rayon ne
+         * garde aucune entrée de circulation. Sans ce gate, l'entrée mènerait à
+         * un écran que l'API refuse : une entrée inerte.
+         */
+        module: 'circulation',
         /**
          * ⚠ « Durées et plafonds », PAS « Règles de prêt » — et ce n'est pas un
          * goût. Le voisin `/admin/regles-de-pret` porte déjà ce libellé, et les
@@ -378,6 +416,14 @@ export const NAVIGATION_PERSONNEL: OngletNav[] = [
       },
       {
         href: '/admin/regles-de-pret',
+        /*
+         * ⚠ MODULE `circulation` — renouvellement en ligne et mise de côté
+         * des réservations — deux gestes de circulation.
+         * Décision de Jean du 8 octobre 2026 : une bibliothèque sans rayon ne
+         * garde aucune entrée de circulation. Sans ce gate, l'entrée mènerait à
+         * un écran que l'API refuse : une entrée inerte.
+         */
+        module: 'circulation',
         // ⚠ DISAIT « Durées de prêt, quotas, renouvellements. » — les trois
         // sont FAUX : ils vivent sur `CirculationRule`, dont aucun écran
         // n'appelle les routes (dette front n° 15). Corrigé le 16 septembre

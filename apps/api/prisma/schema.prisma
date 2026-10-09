@@ -1283,7 +1283,7 @@ model UsageEvent {
   /// Le document concerné. Sans contrainte : voir le bloc ci-dessus.
   recordId String @map("record_id")
 
-  /// `LECTURE` | `TELECHARGEMENT`. En TEXTE comme les autres vocabulaires
+  /// `CONSULTATION` | `TELECHARGEMENT`. En TEXTE comme les autres vocabulaires
   /// par-tenant (aucune entrée TENANT_ENUMS nécessaire).
   ///
   /// ⚠ LA CONSULTATION D'UNE NOTICE N'EST PAS ICI, et c'est mesuré : elle
@@ -1297,10 +1297,46 @@ model UsageEvent {
   /// ⚠ L'HORODATAGE DÉCIDE DE L'ANNÉE D'UN RAPPORT. Les bornes de période sont
   ///semi-ouvertes partout dans `stats` : `gte: from, lt: to`.
   occurredAt DateTime @default(now()) @map("occurred_at")
+  /// QUI a consulté — NOMINATIF, et conservé DOUZE MOIS seulement.
+  ///
+  /// ⚠ NULLABLE DANS LES DEUX SENS, et les deux nuls ne veulent pas dire la
+  /// même chose :
+  ///   · null + `anonymiseLe` posé  → la ligne a été PURGÉE à 12 mois ;
+  ///   · null + `anonymiseLe` nul   → l'acte venait du PERSONNEL ou d'un
+  ///     contexte sans membre (pas d'étudiant à nommer).
+  /// Les confondre ferait croire une purge là où il n'y a jamais eu de nom.
+  userId     String?  @map("user_id")
+
+  /// LA FILIÈRE AU MOMENT DE L'ACTE, dénormalisée — et c'est le point.
+  ///
+  /// ⚠ Elle SURVIT à la purge nominative : c'est elle qui porte l'agrégat.
+  /// La lire par jointure sur `enrollments` donnerait la classe d'AUJOURD'HUI,
+  /// donc un rapport de l'an dernier changerait au passage d'un étudiant en
+  /// année supérieure. Un agrégat historique se dénormalise, sinon il se réécrit.
+  ///
+  /// ⚠ Et elle ne rend PAS la ligne nominative : « L2 Informatique » ne désigne
+  /// personne — SAUF sur un petit effectif. C'est pourquoi la restitution
+  /// applique un SEUIL (voir `usage.service.ts`) : « un agrégat sur une petite
+  /// population est une donnée personnelle déguisée ».
+  className String? @map("class_name")
+
+  /// Quand la ligne a perdu son nom. Null = jamais purgée.
+  ///
+  /// ⚠ POSÉ PLUTÔT QUE DÉDUIT de `occurredAt + 12 mois` : la purge est un ACTE,
+  /// et on doit pouvoir dire si elle a EU LIEU. Une date déduite affirmerait
+  /// qu'elle a tourné alors que le planificateur peut n'avoir jamais démarré —
+  /// c'est « un dispositif se vérifie par son EFFET, jamais par sa présence ».
+  anonymiseLe DateTime? @map("anonymise_le")
 
   @@index([occurredAt])
   @@index([kind, occurredAt])
   @@index([recordId])
+  /// « Mes consultations » — l'étudiant lit les SIENNES, et elles seules.
+  @@index([userId, occurredAt])
+  /// L'agrégat par filière.
+  @@index([className, occurredAt])
+  /// La purge balaie par ancienneté, sur les lignes encore nominatives.
+  @@index([anonymiseLe, occurredAt])
   @@map("usage_events")
 }
 

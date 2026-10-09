@@ -100,13 +100,56 @@ export const MODULES: readonly ModuleDeclare[] = [
   },
   {
     id: 'circulation',
-    libelle: 'Circulation',
-    description: 'Prêts, retours, réservations.',
+    libelle: 'Circulation physique',
+    description: 'Prêts, retours, réservations, récolement.',
     dependances: [],
-    noyau: true,
-    ecrans: [],
-    motifEcrans: '',
+    /**
+     * 🔴 PASSÉ DE NOYAU À ACTIVABLE LE 8 OCTOBRE 2026.
+     *
+     * *Décision de Jean, pour l'Université Virtuelle : étudiants dispersés,
+     * aucun rayon physique, réseaux coûteux.*
+     *
+     * ⚠ CE QU'IL ÉTAIT : noyau, avec ZÉRO écran déclaré — donc une bibliothèque
+     * sans rayon voyait guichet, exemplaires, réservations, récolement, amendes
+     * et rappels, sans aucun moyen de les éteindre.
+     *
+     * ⭐ ET I8 TIENT PAR CONSTRUCTION : `modulesDesactives` vaut `[]` par défaut
+     * et `desactives()` rend `[]` quand la ligne manque. Absent = ACTIF. Vérifié
+     * en base avant la bascule : `horizon → []`, `zinda → ["rappels"]`. Aucune
+     * école existante ne perd quoi que ce soit.
+     *
+     * ⚠ L'IDENTIFIANT NE CHANGE PAS, et c'est un choix. `prets` serait un
+     * mensonge par étroitesse — le module porte aussi le récolement (12 routes)
+     * et les étiquettes, et un récolement n'est pas un prêt. Et l'identifiant est
+     * STOCKÉ dans `modules_desactives` : le garder évite toute migration.
+     * Le contraste avec le numérique vit dans le LIBELLÉ.
+     *
+     * ⚠ LE VERROU DE DÉPENDANCE SUFFIT : `amendes` et `rappels` déclarent
+     * `dependances: ['circulation']`, et `etat()` verrouille un module dont un
+     * autre dépend. Pour éteindre la circulation, l'école éteint d'abord les deux
+     * — ce qui évite des entrées inertes, et ce qui est plus explicite qu'une
+     * cascade silencieuse.
+     */
+    noyau: false,
+    ecrans: [
+      { quoi: 'Le guichet de prêt', chemin: 'guichet' },
+      { quoi: 'Le récolement', chemin: 'admin/recolement' },
+      { quoi: 'Les règles de circulation', chemin: 'admin/regles-de-circulation' },
+      { quoi: 'Les règles de prêt', chemin: 'admin/regles-de-pret' },
+      { quoi: 'Mes prêts et mes réservations', chemin: 'mes-prets' },
+    ],
+    /**
+     * ⚠ ET PAS `admin/statistiques` NI `admin/rapport-annuel` : ils ne
+     * DISPARAISSENT pas, ils perdent leur VOLET DE PRÊTS — qui rend un refus
+     * nommé plutôt que des zéros (décision Q2 du 8 octobre). Les déclarer ici
+     * ferait dire à la boîte de confirmation qu'on perd deux écrans entiers,
+     * et ce serait faux. Relevé par le front, vérifié ici.
+     */
+    motifEcrans:
+      'guichet, récolement, règles, et l’espace « Mes prêts » du lecteur. Les ' +
+      'statistiques et le rapport annuel RESTENT : ils perdent leur volet de prêts.',
   },
+
   {
     id: 'administration',
     libelle: 'Administration',
@@ -243,7 +286,20 @@ export const MODULES: readonly ModuleDeclare[] = [
       'l’année ne soit pas trouée.',
     // Tout ce qu'il agrège vient du catalogue et de la circulation. Les deux
     // sont noyau : la dépendance ne verrouille rien, elle dit le lien.
-    dependances: ['catalogue', 'circulation'],
+    // ⚠ `circulation` A ÉTÉ RETIRÉE LE 8 OCTOBRE 2026 (décision Q2 de Jean).
+    //
+    // Elle y était, et c'était cohérent : ~80 % des mesures de `stats` viennent
+    // des prêts. Mais la conséquence ne l'était pas — une bibliothèque sans
+    // rayon qui éteint la circulation perdait ses statistiques ENTIÈRES, y
+    // compris celles de son catalogue et de son usage numérique, qui sont les
+    // seules qu'elle ait.
+    //
+    // ⭐ Le module ne dépend donc plus que du CATALOGUE, et son VOLET DE PRÊTS
+    // est conditionnel : `StatsService.dashboard` et `RapportAnnuelService`
+    // rendent un refus NOMMÉ (`voletPrets.actif: false`, et un `Bloc`
+    // `non_calculable` avec son motif) au lieu de zéros. Un zéro se lit comme
+    // une mesure, et il se recopie dans un rapport remis à une université.
+    dependances: ['catalogue'],
     noyau: false,
     ecrans: [
       { chemin: 'admin/statistiques', quoi: 'l’écran Statistiques (tableau de bord)' },
@@ -364,6 +420,57 @@ export function dependantsDe(id: string): string[] {
  * calcul, lui, se règle par une branche — l'amende vaut zéro, le retour se fait.
  */
 export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
+  // ⚠ LES 35 ROUTES DE LA CIRCULATION PHYSIQUE (bascule du 8 octobre 2026).
+  //
+  // La garde est posée sur la CLASSE pour `circulation` et `inventory` — une
+  // route écrite demain l'hérite —, et ROUTE PAR ROUTE pour l'espace lecteur, le
+  // catalogue et les étiquettes, dont les contrôleurs portent AUSSI des routes
+  // qui ne sont pas de la circulation.
+  //
+  // ⚠ Elles sont listées quand même : c'est ce COMPTE EXACT qui oblige à revenir
+  // le jour où l'une change de nom.
+  //
+  // ⭐ ET CE QUI N'Y EST PAS EST AUSSI UNE DÉCISION : ni `reader/consultations`
+  // ni `reader/hors-ligne` — l'espace personnel d'un étudiant d'université
+  // virtuelle doit RESTER quand il n'y a pas de rayon. Une garde de classe sur
+  // le contrôleur lecteur les aurait emportées.
+  circulation: [
+    'circulation/circulation.controller.ts :: Post checkout',
+    'circulation/circulation.controller.ts :: Post return',
+    'circulation/circulation.controller.ts :: Post checkouts/:id/renew',
+    'circulation/circulation.controller.ts :: Post checkouts/:id/perte',
+    'circulation/circulation.controller.ts :: Get overdues',
+    'circulation/circulation.controller.ts :: Get patrons/:id',
+    'circulation/circulation.controller.ts :: Get holds',
+    'circulation/circulation.controller.ts :: Post holds',
+    'circulation/circulation.controller.ts :: Post holds/:id/cancel',
+    'circulation/circulation.controller.ts :: Post rules',
+    'circulation/circulation.controller.ts :: Get rules',
+    'circulation/circulation.controller.ts :: Patch rules/:id',
+    'circulation/circulation.controller.ts :: Delete rules/:id',
+    'inventory/inventory.controller.ts :: Post sessions',
+    'inventory/inventory.controller.ts :: Get sessions',
+    'inventory/inventory.controller.ts :: Get sessions/:id',
+    'inventory/inventory.controller.ts :: Post sessions/:id/scan',
+    'inventory/inventory.controller.ts :: Get sessions/:id/counts',
+    'inventory/inventory.controller.ts :: Get sessions/:id/items/:categorie',
+    'inventory/inventory.controller.ts :: Get sessions/:id/report',
+    'inventory/inventory.controller.ts :: Get sessions/:id/report.csv',
+    'inventory/inventory.controller.ts :: Post sessions/:id/close',
+    'inventory/inventory.controller.ts :: Post sessions/:id/reopen',
+    'inventory/inventory.controller.ts :: Delete sessions/:id/scans/:barcode',
+    'inventory/inventory.controller.ts :: Post sessions/:id/mark-missing',
+    'reader/reader.controller.ts :: Get card',
+    'reader/reader.controller.ts :: Get loans',
+    'reader/reader.controller.ts :: Post loans/:id/renew',
+    'reader/reader.controller.ts :: Get holds',
+    'reader/reader.controller.ts :: Post holds',
+    'reader/reader.controller.ts :: Post holds/:id/cancel',
+    'cataloging/cataloging.controller.ts :: Post records/:id/items',
+    'cataloging/cataloging.controller.ts :: Patch items/:itemId',
+    'cataloging/cataloging.controller.ts :: Delete items/:itemId',
+    'labels/labels.controller.ts :: Get labels',
+  ],
   // ⚠ `amendes` N'A PLUS AUCUNE ROUTE depuis le 26/09/2026, et la liste vide est
   // VRAIE — vérifiée, pas déclarée.
   //
@@ -409,6 +516,12 @@ export const ROUTES_PAR_MODULE: Record<string, readonly string[]> = {
     'stats/stats.controller.ts :: Get rapport-annuel',
     'stats/stats.controller.ts :: Get export',
     'stats/stats.controller.ts :: Get report',
+    // ⚠ L'USAGE NUMÉRIQUE (6 octobre 2026). Elle est sous `@ModuleRequis` de
+    // CLASSE comme ses quatre sœurs — mais la COLLECTE, elle, n'est jamais
+    // gardée : suspendre le comptage quand le module est éteint creuserait un
+    // trou dans l'historique, et l'année d'une école qui rallume serait fausse
+    // sans que rien ne le dise. On collecte toujours, on n'EXPOSE que si actif.
+    'stats/stats.controller.ts :: Get usage',
   ],
   moissonnage: [
     'moissonnage/moissonnage.controller.ts :: Get sources',

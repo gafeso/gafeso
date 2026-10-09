@@ -47,7 +47,49 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
   '/inscription': { pour: 'tout le monde', quoi: 'création d’un compte lecteur' },
   '/definir-mot-de-passe': { pour: 'porteur du lien reçu', quoi: 'choix du mot de passe, lien à usage unique' },
   '/profil': { pour: 'tout compte', quoi: 'mon compte : informations, mot de passe, double authentification' },
+  /*
+   * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — le seul écran du dépôt dont
+   * le public est « personne qui n'a pas encore de compte ». Sur une instance
+   * neuve il n'existe aucun utilisateur : une porte depuis la navigation serait
+   * absurde, et une redirection vers /login rendrait l'instance ininstallable.
+   * Sa « porte » est l'adresse elle-même, et sa garde est le JETON D'AMORÇAGE.
+   */
+  /*
+   * ⚠ LES DEUX PAGES LÉGALES, 8 octobre 2026 — publiques, et elles N'EXISTENT
+   * PAS tant que l'établissement ne les a pas publiées : leur rendu appelle
+   * `notFound()`. Un 404 est la réponse JUSTE (« absent », pas
+   * « indisponible »), et leurs liens de pied ne s'affichent pas non plus.
+   */
+  '/mentions-legales': {
+    pour: 'tout visiteur',
+    quoi: 'les mentions légales rédigées par l’établissement — 404 tant qu’elles ne sont pas publiées',
+  },
+  '/confidentialite': {
+    pour: 'tout visiteur',
+    quoi: 'la politique de confidentialité rédigée par l’établissement — 404 tant qu’elle n’est pas publiée',
+  },
+  '/installation': {
+    pour: 'celui qui installe l’instance (jeton d’amorçage)',
+    quoi: 'établissement, domaine, administrateur, modules — en une seule transaction',
+  },
   '/mes-prets': { pour: 'tout compte', quoi: 'mes prêts, mes réservations, mon historique' },
+  /*
+   * ⚠ L'ESPACE LECTEUR NUMÉRIQUE, 8 octobre 2026 — Université Virtuelle.
+   * Les deux écrans EXISTENT avant leurs routes et le DISENT : avec la
+   * circulation éteinte, « Mes prêts » disparaît et le menu du compte ne
+   * garderait que « Mon compte ». Un étudiant à distance n'aurait plus aucun
+   * endroit où chercher ses documents, et il prendrait cette absence pour une
+   * erreur de sa part. Voir `espace-lecteur-pas-encore.spec.ts`, qui échoue le
+   * jour où l'API expose la route.
+   */
+  '/mes-consultations': {
+    pour: 'tout compte',
+    quoi: 'les documents lus en ligne — l’historique n’est pas encore servi, et l’écran le dit',
+  },
+  '/mes-documents-hors-ligne': {
+    pour: 'tout compte',
+    quoi: 'les documents emportés hors connexion — la liste n’est pas encore servie, et l’écran le dit',
+  },
   '/mon-depot': { pour: 'depot.deposer', quoi: 'déposer son mémoire ou sa thèse et suivre son avancement' },
   '/mes-encadrements': { pour: 'encadrements.voir', quoi: 'les mémoires et thèses qu’on a dirigés, déjà catalogués' },
   '/admin': { pour: 'personnel', quoi: 'porte d’entrée : redirige vers la première section accessible' },
@@ -164,7 +206,20 @@ describe('la carte des écrans', () => {
     // limite du témoin de compte, et elle est écrite ici plutôt que découverte
     // ailleurs : il convoque quand un écran s'AJOUTE, jamais quand sa porte se
     // déplace. Ce qui garde la porte est la carte engendrée juste en dessous.
-    expect(ecransSurLeDisque().length).toBe(48);
+    /*
+     * ⚠ 50 le 8 octobre 2026 : `/mes-consultations` et
+     * `/mes-documents-hors-ligne`, l'espace lecteur d'une bibliothèque
+     * numérique. Le compte a convoqué, et la question posée était la bonne —
+     * ces écrans ont-ils une porte ? Oui : le menu du compte, pour tout
+     * connecté.
+     */
+    // ⚠ 51 le 8 octobre 2026 : `/installation`. Le compte a convoqué, et la
+    // question était la bonne — cet écran a-t-il une porte ? Oui, et elle n'est
+    // pas dans la navigation : c'est son adresse, gardée par le jeton.
+    // ⚠ 54 le 8 octobre 2026 : les deux pages légales publiques et leur écran
+    // de rédaction. Le compte a convoqué trois fois de suite aujourd'hui, et
+    // chaque fois la question était la bonne — cet écran a-t-il une porte ?
+    expect(ecransSurLeDisque().length).toBe(54);
   });
 
   it('le document sur disque est à jour', () => {

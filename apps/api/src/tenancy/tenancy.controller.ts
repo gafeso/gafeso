@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModulesService } from '../modules/modules.service';
 import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
@@ -79,6 +80,8 @@ export class TenancyController {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    // `circulationActive` sur /current et /descriptor : contrat du mobile.
+    private readonly modules: ModulesService,
   ) {}
 
   /**
@@ -171,8 +174,20 @@ export class TenancyController {
     // côté serveur, que ce silence-là côté appareil.
     const api = this.config.get<string>('API_PUBLIC_URL')?.trim();
     if (!api) {
+      // ⚠ LE REFUS NOMME LA VARIABLE ET DIT QUOI FAIRE — corrigé le 8 octobre
+      // 2026, après qu'un développeur a obtenu un `400` nu sur cette route en
+      // développement, où la variable n'est pas dans `.env.example`.
+      //
+      // Un refus qui ne dit que « non » envoie chercher dans le code ; celui-ci
+      // nomme le fichier, la variable et une valeur de départ. C'est « le
+      // message d'échec dit QUOI FAIRE, pas ce qui ne va pas ».
       throw new BadRequestException(
-        'API_PUBLIC_URL n’est pas configurée : le descripteur de connexion serait inutilisable.',
+        'API_PUBLIC_URL n’est pas configurée : le descripteur de connexion serait ' +
+          'inutilisable — un appareil le téléchargerait sans erreur et se ' +
+          'connecterait à nulle part. ' +
+          'Ajoutez API_PUBLIC_URL dans votre `.env` (en développement : ' +
+          'http://localhost:4000 ; en production : l’URL publique de l’API, ' +
+          'voir .env.prod.example).',
       );
     }
     return {
@@ -181,6 +196,18 @@ export class TenancyController {
       tenant: tenant.slug,
       name: nomAffichable(record?.name, tenant.name),
       enrollmentUrl: enrollmentUrl(this.appUrl(), tenant.slug),
+      // ⚠ UN BOOLÉEN, JAMAIS UNE ABSENCE — contrat du mobile, 8 octobre 2026.
+      //
+      // Le descripteur est MIS EN CACHE par l'app et reste lisible hors ligne :
+      // c'est ce qui lui permet de ne pas promettre un comptoir avant même
+      // d'avoir un jeton. `GET /modules` ne peut pas servir ce besoin — mesuré,
+      // il rend 401 sans jeton.
+      //
+      // 🔴 Ni omis, ni `null`. L'absence porte DÉJÀ un autre sens dans ce
+      // produit (`availability: null` = « vous êtes anonyme »), et un client qui
+      // lirait l'absence comme « pas de circulation » amputerait le menu d'une
+      // vraie bibliothèque au premier champ oublié.
+      circulationActive: await this.modules.estActif(tenant.id, 'circulation'),
     };
   }
 
@@ -207,6 +234,11 @@ export class TenancyController {
       secondaryColor: record?.settings?.secondaryColor ?? '#D97B2B',
       logoUrl: record?.settings?.logoUrl ?? null,
       locale: record?.settings?.locale ?? 'fr',
+      // ⚠ UN BOOLÉEN, JAMAIS UNE ABSENCE — voir le même champ sur
+      // /tenancy/descriptor. Le mobile s'en sert pour ne pas afficher un
+      // comptoir qui n'existe pas dans une bibliothèque sans rayonnages ;
+      // cette route est la seule disponible AVANT authentification.
+      circulationActive: await this.modules.estActif(tenant.id, 'circulation'),
       // Vitrine (spec docs/spec-accueil-tenant.md) : palette neutre complète
       // (défauts appliqués) + toggle du motif décoratif.
       themeTokens: mergeHomeTokens(record?.settings?.themeTokens),

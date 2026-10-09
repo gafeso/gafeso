@@ -21,6 +21,7 @@ import { IssueLicenseDto } from './dto/offline.dto';
 import { LICENSE_VERSION, LicenseBody, signLicense, wrapCekForDevice } from './license-crypto';
 import { OfflineKeysService } from './offline-keys.service';
 import { StorageService } from '../storage/storage.service';
+import { USAGE_TELECHARGEMENT, UsageService } from '../stats/usage.service';
 
 export type TenantDb = PrismaClient;
 /**
@@ -56,7 +57,20 @@ export type LicenseStatus = 'active' | 'revoked' | 'expired' | 'unknown';
  * Le type oblige désormais chaque site à traiter les deux cas.
  */
 type AccesHorsLigne =
-  | { accorde: true }
+  | {
+      accorde: true;
+      /**
+       * La filière de l'étudiant AU MOMENT du droit, pour la trace d'usage.
+       *
+       * ⚠ ELLE SORT D'ICI plutôt que d'être relue : `droitHorsLigne` a déjà
+       * construit le contexte d'accès, qui la porte. La relire coûterait une
+       * requête pour une valeur qu'on vient d'avoir en main — et deux lectures
+       * de la même chose finissent par diverger.
+       *
+       * `null` pour le personnel : il n'y a pas d'étudiant à nommer.
+       */
+      className: string | null;
+    }
   | { accorde: false; motif: 'droit'; message: string }
   | { accorde: false; motif: 'embargo'; jusquAu: Date; personnel: boolean };
 
@@ -71,6 +85,10 @@ export class OfflineLicensesService {
     private readonly keys: OfflineKeysService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    // ⚠ La trace d'usage, pour compter la DÉLIVRANCE d'une licence.
+    // `UsageService` est exporté par `StatsModule` précisément parce que ses
+    // ÉCRIVAINS vivent ailleurs — voir le commentaire de `stats.module.ts`.
+    private readonly usage: UsageService,
   ) {}
 
   /**
@@ -116,8 +134,13 @@ export class OfflineLicensesService {
     recordId: string,
   ): Promise<AccesHorsLigne> {
     const personnel = await this.authz.hasFunction(db, userId, FONCTIONS.DOCUMENT_LIRE);
+    // La filière, retenue pour la trace d'usage. Null pour le personnel : il n'y
+    // a pas d'étudiant à nommer, et un bibliothécaire qui prépare un appareil ne
+    // doit pas gonfler la filière de personne.
+    let className: string | null = null;
     if (!personnel) {
       const ctx = await this.access.buildStudentContext(tenant, db, userId);
+      className = ctx.className;
       const statut = await this.access.getRecordAccessStatus(db, ctx, recordId);
       // ⚠ LE MESSAGE VIENT DE LA LECTURE EN LIGNE, il n'est pas recomposé ici :
       // `getRecordAccessStatus` le rend déjà, embargo compris.
@@ -132,7 +155,7 @@ export class OfflineLicensesService {
     if (sousEmbargo(jusquAu, new Date())) {
       return { accorde: false, motif: 'embargo', jusquAu: jusquAu as Date, personnel };
     }
-    return { accorde: true };
+    return { accorde: true, className };
   }
 
   /**
@@ -331,6 +354,20 @@ export class OfflineLicensesService {
       targetLabel: dto.docId,
       metadata: { deviceId: device.id, expiresAt: expiresAt.toISOString() },
       ip: ip ?? null,
+    });
+
+    // 7 bis) TRACE D'USAGE — la DÉLIVRANCE, jamais la lecture.
+    //
+    // ⚠ `TELECHARGEMENT` compte le fait qu'un fichier et sa licence sont PARTIS
+    // vers un appareil. Ce qui se passe ensuite est hors connexion, sur un
+    // téléphone : nous ne le savons pas, et nous ne le saurons jamais. Un écran
+    // qui parlerait de « lectures hors ligne » affirmerait ce que rien ne mesure
+    // — c'est pourquoi le libellé dit « téléchargements ».
+    //
+    // ⚠ L'auteur vient du droit déjà évalué en 2) : aucune requête de plus.
+    void this.usage.enregistrer(db, dto.docId, USAGE_TELECHARGEMENT, {
+      userId: user.sub,
+      className: droit.className,
     });
 
     // 8) Réponse : la licence signée + tout ce qu'il faut pour lire hors-ligne.

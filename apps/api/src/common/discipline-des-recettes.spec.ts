@@ -68,6 +68,17 @@ const MARQUE_ATTENDUE = /const MARQUE = /;
  * écrite plus bas, mesurée plutôt que supposée.
  */
 const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
+  'stats/usage-nominatif-en-base.spec.ts': {
+    discipline: 'nettoyage-recense',
+    motif:
+      'elle ÉCRIT des lignes d’usage dans l’école de développement, qui en porte ' +
+      '503 réelles. Le recensement des identifiants est pris AVANT, le nettoyage ' +
+      'se fait par DIFFÉRENCE D’ENSEMBLES, et le contrôle final est confronté au ' +
+      'recensement — jamais à sa propre empreinte. ⚠ Et elle appelle la PURGE, ' +
+      'qui touche des lignes qu’elle n’a pas créées : c’est exactement « l’entrée ' +
+      'et la sortie ne sont pas le même ensemble », donc le nettoyage vise ce qui ' +
+      'est APPARU, pas ce qu’on croit avoir écrit.',
+  },
   'cataloging/vocabulaire-des-types-en-base.spec.ts': {
     discipline: 'lecture-seule',
     motif: 'interroge le vocabulaire que la base PORTE ; ne l’écrit jamais',
@@ -167,7 +178,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT treize — une quatorzième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT quatorze — une quinzième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

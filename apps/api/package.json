@@ -10,14 +10,14 @@
     "start": "node dist/main.js",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "tsc --noEmit && vitest run",
+    "test": "tsc --noEmit -p tsconfig.scripts.json && vitest run",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "dotenv -e ../../.env -- prisma db push",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
-    "test:base": "tsc --noEmit && PG_LIVE=1 dotenv -e ../../.env -- vitest run"
+    "test:base": "tsc --noEmit -p tsconfig.scripts.json && PG_LIVE=1 dotenv -e ../../.env -- vitest run"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

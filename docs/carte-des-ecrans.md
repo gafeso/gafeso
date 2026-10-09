@@ -40,7 +40,7 @@ refuser la route par l’API.
 
 | Écran | Adresse | Fonction exigée | Module | Ce qu’on y fait |
 |---|---|---|---|---|
-| Prêt et retour | `/guichet` | `circulation.faire` | noyau | Prêter, rendre, encaisser une amende — au code-barres. |
+| Prêt et retour | `/guichet` | `circulation.faire` | `circulation` — **disparaît si éteint** | Prêter, rendre, encaisser une amende — au code-barres. |
 | Rappels envoyés | `/admin/rappels` | `circulation.retards` | `rappels` — **disparaît si éteint** | Les courriels de retard déjà partis, et leur réglage. |
 
 ### Onglet « Outils »
@@ -49,7 +49,7 @@ refuser la route par l’API.
 |---|---|---|---|---|
 | Import de notices *(Catalogue)* | `/admin/outils/import-notices` | `outils.catalogue` | noyau | Importer un lot de notices MARC ou CSV, avec compte rendu ligne à ligne. |
 | Moissonnage *(Catalogue)* | `/admin/moissonnage` | `outils.catalogue` | `moissonnage` — **disparaît si éteint** | Récolter automatiquement des notices depuis des entrepôts OAI-PMH extérieurs. |
-| Récolement *(Catalogue)* | `/admin/recolement` | `outils.catalogue` | noyau | L’inventaire au code-barres : ce qui manque, ce qui est mal rangé. |
+| Récolement *(Catalogue)* | `/admin/recolement` | `outils.catalogue` | `circulation` — **disparaît si éteint** | L’inventaire au code-barres : ce qui manque, ce qui est mal rangé. |
 | Import des étudiants *(Lecteurs)* | `/admin/import-etudiants` | `outils.lecteurs` | noyau | Charger la liste des étudiants attendus — matricule, courriel, classe. |
 
 ### Onglet « Statistiques »
@@ -64,9 +64,10 @@ refuser la route par l’API.
 | Écran | Adresse | Fonction exigée | Module | Ce qu’on y fait |
 |---|---|---|---|---|
 | Modules *(Établissement)* | `/admin/modules` | `modules.gerer` | noyau | Allumer ou éteindre les fonctions de l’école. |
+| Mentions et confidentialité *(Établissement)* | `/admin/pages-legales` | `etablissement.apparence` | noyau | Les mentions légales et la politique de confidentialité, rédigées par l’établissement. |
 | Identité *(Établissement)* | `/admin/etablissement` | `etablissement.apparence` | noyau | Nom, logo, couleurs et coordonnées de l’établissement. |
-| Durées et plafonds *(Établissement)* | `/admin/regles-de-circulation` | `etablissement.regles` | noyau | Durée du prêt, plafonds et amende, par catégorie et par type. |
-| Règles de prêt *(Établissement)* | `/admin/regles-de-pret` | `etablissement.regles` | noyau | Renouvellement en ligne et mise de côté des réservations. |
+| Durées et plafonds *(Établissement)* | `/admin/regles-de-circulation` | `etablissement.regles` | `circulation` — **disparaît si éteint** | Durée du prêt, plafonds et amende, par catégorie et par type. |
+| Règles de prêt *(Établissement)* | `/admin/regles-de-pret` | `etablissement.regles` | `circulation` — **disparaît si éteint** | Renouvellement en ligne et mise de côté des réservations. |
 | Page d’accueil *(Établissement)* | `/admin/accueil` | `etablissement.apparence` | noyau | Textes et images de la page publique. |
 | Interopérabilité *(Diffusion)* | `/admin/interoperabilite` | `diffusion.gerer` | `interoperabilite` — **disparaît si éteint** | Ce que l’extérieur peut moissonner de votre catalogue. |
 | Rôles *(Sécurité)* | `/admin/roles` | `securite.roles` | noyau | Qui a le droit de faire quoi. |
@@ -84,10 +85,15 @@ refuser la route par l’API.
 | `/admin/moissonnage/[id]` | outils.catalogue | un entrepôt moissonné et ses comptes rendus de récolte |
 | `/admin/parametres` | quiconque avait l’ancienne adresse | redirige vers « Identité » — l’écran a été scindé en Identité et Règles de prêt, et l’ancienne adresse reste vivante exprès |
 | `/admin/recolement/[id]` | outils.catalogue | une session de récolement en cours |
+| `/confidentialite` | tout visiteur | la politique de confidentialité rédigée par l’établissement — 404 tant qu’elle n’est pas publiée |
 | `/definir-mot-de-passe` | porteur du lien reçu | choix du mot de passe, lien à usage unique |
 | `/e/[slug]` | tout le monde | la page d’inscription par QR d’un établissement |
 | `/inscription` | tout le monde | création d’un compte lecteur |
+| `/installation` | celui qui installe l’instance (jeton d’amorçage) | établissement, domaine, administrateur, modules — en une seule transaction |
 | `/login` | tout le monde | connexion, avec double authentification si l’école l’exige |
+| `/mentions-legales` | tout visiteur | les mentions légales rédigées par l’établissement — 404 tant qu’elles ne sont pas publiées |
+| `/mes-consultations` | tout compte | les documents lus en ligne — l’historique n’est pas encore servi, et l’écran le dit |
+| `/mes-documents-hors-ligne` | tout compte | les documents emportés hors connexion — la liste n’est pas encore servie, et l’écran le dit |
 | `/mes-encadrements` | encadrements.voir | les mémoires et thèses qu’on a dirigés, déjà catalogués |
 | `/mes-prets` | tout compte | mes prêts, mes réservations, mon historique |
 | `/mon-depot` | depot.deposer · module `depot` | déposer son mémoire ou sa thèse et suivre son avancement |

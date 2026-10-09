@@ -85,6 +85,11 @@ describe('découpage par métier (et non plus tout sous Administration)', () => 
       // ⚠ « Modules » EN TÊTE : activer un module décide de ce que les autres
       // écrans montrent. C'est le réglage qui commande les réglages.
       'Modules',
+      // ⚠ Arrivée le 8 octobre 2026, juste avant l'identité et sous la MÊME
+      // fonction : ces deux pages sont ce que l'établissement dit de lui-même
+      // publiquement. L'ordre est celui du fichier, pas un tri — la liste de ce
+      // test est une COPIE ORDONNÉE, donc elle suit le menu.
+      'Mentions et confidentialité',
       'Identité',
       // ⚠ ARRIVÉE LE 26 SEPTEMBRE 2026, en provenance de Guichet : ses quatre
       // routes exigent `etablissement.regles` et non plus `circulation.faire`.

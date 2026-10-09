@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModulesService } from '../modules/modules.service';
 import { tenantSchemaName } from '../tenancy/tenant-schema';
 import { eachBucket, Granularity, previousPeriod, StatsPeriod } from './stats-period';
 import { joinCsvSections, toCsv } from './csv';
@@ -26,7 +27,13 @@ export interface RankRow {
 
 @Injectable()
 export class StatsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // ⚠ POUR LE VOLET DE PRÊTS, et non pour garder le module `statistiques` :
+    // celui-ci est gardé par `@ModuleRequis` sur le contrôleur. Ici on consulte
+    // l'état d'un AUTRE module (`circulation`) pour décider ce qu'on MESURE.
+    private readonly modules: ModulesService,
+  ) {}
 
   /** Table qualifiée par le schéma du tenant (slug validé → sûr en SQL brut). */
   private q(slug: string, table: string): string {
@@ -354,8 +361,65 @@ export class StatsService {
   }
 
   // ── Agrégat pour le dashboard (un seul appel) ─────────────────────────────
+  /**
+   * LE TABLEAU DE BORD, et son VOLET DE PRÊTS n'existe que si la circulation
+   * physique est active.
+   *
+   * *Décision de Jean du 8 octobre 2026 (Q2) : « statistiques ne dépend plus que
+   * de catalogue. Volet prêts présent seulement si circulation est actif ;
+   * sinon refus explicite nommé côté API, jamais des zéros. »*
+   *
+   * 🔴 JAMAIS DES ZÉROS, ET C'EST LE CŒUR DE LA DÉCISION. Une bibliothèque sans
+   * rayon qui lit « 0 prêt, 0 retard, 0 réservation » ne lit pas une absence de
+   * module : elle lit un ÉCHEC. C'est « une non-réponse écrite comme un fait »,
+   * appliqué à une mesure — et le pire des faux silencieux, parce qu'un zéro
+   * dans un tableau de bord se recopie dans un rapport.
+   *
+   * La forme rendue est donc une UNION DISCRIMINÉE : le volet est `actif: true`
+   * avec ses chiffres, ou `actif: false` avec le MODULE NOMMÉ et ce qu'il faut
+   * faire pour l'allumer. Un booléen seul aurait laissé le front inventer la
+   * phrase, et deux formulations d'un même refus divergent.
+   */
   async dashboard(slug: string, tenantId: string, period: StatsPeriod, now: Date = new Date()) {
-    const [kpis, activity, series, mostBorrowed, neverBorrowed, categories, classes, authors, fund, system] =
+    const circulation = await this.modules.estActif(tenantId, 'circulation');
+
+    // ── Le versant CATALOGUE, toujours servi : c'est la seule dépendance du
+    //    module `statistiques` depuis le 8 octobre 2026.
+    const [fund, system] = await Promise.all([
+      this.fundByCategory(slug),
+      this.systemActivity(slug, tenantId, period),
+    ]);
+    const base = {
+      period: {
+        from: period.from.toISOString(),
+        to: period.to.toISOString(),
+        granularity: period.granularity,
+      },
+      fundByCategory: fund,
+      system,
+    };
+
+    if (!circulation) {
+      return {
+        ...base,
+        // ⚠ Les chiffres du fonds restent : un catalogue existe sans rayon.
+        kpis: await this.kpisDuFonds(slug),
+        voletPrets: {
+          actif: false as const,
+          module: 'circulation',
+          libelleModule: 'Circulation physique',
+          // ⚠ LE REFUS DIT QUOI FAIRE, pas seulement ce qui manque — c'est la
+          // propriété que `couverture-des-roles` a rendue obligatoire ici.
+          message:
+            'Le module « Circulation physique » est éteint pour cet établissement : ' +
+            'il n’y a donc ni prêt, ni retour, ni réservation à mesurer. Ce n’est ' +
+            'pas un résultat nul — c’est une mesure qui n’a pas lieu d’être. ' +
+            'Pour l’allumer : Administration › Modules.',
+        },
+      };
+    }
+
+    const [kpis, activity, series, mostBorrowed, neverBorrowed, categories, classes, authors] =
       await Promise.all([
         this.kpis(slug, now),
         this.activity(slug, period),
@@ -365,21 +429,46 @@ export class StatsService {
         this.topCategories(slug, period),
         this.topClasses(slug, period),
         this.topAuthors(slug, period),
-        this.fundByCategory(slug),
-        this.systemActivity(slug, tenantId, period),
       ]);
+    // ⚠ LES SECTIONS DE PRÊT RESTENT À LA RACINE, et c'est le contrat du FRONT.
+    //
+    // Ma première rédaction les imbriquait dans `voletPrets` — plus net sur le
+    // papier, et cela CASSAIT l'écran des statistiques, qui lit `data.activity`
+    // et `data.rankings` à la racine et était déjà livré. Mesuré par leurs huit
+    // tests, pas deviné.
+    //
+    // ⭐ Le consommateur a raison ici : la décision de Jean porte sur « présent
+    // ou refus nommé », pas sur l'arborescence. Changer la forme en plus aurait
+    // été un second lot déguisé en premier.
     return {
-      period: {
-        from: period.from.toISOString(),
-        to: period.to.toISOString(),
-        granularity: period.granularity,
-      },
+      ...base,
       kpis,
       activity,
       timeseries: series,
-      rankings: { mostBorrowed, neverBorrowed, topCategories: categories, topClasses: classes, topAuthors: authors },
-      fundByCategory: fund,
-      system,
+      rankings: {
+        mostBorrowed,
+        neverBorrowed,
+        topCategories: categories,
+        topClasses: classes,
+        topAuthors: authors,
+      },
+      voletPrets: { actif: true as const },
     };
+  }
+
+  /**
+   * LES CHIFFRES DU FONDS SEULS — ce qu'un catalogue porte sans rayon.
+   *
+   * ⚠ `kpis()` en compte QUATRE dont TROIS viennent des prêts (`checkout`,
+   * retards, réservations). Les servir à zéro serait exactement le faux qu'on
+   * évite ; on ne rend donc que celui qui a un sens sans circulation.
+   */
+  async kpisDuFonds(slug: string) {
+    const db = this.prisma.forTenant(slug);
+    const [notices, numeriques] = await Promise.all([
+      db.biblioRecord.count(),
+      db.digitalCopy.count(),
+    ]);
+    return { notices, numeriques };
   }
 }

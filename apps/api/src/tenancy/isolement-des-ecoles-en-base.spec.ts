@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ecolesMesurees } from '../common/base-injoignable';
 import { PrismaClient } from '@prisma/client';
 import { MESSAGE_BASE_INJOIGNABLE } from '../common/base-injoignable';
 
@@ -57,6 +58,10 @@ describe.runIf(process.env.PG_LIVE === '1')('L’isolement entre écoles, en bas
       ecoles = (
         await prisma.tenant.findMany({ select: { id: true, slug: true }, orderBy: { slug: 'asc' } })
       ).filter((e) => avecSchema.has(e.slug));
+      // ⚠ LA SORTIE NOMME CE QUI A ÉTÉ MESURÉ — ce garde COMPARE deux écoles,
+      // et sa propriété n'existe qu'à plusieurs : savoir LESQUELLES est la
+      // moitié du verdict.
+      console.log(ecolesMesurees('isolement', ecoles.map((e) => e.slug)));
     } catch {
       console.warn('[isolement] base injoignable — scénarios ignorés.');
     }

@@ -332,6 +332,6 @@ export class OpacController {
     const ctx = readsAll
       ? null
       : await this.accessControl.buildStudentContext(resolved, db, user.sub);
-    return this.opac.getReadUrl(db, id, ctx);
+    return this.opac.getReadUrl(db, id, ctx, user.sub);
   }
 }
