@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+import { booleenDUrl } from './booleen-url';
 
 export class OpacSearchDto {
   @ApiPropertyOptional({ description: 'Recherche plein texte (titre, auteur, ISBN)' })
@@ -59,4 +61,16 @@ export class OpacSearchDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Ne rendre que les notices ayant un document numérique. ⚠ Filtré PAR LE ' +
+      'MOTEUR (attribut `hasDigital`), contrairement à `avecFichier` de ' +
+      '/parcourir qui se lit en base — c\'est ce qui rend `totalHits` et les ' +
+      'facettes EXACTS sur une recherche plein texte.',
+  })
+  @IsOptional()
+  @Transform(booleenDUrl)
+  @IsBoolean()
+  avecFichier?: boolean;
 }

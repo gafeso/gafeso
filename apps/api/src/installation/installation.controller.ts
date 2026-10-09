@@ -16,11 +16,26 @@ import { InstallationService } from './installation.service';
 import { SessionAssistantGuard } from './session-assistant.guard';
 
 /**
- * L'ASSISTANT D'INSTALLATION — les six routes, et aucune ne survit à
+ * L'ASSISTANT D'INSTALLATION — six routes, dont CINQ ne survivent pas à
  * l'installation : elles répondent alors `410 Gone`.
  *
  * ⚠ `410` et non `404` : « cette route a existé et n'existe plus » est une
  * information juste, là où un 404 ferait chercher une faute de frappe.
+ *
+ * ⚠ 🔴 ET `GET etat` SURVIT, DÉLIBÉRÉMENT. Ce commentaire disait « les six
+ * routes, et AUCUNE ne survit » — c'était faux, et faux de la façon la plus
+ * coûteuse : il décrivait l'inverse d'une décision prise exprès.
+ *
+ * `etat` est la SEULE route appelée sur une instance installée, et c'est elle
+ * qui départage l'assistant de l'écran de connexion. Une route qui existe pour
+ * dire « est-ce installé ? » doit pouvoir répondre NON — et un `410` sur un
+ * appel de routine se lit comme une panne dans un journal.
+ *
+ * Le document de conception portait les deux affirmations, à deux chapitres
+ * d'écart ; c'est l'USAGE qui a tranché, pas la relecture — le front ne pouvait
+ * pas écrire son écran sans savoir laquelle était vraie. Corrigé le 9 octobre
+ * 2026, en documentant l'assistant pour l'UO : le commentaire avait survécu à
+ * la décision qu'il contredit.
  *
  * ⚠ ET CES ROUTES SONT LA SEULE POPULATION DU PRODUIT QUI N'EST GARDÉE NI PAR
  * UNE FONCTION NI PAR UNE CLÉ D'API. C'est la troisième famille de gardes —

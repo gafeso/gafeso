@@ -112,3 +112,8 @@ reconciliation-*.md
 
 # Captures de comparaison P2 (artefacts de travail, jamais du code)
 var/
+
+# Outillage de session local — chemins ABSOLUS de la machine, dont le clone
+# d'une autre session. Il est entré une fois par un `git add -A` ; il ne doit
+# pas être suivi.
+.claude/launch.json

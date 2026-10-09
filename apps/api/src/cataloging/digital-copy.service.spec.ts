@@ -237,7 +237,16 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
       publishYear: 2021,
     });
     expect(result.record.author).toBe('Auteur du fichier');
-    expect(search.indexRecords).toHaveBeenCalledTimes(1);
+    // ⚠ DEUX RÉINDEXATIONS DEPUIS LE 9 OCTOBRE 2026, et c'est voulu.
+    //
+    // La première est INCONDITIONNELLE, juste après l'attachement de la copie :
+    // elle pose `hasDigital` dans l'index. La seconde vient du pré-remplissage
+    // des métadonnées, et pose le titre, l'auteur, l'éditeur extraits du PDF.
+    //
+    // ⚠ Les fondre serait une fausse économie : le pré-remplissage sort par
+    // `return record` quand le fichier n'apporte rien, et l'index dirait alors
+    // « aucun document » sur une notice qui vient d'en recevoir un.
+    expect(search.indexRecords).toHaveBeenCalledTimes(2);
     expect(search.indexRecords.mock.calls[0][0]).toBe('zinda');
   });
 
@@ -249,7 +258,15 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
     await service.upload(db, 'zinda', 'rec-1', pdfFile());
 
     expect(db.biblioRecord.update).not.toHaveBeenCalled();
-    expect(search.indexRecords).not.toHaveBeenCalled();
+    // ⭐ ET POURTANT L'INDEX EST ÉCRIT — c'est exactement le trou corrigé le
+    // 9 octobre 2026. Aucun champ de métadonnée ne change, donc rien à patcher ;
+    // mais la notice vient de RECEVOIR un document, et `hasDigital` doit passer
+    // à vrai. Cette assertion disait `not.toHaveBeenCalled()` : elle figeait un
+    // index qui mentait sur ce cas précis.
+    expect(
+      search.indexRecords,
+      'un document attaché sans métadonnée nouvelle doit QUAND MÊME être indexé',
+    ).toHaveBeenCalledTimes(1);
   });
 
   it('dépose la couverture extraite si la notice n’en a pas déjà une', async () => {
@@ -307,7 +324,17 @@ describe('DigitalCopyService — pré-remplissage à partir des métadonnées ex
     expect(storage.putObject).toHaveBeenCalled(); // le fichier est bien stocké malgré tout
     expect(result.digitalCopy.fileFormat).toBe('PDF');
     expect(result.record.author).toBeNull(); // notice inchangée (patch non appliqué)
-    expect(search.indexRecords).not.toHaveBeenCalled();
+    // ⚠ L'ÉCHEC DU PATCH N'ANNULE PAS L'INDEXATION DE `hasDigital`, et c'est
+    // le bon comportement : le document EST attaché, même si ses métadonnées
+    // n'ont pas pu s'écrire. L'index doit dire ce qui est vrai — « cette notice
+    // a un document » — plutôt que de rester muet parce qu'autre chose a raté.
+    //
+    // Cette assertion disait `not.toHaveBeenCalled()`, ce qui était juste quand
+    // la seule réindexation venait du patch.
+    expect(
+      search.indexRecords,
+      'la réindexation inconditionnelle précède le patch : elle a lieu quand même',
+    ).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -368,13 +395,13 @@ describe('DigitalCopyService — métadonnées et téléchargement', () => {
 
   it('remove supprime la ligne puis l’objet MinIO', async () => {
     db.digitalCopy.findUnique.mockResolvedValue({ objectKey: 'rec-1/file.pdf' });
-    const result = await service.remove(db, 'rec-1');
+    const result = await service.remove(db, 'zinda', 'rec-1');
     expect(db.digitalCopy.delete).toHaveBeenCalledWith({ where: { recordId: 'rec-1' } });
     expect(storage.deleteObject).toHaveBeenCalledWith('rec-1/file.pdf');
     expect(result).toEqual({ deleted: true });
   });
 
   it('remove sur une notice sans exemplaire → 404', async () => {
-    await expect(service.remove(db, 'rec-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.remove(db, 'zinda', 'rec-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

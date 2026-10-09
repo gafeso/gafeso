@@ -12,6 +12,136 @@
 > n'est pas l'exploitant du serveur mais la personne qui fait évoluer
 > l'installation ou le code.
 
+---
+
+## 🔴 LA SÉQUENCE DE DÉPLOIEMENT, EN ENTIER — version comprise
+
+*Mise en tête le 9 octobre 2026, après le déploiement de rc7 : un
+`up -d --build` sans la ligne de version a produit une image qui répond
+« non étiquetée / commit inconnu », **sans aucun avertissement**.*
+
+```bash
+cd /chemin/vers/gafeso
+
+# ① LA VERSION — jamais `main`, toujours une étiquette.
+git fetch --tags
+git tag -l 'v*' | sort -V | tail -5        # les versions disponibles
+git checkout v1.0.0-rc8                     # celle que vous déployez
+
+# ② POSER LA VERSION DANS L'ENVIRONNEMENT. Deux lignes, et l'ordre compte :
+#    le `|| exit 1` doit être sur la SUBSTITUTION, pas sur l'eval.
+V="$(scripts/version-du-depot.sh --exporter)" || exit 1
+eval "$V"
+echo "$GAFESO_VERSION / $GAFESO_COMMIT"     # ⚠ LISEZ-LE avant de continuer
+
+# ③ CONSTRUIRE, puis lancer.
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+
+# ④ VÉRIFIER CE QUI TOURNE — à la destination, jamais dans le compte rendu.
+curl -s https://<votre-domaine>/api/health
+# → {"status":"ok","version":"v1.0.0-rc8","commit":"…",…}
+```
+
+### ⚠ Pourquoi l'étape ② n'est pas optionnelle, et ne l'est plus
+
+La construction **REFUSE** désormais sans version, en deux secondes, avec la
+commande à lancer :
+
+```
+=== REFUS DE CONSTRUIRE — la version n'est pas posée ===
+  GAFESO_VERSION=[]  GAFESO_COMMIT=[]
+  Cette image repondrait « non etiquetee / inconnu » sur /health,
+  sans aucun avertissement. Posez la version AVANT de construire :
+    …
+```
+
+⚠ **Ce qui a été RETIRÉ pour ça** : le compose substituait
+`${GAFESO_VERSION:-non étiquetée}`. Ce défaut était défendable en soi — dire la
+vérité plutôt qu'un numéro plausible — et il était faux à cet endroit : il
+rendait l'OUBLI indiscernable du CHOIX. Sans lui, la variable arrive vide et la
+construction s'arrête.
+
+⚠ **Et le produit garde sa tolérance à l'EXÉCUTION** : un conteneur lancé à la
+main sans ces variables répond « non étiquetée », ce qui est juste — il ne sait
+pas. On refuse de FABRIQUER une image sans version ; on n'interdit pas d'en
+exécuter une.
+
+### 🔴 rc8 : UNE COMMANDE À PASSER APRÈS LA MONTÉE — la réindexation
+
+*La démonstration doit la passer. Tranché le 9 octobre 2026, mesuré.*
+
+rc8 ajoute `hasDigital` aux attributs **filtrables** de l'index. Les réglages
+d'index et les documents existants ne le portent pas : **la réindexation n'est
+pas automatique**, et il faut la lancer UNE FOIS par établissement, après la
+montée.
+
+```bash
+# Pour chaque établissement (la clé est dans .env.prod) :
+curl -s -X POST -H "x-admin-api-key: $ADMIN_API_KEY" \
+  https://api.<votre-domaine>/admin/tenants/<slug>/reindex
+# → {"indexed": 8000}
+```
+
+⚠ **Attendez quelques secondes avant de vérifier** : Meilisearch indexe de
+façon ASYNCHRONE. Une mesure prise juste après rend `0` — ce n'est pas un échec,
+c'est une propagation en cours.
+
+**La vérification :**
+
+```bash
+curl -s 'https://<votre-domaine>/api/opac/search?avecFichier=true&limit=1' | head -c 120
+# → "totalHits": <le nombre de notices ayant un document>
+```
+
+#### ⭐ POURQUOI UNE COMMANDE, ET PAS UNE RÉINDEXATION AUTOMATIQUE AU DÉMARRAGE
+
+Les deux ont été pesées, et la mesure décide :
+
+| | |
+|---|---|
+| coût d'une réindexation | **93 ms** pour 480 notices, **820 ms** pour 8 000 — mesuré |
+| ce qu'elle serait au démarrage | linéaire en taille de fonds, **à CHAQUE redémarrage** |
+
+Le coût unitaire est faible, et ce n'est pas l'argument. Les trois qui décident :
+
+1. **Un redémarrage n'est pas un événement rare.** Le conteneur `api` redémarre
+   sur une mise à jour, un `restart`, une sonde en échec, une coupure. Une
+   réindexation complète à chaque fois est une écriture de masse déclenchée par
+   un événement d'exploitation — et ce dépôt a déjà payé qu'« une exigence neuve
+   peut révéler qu'un mécanisme existant était faux » quand on change la
+   FRÉQUENCE d'appel d'un mécanisme.
+2. **Un client universitaire a dix fois notre fonds d'échelle.** Nos 8 000
+   notices ne sont pas un instrument de mesure : 820 ms chez nous peut être dix
+   secondes chez eux, à chaque démarrage, pendant que la sonde de santé attend.
+3. ⭐ **Et l'oubli est désormais BRUYANT.** C'est ce qui rend la commande
+   acceptable : si vous ne la passez pas, le moteur REFUSE le filtre
+   (`invalid_search_filter`) et le journal de l'`api` dit exactement quoi faire —
+   *« le moteur répond ; c'est l'INDEX qui n'a pas les réglages à jour. Remède :
+   POST /admin/tenants/<slug>/reindex »*. Un garde vivant
+   (`compte-filtre-exact-en-base.spec.ts`) le refuse aussi en développement.
+
+> ⭐ **Une commande à passer n'est tolérable que si l'oublier se voit.** Sans le
+> refus nommé, cette ligne aurait été une invitation à produire un catalogue
+> filtré VIDE — « aucun document numérique » sur un fonds qui en porte 155.
+
+⚠ **Et ce n'est pas une migration de données** : l'index n'est pas dans la
+sauvegarde, et il se reconstruit depuis la base. La réindexation est donc
+rejouable autant de fois qu'on veut, sans risque.
+
+### ⚠ `scripts/version-du-depot.sh` REFUSE aussi, et il a ses raisons
+
+- **si l'arbre a des fichiers SUIVIS modifiés** : l'image ne correspondrait pas
+  à l'étiquette qu'elle porte. Commitez ou remisez d'abord ;
+- **si vous n'êtes pas exactement sur une étiquette** : il exporte
+  `non étiquetée`, ce qui fait maintenant refuser la construction. C'est
+  volontaire — « à peu près sur rc8 » n'est pas une version.
+
+Il **avertit** sans refuser pour les fichiers NON suivis : ils entrent dans le
+contexte de build, et c'est à vous de juger (voir `.dockerignore`).
+
+---
+
 > Déploiement Docker Compose mono-serveur. Le serveur exécute exactement le
 > code du dépôt Git : `git pull` + rebuild, rien d'autre. Pas de Kubernetes,
 > pas de build manuel — conforme au principe « monolithe modulaire, pas de
@@ -184,18 +314,26 @@ qu'aux couvertures d'ouvrages.
 
 ## ⭐ Construire les images : la VERSION se pose au BUILD
 
-```bash
-git fetch --tags && git checkout v1.0.0-rc2
-V="$(scripts/version-du-depot.sh --exporter)" || exit 1
-eval "$V"
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
-```
+> **La séquence est en TÊTE de ce document** — voir « LA SÉQUENCE DE
+> DÉPLOIEMENT, EN ENTIER ». Elle n'est pas répétée ici.
+>
+> ⚠ Ce paragraphe la portait, avec `git checkout v1.0.0-rc2` : un numéro de
+> version figé dans un exemple, qui avait cinq versions de retard. Deux
+> séquences dans un même document finissent par divergier, et le lecteur croit
+> la première qu'il trouve — « corriger en ajoutant à côté ne corrige rien ».
+
+Ce qui reste ici est le MOTIF, qui ne périme pas :
 
 ⚠ **On construit DEPUIS L'ÉTIQUETTE, pas depuis `main`.** `main` avance ; une
 étiquette ne bouge pas. Un build fait sur `main` porte le dernier commit, pas la
-version qu'on croit déployer — et le script le DIRA (`non étiquetée`), ce qui est
-honnête mais pas ce qu'on voulait.
+version qu'on croit déployer.
+
+⚠ *Cette ligne disait : « le script le DIRA (`non étiquetée`), ce qui est honnête
+mais pas ce qu'on voulait ». Depuis le 9 octobre 2026, **la construction
+REFUSE** : « honnête mais pas ce qu'on voulait » décrivait exactement le défaut
+qui a produit l'image muette de rc7. Un avertissement exact devient un mensonge
+quand sa condition disparaît — ici la condition a disparu parce qu'on a posé un
+refus.*
 
 ⚠ **Et `eval "$(…)"` directement serait FAUX.** Cette forme **avale le code de
 sortie** : un refus passerait inaperçu, et le build produirait une image

@@ -114,7 +114,18 @@ const EXCEPTIONS: Exception[] = [
  * suit les chemins LITTÉRAUX, pas les variables. On factorise le CORPS, jamais
  * l'ADRESSE — et ici l'adresse est bien restée au point d'appel.
  */
-const NOMBRE_D_APPELS = 149;
+/*
+ * ⚠ 151 le 9 octobre 2026 : `GET /reader/consultations` et
+ * `GET /reader/hors-ligne`. Les deux écrans de l'espace lecteur ne disent plus
+ * « pas encore » — ils APPELLENT.
+ */
+/*
+ * ⚠ 152 le 9 octobre 2026 : `GET /stats/usage`, le volet d'usage numérique.
+ * ⚠ Il ne dépend PAS du module `circulation` — une bibliothèque sans rayon a des
+ * consultations en ligne et des téléchargements, et c'est même le seul volet de
+ * statistiques qui lui reste.
+ */
+const NOMBRE_D_APPELS = 152;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —

@@ -59,7 +59,7 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement DIX', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement ONZE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
@@ -90,6 +90,12 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
       'collections/nom-de-collection-en-base.spec.ts',
+      // ⭐ ONZIÈME, le 9 octobre 2026 : le compte filtré par le moteur,
+      // confronté au compte en base. Le compte a fait son office — il a obligé
+      // à le classer PAR_ECOLE, à déclarer sa discipline de recette, et il a
+      // REFUSÉ ma première rédaction qui citait la forme interdite dans un
+      // commentaire.
+      'opac/compte-filtre-exact-en-base.spec.ts',
       'roles/roles-systeme-en-base.spec.ts',
       'stats/usage-nominatif-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
@@ -162,6 +168,9 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
     'vocabulaire-des-types-en-base.spec.ts': 'le vocabulaire tel que chaque base le porte',
     'roles-systeme-en-base.spec.ts': 'la dérive des rôles, école par école',
     'usage-nominatif-en-base.spec.ts': 'le compteur, le seuil et la purge, école par école',
+    'compte-filtre-exact-en-base.spec.ts':
+      'il confronte le compte du MOTEUR au compte de la BASE, école par école — ' +
+      'c’est le garde d’EFFET qui voit l’index dériver, quel qu’en soit l’auteur',
     'isolement-des-ecoles-en-base.spec.ts':
       'il COMPARE deux écoles — la propriété n’existe qu’à plusieurs',
     'derive-des-schemas-en-base.spec.ts': 'il confronte chaque schéma d’école au gabarit',

@@ -53,7 +53,52 @@ export type EtatRecherche = 'servi' | 'indisponible';
  */
 export type ReponseRecherche =
   | ({ etat: 'servi' } & SearchResult)
-  | { etat: 'indisponible'; motif: string };
+  | { etat: 'indisponible'; motif: string; cause: CauseIndisponible };
+
+/**
+ * ⭐ POURQUOI LA RECHERCHE N'A PAS RÉPONDU — et les deux causes n'appellent pas
+ * le même geste.
+ *
+ * *Ajouté le 9 octobre 2026, en indexant `hasDigital`.*
+ *
+ * Le `catch` de `search()` rendait `indisponible` pour TOUT. Or le moteur
+ * refuse aussi, avec un `400`, un filtre portant sur un attribut qui n'est pas
+ * déclaré filtrable — et c'est un filtre que LE PRODUIT ÉMET. Mesuré :
+ *
+ *     Attribute `hasDigital` is not filterable. Available filterable
+ *     attributes are: `recordType language keywords publishYear category`.
+ *
+ * ⚠ Ce n'est PAS une indisponibilité : le moteur va très bien, il refuse une
+ * question mal posée. Les confondre a deux coûts :
+ *   · l'exploitant lit « recherche indisponible » et regarde le conteneur
+ *     Meilisearch, qui est en parfaite santé ;
+ *   · et il n'y a rien à ATTENDRE — le remède est une réindexation, pas de la
+ *     patience.
+ *
+ * > ⭐ C'est « un booléen qui refuse détruit le motif à la source », appliqué à
+ * > un état : `indisponible` répondait pour deux raisons étrangères l'une à
+ * > l'autre, et aucun appelant ne pouvait les séparer.
+ *
+ * ⚠ LE COMPORTEMENT PUBLIC NE CHANGE PAS : les deux causes rendent toujours un
+ * 503 sur l'OPAC, jamais un catalogue vide. Ce qui change est ce que le JOURNAL
+ * et les gardes peuvent dire.
+ */
+export type CauseIndisponible = 'moteur' | 'filtre_refuse';
+
+/**
+ * Reconnaît le refus de filtre du moteur — par son CODE, pas par son texte.
+ *
+ * ⚠ Meilisearch rend `code: 'invalid_search_filter'`. On teste donc le code et,
+ * à défaut, la phrase « is not filterable » : un message traduit ou reformulé
+ * casserait un test sur le texte seul, et le code est stable par contrat.
+ */
+export function estUnFiltreRefuse(error: unknown): boolean {
+  const e = error as { code?: string; message?: string };
+  return (
+    e?.code === 'invalid_search_filter' ||
+    /is not filterable|invalid_search_filter/i.test(e?.message ?? '')
+  );
+}
 
 /**
  * Réponse de `SearchService.countDocuments` — même union que la recherche.
@@ -68,6 +113,35 @@ export type ReponseRecherche =
 export type ReponseComptage =
   | { etat: 'servi'; documents: number }
   | { etat: 'indisponible'; motif: string };
+
+/**
+ * ⭐ LA PROJECTION À CHARGER POUR CONSTRUIRE UN DOCUMENT D'INDEX — déclarée UNE
+ * FOIS, et employée par les dix sites.
+ *
+ * *Posée le 9 octobre 2026, et c'est le GARDE D'EFFET qui l'a rendue
+ * nécessaire.*
+ *
+ * `hasDigital` est calculé depuis la relation `digitalCopy`. Un site qui charge
+ * une notice SANS cette relation construit donc un document portant
+ * `hasDigital: false` — **en silence**, puisque `undefined` et « pas de copie »
+ * donnent le même booléen.
+ *
+ * ⚠ C'est exactement ce qui est arrivé : la réindexation complète
+ * (`POST /admin/tenants/:slug/reindex`) ne chargeait pas la relation, et elle a
+ * écrit `false` sur les 8 480 notices des deux écoles. Le compte filtré l'a dit
+ * — « le moteur dit 0, la base porte 155 » — là où aucune relecture des dix
+ * sites ne l'aurait montré.
+ *
+ * > ⭐ **Dix sites à tenir d'accord à la main sont dix occasions d'oublier.**
+ * > Une projection déclarée n'en laisse qu'une : celle d'oublier d'employer la
+ * > constante — et `projection-dindex-unique.spec.ts` la refuse.
+ */
+export const INCLUDE_POUR_INDEX = {
+  contributors: { orderBy: { position: 'asc' as const } },
+  keywords: { include: { keyword: true } },
+  /** La relation, pas un booléen : voir le paramètre de `buildRecordSearchDoc`. */
+  digitalCopy: { select: { encStatus: true } },
+} as const;
 
 export function buildRecordSearchDoc(record: {
   id: string;
@@ -84,6 +158,21 @@ export function buildRecordSearchDoc(record: {
   coverUrl: string | null;
   contributors?: { name: string; role?: string; position?: number; authorId?: string | null }[];
   keywords?: string[] | { keyword: { name: string } }[];
+  /**
+   * ⚠ LA RELATION, PAS UN BOOLÉEN DÉJÀ CALCULÉ — et c'est délibéré.
+   *
+   * Si l'appelant passait `hasDigital: boolean`, chaque site de construction
+   * devrait le calculer, et un site qui oublie `include: { digitalCopy }`
+   * passerait `false` SANS QUE RIEN NE LE DISE. En recevant la relation, un
+   * appelant qui ne l'a pas chargée passe `undefined` — et le compte filtré
+   * (`totalHits` confronté à la base) le voit.
+   *
+   * ⚠ `undefined` et `null` ne veulent PAS dire la même chose : `null` =
+   * « chargée, et il n'y en a pas » ; `undefined` = « pas chargée ». Les deux
+   * donnent `false`, et c'est le moins mauvais choix — mais le second est un
+   * DÉFAUT, et seul le compte exact le trouve.
+   */
+  digitalCopy?: { encStatus?: string | null } | null;
 }): RecordSearchDoc {
   const ordered = [...(record.contributors ?? [])].sort(
     (a, b) => (a.position ?? 0) - (b.position ?? 0),
@@ -114,6 +203,11 @@ export function buildRecordSearchDoc(record: {
     publishYear: record.publishYear,
     recordType: record.recordType,
     coverUrl: record.coverUrl,
+    // ⚠ L'EXISTENCE, pas la préparation hors ligne — le même sens que sur la
+    // notice publique. `offlineReady` n'est PAS indexé : rien ne le filtre, et
+    // un attribut filtrable de plus est une seconde source de plus à tenir
+    // d'accord. On indexe ce qu'on filtre, et rien de plus.
+    hasDigital: record.digitalCopy != null,
   };
 }
 
@@ -235,11 +329,26 @@ export class SearchService {
       return { etat: 'servi', ...(await this.engine.search(slug, params)) };
     } catch (error) {
       const motif = (error as Error).message;
+      if (estUnFiltreRefuse(error)) {
+        // ⚠ LE MOTEUR VA BIEN : il refuse un filtre que NOUS avons émis sur un
+        // attribut qu'il ne sait pas filtrer. Le remède est une réindexation,
+        // pas de la patience — et le journal doit le dire, sinon l'exploitant
+        // regarde le conteneur.
+        this.logger.error(
+          `Recherche ${this.engine.name} : FILTRE REFUSÉ (${slug}) — ${motif}\n` +
+            `⚠ Le moteur répond ; c'est l'INDEX qui n'a pas les réglages à jour. ` +
+            `Un attribut filtrable a été ajouté au code sans réindexation. ` +
+            `Remède : POST /admin/tenants/${slug}/reindex (il repose les réglages ` +
+            `ET les documents). Voir DEPLOY.md, « monter une version qui ajoute ` +
+            `un attribut filtrable ».`,
+        );
+        return { etat: 'indisponible', motif, cause: 'filtre_refuse' };
+      }
       this.logger.warn(
         `Recherche ${this.engine.name} indisponible (${slug}) : ${motif} — ` +
           `état « indisponible » rendu à l'appelant (JAMAIS un résultat vide).`,
       );
-      return { etat: 'indisponible', motif };
+      return { etat: 'indisponible', motif, cause: 'moteur' };
     }
   }
 }

@@ -105,6 +105,20 @@ describe('caractérisation — les trois champs dans le document de recherche', 
     expect(doc).not.toHaveProperty('defensePlace');
   });
 
+  /**
+   * ⚠ MISE À JOUR DÉLIBÉRÉMENT le 9 octobre 2026 — `hasDigital` entre dans le
+   * document indexé.
+   *
+   * Un instantané se met à jour par un GESTE, jamais par `-u` lancé « pour que
+   * ça passe ». Celui-ci a refusé l'ajout, et c'est son office : il fige la
+   * FORME du document envoyé au moteur, octet pour octet, parce qu'un champ qui
+   * s'y glisse part dans l'index de toutes les écoles sans qu'aucune décision
+   * ne le prévoie.
+   *
+   * La décision est écrite dans `FILTERABLE_ATTRIBUTES` : `hasDigital` est
+   * indexé pour que le compte filtré soit EXACT, et les deux transitions qui le
+   * changent réindexent désormais (`DigitalCopyService.reindexerApresTransition`).
+   */
   it('⚠ EMPREINTE DU DOCUMENT DE RECHERCHE : figée à l’octet', () => {
     expect(doc).toMatchSnapshot();
   });

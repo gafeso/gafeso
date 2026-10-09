@@ -48,8 +48,24 @@ export default function PagesLegalesPage() {
       // ⚠ L'écran lit la charge COMPLÈTE des réglages, pas la vue publique :
       // `GET /tenancy/home` ne rend que ce qui est PUBLIÉ, donc il ne montrerait
       // jamais un brouillon. C'est le même piège que l'accueil, déjà tranché là.
+      /*
+       * ⚠⚠ `GET /tenancy/settings` N'EXISTE PAS — mesuré le 9 octobre 2026 par
+       * une recette : l'écran affichait « Cannot GET /tenancy/settings ». Je
+       * l'avais écrit contre une route que je n'avais jamais appelée, et c'est
+       * exactement « une doublure est une hypothèse, et un test vert ne confirme
+       * que moi » : mes 14 cas doublaient `api()`, donc aucun ne pouvait me
+       * démentir.
+       *
+       * Les routes qui existent sont `GET /tenancy/home` (le PUBLIÉ seulement,
+       * via `pourLePublic`), `GET /current`, `GET /descriptor`, et
+       * `PATCH /settings`. Aucune ne rend un BROUILLON.
+       *
+       * ⚠ On lit donc le PUBLIÉ en attendant la route, et c'est une borne
+       * écrite, pas un contournement : un brouillon enregistré n'est pas
+       * relisible, et la demande est en passation.
+       */
       const r = await api<{ pagesLegales?: Record<ClePageLegale, PageLegale> }>(
-        '/tenancy/settings',
+        '/tenancy/home',
       );
       setPages({
         mentions: r.pagesLegales?.mentions ?? VIDE,
@@ -65,6 +81,23 @@ export default function PagesLegalesPage() {
   }, [charger]);
 
   async function envoyer(suivant: Record<ClePageLegale, PageLegale>) {
+    /*
+     * ⚠⚠ ON N'ENREGISTRE JAMAIS SI ON N'A PAS PU LIRE, et c'est la garantie la
+     * plus importante de cet écran.
+     *
+     * `PATCH /tenancy/settings` fait un REMPLACEMENT COMPLET de `pagesLegales`
+     * (« comme l'accueil », dit le service). Un écran qui n'a pas chargé l'état
+     * courant et qui enregistre quand même ÉCRASE tout ce qui s'y trouvait —
+     * y compris une page publiée que personne ne voulait retirer.
+     *
+     * ⭐ C'est « une fonction qui ne peut pas accomplir son office ne doit pas
+     * sortir comme si elle l'avait accompli », appliqué à une ÉCRITURE : ici
+     * l'office est « modifier », et modifier sans avoir lu est écraser.
+     */
+    if (!pages) {
+      setErreur(T.refusEnregistrerSansLecture);
+      return;
+    }
     setErreur(null);
     setNotice(null);
     setEnCours(true);
@@ -94,6 +127,10 @@ export default function PagesLegalesPage() {
     <main id={ID_CONTENU} className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="font-serif text-2xl font-bold">{T.editeurTitre}</h1>
       <p className="mt-2 text-sm text-muted">{T.editeurAide}</p>
+      {/* ⚠ LA BORNE EST DITE À L'ÉCRAN, pas seulement en commentaire : un texte
+          enregistré sans être publié ne se relit pas, et le taire ferait croire
+          à une perte de données. */}
+      <Alert tone="warning" className="mt-3">{T.brouillonNonRelisible}</Alert>
       {erreur && <Alert tone="error" className="mt-4">{erreur}</Alert>}
       {notice && <Alert tone="success" className="mt-4">{notice}</Alert>}
       {!pages && !erreur && <p className="mt-6 text-sm text-muted">{LIBELLES.commun.chargement}</p>}

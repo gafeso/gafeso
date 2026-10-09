@@ -532,26 +532,121 @@ export const LIBELLES = {
    * jour où l'API expose une route de consultation ou de licence hors ligne pour
    * le lecteur. Le texte explique ; seul le test se souvient.
    */
+  /**
+   * L'ESPACE LECTEUR D'UNE BIBLIOTHÈQUE NUMÉRIQUE — les deux routes servent
+   * depuis le 9 octobre 2026.
+   *
+   * ⚠ CES TEXTES DISAIENT « PAS ENCORE DISPONIBLE », et c'était JUSTE quand on
+   * les a écrits : la passation ne mentionnait ni `/reader/consultations` ni
+   * `/reader/hors-ligne`. Ils sont devenus FAUX le matin où les routes ont été
+   * livrées — et c'est exactement la famille « un avertissement exact devient un
+   * mensonge quand sa condition disparaît ».
+   *
+   * ⚠ Le garde `espace-lecteur-pas-encore.spec.ts` est RETOURNÉ : il refuse
+   * désormais « pas encore » sur ces écrans. Le texte explique ; seul le test se
+   * souvient.
+   */
+  /**
+   * LE VOLET USAGE DES STATISTIQUES — `GET /stats/usage` (rc7).
+   *
+   * ⚠ AGRÉGÉ, ET UNIQUEMENT AGRÉGÉ. Aucune route d'administration ne restitue
+   * l'historique d'un lecteur nommé, et l'écran ne doit pas donner l'impression
+   * du contraire.
+   */
+  usage: {
+    titre: 'Usage numérique',
+    intro:
+      'Les consultations en ligne et les téléchargements de la période. Agrégés : ' +
+      'aucun lecteur n’est nommé, et aucune liste ne permet de remonter à quelqu’un.',
+    parDocument: 'Documents les plus consultés',
+    parJour: 'Consultations et téléchargements dans le temps',
+    parFiliere: 'Par classe',
+    colConsultations: 'Consultations en ligne',
+    colTelechargements: 'Téléchargements',
+
+    /**
+     * ⭐⭐ LA PHRASE QUI REMPLACE LES CHIFFRES SOUS LE SEUIL.
+     *
+     * L'API masque les comptes à **-1** quand une classe compte moins de cinq
+     * lecteurs distincts, et elle le DIT (`publiable: false`). Trois règles
+     * tiennent cette ligne, et chacune corrige un faux différent :
+     *
+     * · ⚠ **jamais le NOMBRE** — ni les comptes (−1 n'est pas une mesure), ni
+     *   l'effectif. « 3 lecteurs » est exactement la divulgation que le seuil
+     *   existe pour empêcher : dans une classe de trois, un collègue sait qui.
+     *   C'est « un agrégat sur une petite population est une donnée personnelle
+     *   déguisée », et le seuil ne protège que si on ne publie pas le compte
+     *   qui l'a déclenché.
+     * · ⚠ **jamais une ligne ABSENTE** — une absence muette se lit comme un
+     *   zéro, c'est-à-dire « cette classe ne lit rien ». Le faux serait pire que
+     *   le silence qu'on cherchait.
+     * · ⚠ **et elle dit POURQUOI** : sans le motif, un gestionnaire croit à une
+     *   panne de calcul et la cherche.
+     */
+    nonPubliable: (seuil: number) =>
+      `moins de ${seuil} lecteurs : non publié pour protéger la vie privée`,
+    /** L'état vide, et il est SANS ambiguïté : on sait, et il n'y a rien. */
+    acces: 'accès',
+    aucunUsage: 'Aucune consultation en ligne ni téléchargement sur cette période.',
+  },
+
   espaceLecteur: {
     consultations: {
       titre: 'Mes consultations',
-      /** ⚠ Dit ce qui MANQUE et à qui s'adresser — jamais « revenez plus tard ». */
-      pasEncore:
-        'L’historique de vos lectures en ligne n’est pas encore disponible sur cette installation.',
-      sortie:
-        'Vos documents restent accessibles depuis le catalogue : cherchez-les par titre ou par auteur.',
+      /**
+       * ⚠ `retentionMois` EST SERVI EXPRÈS, ET IL FAUT L'AFFICHER. Les
+       * consultations plus anciennes ont perdu leur nom (purge) : elles
+       * n'apparaissent plus. Sans cette phrase, un étudiant dont l'historique
+       * s'arrête croira que le produit a PERDU ses données.
+       */
+      retention: (mois: number) =>
+        `Votre historique nominatif est conservé ${mois} mois. Au-delà, les consultations ` +
+        `restent comptées dans les statistiques de l’établissement, sans votre nom.`,
+      /**
+       * ⚠ DEUX NATURES, ET JAMAIS « LUE ». On observe la délivrance d'une URL,
+       * pas une lecture — et la lecture hors connexion n'est pas tracée. Dire
+       * « lu » affirmerait un fait que le produit ne peut pas connaître, à la
+       * personne même qui saurait qu'il est faux.
+       */
+      natureConsultation: 'consultée en ligne',
+      natureTelechargement: 'téléchargée',
+      /**
+       * ⚠ UN `titre` NULL SE DIT. Une notice supprimée depuis la consultation
+       * laisse une ligne sans nom : l'afficher en blanc donnerait une liste
+       * d'identifiants, et un étudiant croirait à un défaut d'affichage.
+       */
+      noticeRetiree: 'Notice retirée du catalogue',
+      /** L'état vide, et il est SANS ambiguïté : on sait, et il n'y a rien. */
+      aucune: 'Vous n’avez encore consulté aucun document en ligne.',
+      colonneQuand: 'Date',
+      colonneQuoi: 'Document',
+      colonneNature: 'Accès',
     },
     horsLigne: {
       titre: 'Mes documents hors ligne',
-      pasEncore:
-        'La liste des documents que vous avez emportés hors connexion n’est pas encore disponible sur cette installation.',
       /**
-       * ⚠ NE PROMET PAS l'application mobile : elle existe, elle n'est pas
-       * publiée, et ce dépôt ne publie rien. Le texte dit ce qu'on sait — où la
-       * lecture hors ligne se fait — sans annoncer un téléchargement.
+       * ⚠ « EMPORTÉS », JAMAIS « LUS ». Ce sont les documents DÉLIVRÉS à un
+       * appareil : le produit ne sait pas si vous les avez ouverts, et il ne le
+       * saura pas.
        */
-      sortie:
-        'La lecture hors connexion se fait depuis l’application de lecture, sur votre appareil.',
+      intro:
+        'Les documents délivrés à vos appareils pour la lecture sans réseau. ' +
+        'Chaque bail a une échéance ; au-delà, le document se redemande.',
+      /**
+       * ⚠⚠ L'ÉTAT VIDE NE DIT PAS « VOUS N'AVEZ JAMAIS RIEN EMPORTÉ », et c'est
+       * une décision mesurée : la route ne sert QUE les baux NON EXPIRÉS. Le
+       * produit ne PEUT donc pas distinguer « jamais rien emporté » de « plus
+       * rien en cours ». Affirmer le premier serait un faux sur l'histoire de
+       * quelqu'un — on dit ce qu'on sait, et on dit la règle qui l'explique.
+       */
+      aucunEnCours: 'Aucun document n’est emporté en ce moment.',
+      aucunEnCoursMotif:
+        'Seuls les documents dont le bail court encore apparaissent ici : un bail échu ' +
+        'disparaît de cette liste, même si vous aviez emporté le document.',
+      expireLe: (d: Date) =>
+        `Bail jusqu’au ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+      appareil: 'Appareil',
+      noticeRetiree: 'Notice retirée du catalogue',
     },
   },
 
@@ -602,6 +697,34 @@ export const LIBELLES = {
     depublier: 'Retirer de la ligne',
     enregistrer: 'Enregistrer',
     nonPubliee: 'Non publiée — invisible du public, et son lien n’est pas affiché.',
+
+    /**
+     * ⚠⚠ LE REFUS D'ÉCRIRE SANS AVOIR LU — et il explique le DANGER, pas la
+     * panne.
+     *
+     * `PATCH /tenancy/settings` remplace `pagesLegales` EN ENTIER. Un écran qui
+     * n'a pas pu charger l'état courant et qui enregistrerait quand même
+     * écraserait tout ce qui s'y trouvait, y compris une page PUBLIÉE que
+     * personne ne voulait retirer. Le refus est donc la bonne réponse — et il
+     * doit dire ce qu'il protège, sinon il se lit comme une panne qu'on
+     * contourne en rechargeant.
+     */
+    refusEnregistrerSansLecture:
+      'Le contenu actuel n’a pas pu être chargé : enregistrer maintenant remplacerait ' +
+      'tout ce qui s’y trouve, y compris une page déjà publiée. Rechargez la page ; ' +
+      'si l’erreur persiste, signalez-la avant de réessayer.',
+
+    /**
+     * ⚠ LA BORNE, DITE À L'ÉCRAN. Aucune route ne rend un BROUILLON : seule la
+     * version PUBLIÉE est relisible (`GET /tenancy/home` passe par
+     * `pourLePublic`). Un texte saisi puis enregistré sans être publié ne se
+     * retrouvera donc pas au prochain chargement — et le taire ferait croire à
+     * une perte de données.
+     */
+    brouillonNonRelisible:
+      'Seules les pages déjà publiées sont rechargées ici. Un texte enregistré sans ' +
+      'être publié ne réapparaîtra pas tant que l’API ne saura pas le relire : ' +
+      'publiez, ou gardez votre texte de côté.',
   },
 
   installation: {

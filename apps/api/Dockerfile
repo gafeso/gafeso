@@ -85,8 +85,39 @@ ENV NODE_ENV=production
 # ⚠ Posés sur l'étage `runner` seulement : un ARG sur un étage de build
 # invaliderait le cache de compilation à CHAQUE commit, pour deux chaînes qui
 # n'entrent dans aucun calcul.
-ARG GAFESO_VERSION="non étiquetée"
-ARG GAFESO_COMMIT="inconnu"
+# 🔴 PLUS DE DÉFAUT, ET UN REFUS — 9 octobre 2026.
+#
+# Les défauts « non étiquetée » / « inconnu » étaient les réponses HONNÊTES d'un
+# build fait sans arguments. Ils rendaient aussi l'OUBLI indiscernable du choix :
+# un `up -d --build` sans `eval "$(scripts/version-du-depot.sh --exporter)"`
+# produisait une image muette sur sa version, et personne ne le savait avant
+# d'interroger `/health`. Constaté au déploiement de rc7.
+#
+# ⚠ `version.ts` garde sa tolérance : une valeur vide y devient « non étiquetée ».
+# C'est juste — un conteneur lancé à la main doit DIRE qu'il ne sait pas. Ce
+# refus-ci porte sur la CONSTRUCTION, qui est un geste délibéré avec une
+# commande à lancer. Les deux ne se contredisent pas : on refuse de FABRIQUER
+# une image sans version, on n'interdit pas d'en EXÉCUTER une.
+ARG GAFESO_VERSION=""
+ARG GAFESO_COMMIT=""
+RUN if [ -z "$GAFESO_VERSION" ] || [ -z "$GAFESO_COMMIT" ]; then \
+      echo "" >&2; \
+      echo "=== REFUS DE CONSTRUIRE — la version n'est pas posée ===" >&2; \
+      echo "" >&2; \
+      echo "  GAFESO_VERSION=[$GAFESO_VERSION]  GAFESO_COMMIT=[$GAFESO_COMMIT]" >&2; \
+      echo "" >&2; \
+      echo "  Cette image repondrait « non etiquetee / inconnu » sur /health," >&2; \
+      echo "  sans aucun avertissement. Posez la version AVANT de construire :" >&2; \
+      echo "" >&2; \
+      echo "    git fetch --tags && git checkout <etiquette>" >&2; \
+      echo "    V=\"\$(scripts/version-du-depot.sh --exporter)\" || exit 1" >&2; \
+      echo "    eval \"\$V\"" >&2; \
+      echo "    docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build" >&2; \
+      echo "" >&2; \
+      echo "  La sequence complete est en tete de DEPLOY.md." >&2; \
+      echo "" >&2; \
+      exit 1; \
+    fi
 ENV GAFESO_VERSION=$GAFESO_VERSION
 ENV GAFESO_COMMIT=$GAFESO_COMMIT
 

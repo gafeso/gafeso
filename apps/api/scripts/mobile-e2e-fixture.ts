@@ -3,7 +3,7 @@
  *
  * Sous-commandes :
  *   create            → provisionne un document offline-ready dans tenant_zinda + le droit
- *                       d'accès, et imprime un JSON { tenant, token, docId, ids… } ;
+ *                       d'accès, et imprime un JSON { tenant, docId, ids… } ;
  *   create-big <blob> <cekHex>
  *                     → même chose, mais réutilise un blob GAFS1 DÉJÀ chiffré (le vrai scan
  *                       lourd du fonds) : évite de re-chiffrer des centaines de Mo, et c'est
@@ -53,7 +53,6 @@
 import { readFileSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import jwt from 'jsonwebtoken';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
   CONTENT_ALGO,
@@ -82,6 +81,25 @@ function s3(): S3Client {
     },
     forcePathStyle: true,
   });
+}
+
+/**
+ * La classe de l'étudiante d'essai — et un REFUS si elle n'en a pas.
+ *
+ * ⚠ Une règle d'accès sans `className` est OUVERTE À TOUS : la poser ici
+ * ouvrirait le document à tout le monde, et la fixture éprouverait l'inverse de
+ * ce qu'elle annonce — « un élargissement qui laisse la restriction visible est
+ * pire qu'un qui la supprime ».
+ */
+function classeDeLEtudiante(etudiante: { email: string; className: string | null }): string {
+  if (!etudiante.className) {
+    throw new Error(
+      `${etudiante.email} n'a aucune classe : la règle d'accès serait OUVERTE À ` +
+        'TOUS, et cette fixture éprouve précisément une restriction. Lancez ' +
+        '`npm run comptes:recette`, qui rattache le compte à une classe réelle.',
+    );
+  }
+  return etudiante.className;
 }
 
 function clients() {
@@ -194,13 +212,26 @@ async function create() {
     const tenant = await pub.tenant.findUnique({ where: { slug: 'zinda' } });
     if (!tenant) throw new Error('tenant zinda absent');
 
-    const student = await zdb.user.findFirst({ where: { email: 'awa@exemple.bf' } });
-    if (!student) throw new Error('étudiante awa@exemple.bf absente');
-    const token = jwt.sign(
-      { sub: student.id, email: student.email, role: 'STUDENT', tenant: 'zinda' },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '1h' },
-    );
+    // ⚠ LE COMPTE QUE L'E2E EMPLOIE, pas un compte de démonstration.
+    //
+    // Mesuré le 9 octobre 2026, après la bascule du mobile : leur test MVP se
+    // connecte par `POST /auth/login` avec `recette-etu@` puis affirme
+    // `session.userId === fx['userId']`. Avec l'ancienne cible (`awa@`), cette
+    // égalité était FAUSSE — la fixture rendait l'id d'une autre personne.
+    //
+    // ⚠ Et le mot de passe d'`awa@` est tiré au hasard à chaque seed : un e2e
+    // qui s'y connecte n'est pas rejouable. C'est tout l'objet de
+    // `scripts/dev/comptes-de-recette.mjs`.
+    const student = await zdb.user.findFirst({
+      where: { email: 'recette-etu@exemple.bf' },
+      select: { id: true, email: true, className: true },
+    });
+    if (!student) {
+      throw new Error(
+        'recette-etu@exemple.bf absente — lancez `npm run comptes:recette` ' +
+          "d'abord : c'est lui qui pose les comptes d'essai par les routes du produit.",
+      );
+    }
 
     // Document multi-pages (exerce la pagination du lecteur).
     const doc = await PDFDocument.create();
@@ -273,7 +304,17 @@ async function create() {
     });
     pose.push({ quoi: 'collection', id: collection.id });
     const rule = await pub.accessRule.create({
-      data: { collectionId: collection.id, tenantId: tenant.id, className: 'L1_DROIT' },
+      // ⚠ LA CLASSE EST DÉRIVÉE DU COMPTE, jamais écrite en dur.
+      //
+      // Le mobile l'a trouvé en basculant : `recette-etu@` est en `L1`, et la
+      // règle visait `L1_DROIT`. Garder la classe en dur aurait produit un
+      // REFUS DE LICENCE — un échec dont la cause n'aurait pas été lisible,
+      // puisque l'authentification, elle, aurait réussi.
+      //
+      // ⚠ Et on REFUSE si le compte n'a pas de classe, plutôt que de poser une
+      // règle sans `className` : une règle à classe nulle est une règle OUVERTE
+      // À TOUS, donc l'inverse de ce que cette fixture éprouve.
+      data: { collectionId: collection.id, tenantId: tenant.id, className: classeDeLEtudiante(student) },
     });
     pose.push({ quoi: 'accessRule', id: rule.id });
     const link = await pub.collectionTitle.create({
@@ -284,7 +325,6 @@ async function create() {
     console.log(
       JSON.stringify({
         tenant: 'zinda',
-        token,
         userId: student.id,
         docId: record.id,
         recordId: record.id,
@@ -327,13 +367,26 @@ async function createBig(blobPath: string, cekHex: string) {
   try {
     const tenant = await pub.tenant.findUnique({ where: { slug: 'zinda' } });
     if (!tenant) throw new Error('tenant zinda absent');
-    const student = await zdb.user.findFirst({ where: { email: 'awa@exemple.bf' } });
-    if (!student) throw new Error('étudiante awa@exemple.bf absente');
-    const token = jwt.sign(
-      { sub: student.id, email: student.email, role: 'STUDENT', tenant: 'zinda' },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '2h' },
-    );
+    // ⚠ LE COMPTE QUE L'E2E EMPLOIE, pas un compte de démonstration.
+    //
+    // Mesuré le 9 octobre 2026, après la bascule du mobile : leur test MVP se
+    // connecte par `POST /auth/login` avec `recette-etu@` puis affirme
+    // `session.userId === fx['userId']`. Avec l'ancienne cible (`awa@`), cette
+    // égalité était FAUSSE — la fixture rendait l'id d'une autre personne.
+    //
+    // ⚠ Et le mot de passe d'`awa@` est tiré au hasard à chaque seed : un e2e
+    // qui s'y connecte n'est pas rejouable. C'est tout l'objet de
+    // `scripts/dev/comptes-de-recette.mjs`.
+    const student = await zdb.user.findFirst({
+      where: { email: 'recette-etu@exemple.bf' },
+      select: { id: true, email: true, className: true },
+    });
+    if (!student) {
+      throw new Error(
+        'recette-etu@exemple.bf absente — lancez `npm run comptes:recette` ' +
+          "d'abord : c'est lui qui pose les comptes d'essai par les routes du produit.",
+      );
+    }
 
     const blob = readFileSync(blobPath);
     if (blob.subarray(0, 5).toString('latin1') !== 'GAFS1') {
@@ -400,7 +453,17 @@ async function createBig(blobPath: string, cekHex: string) {
     });
     pose.push({ quoi: 'collection', id: collection.id });
     const rule = await pub.accessRule.create({
-      data: { collectionId: collection.id, tenantId: tenant.id, className: 'L1_DROIT' },
+      // ⚠ LA CLASSE EST DÉRIVÉE DU COMPTE, jamais écrite en dur.
+      //
+      // Le mobile l'a trouvé en basculant : `recette-etu@` est en `L1`, et la
+      // règle visait `L1_DROIT`. Garder la classe en dur aurait produit un
+      // REFUS DE LICENCE — un échec dont la cause n'aurait pas été lisible,
+      // puisque l'authentification, elle, aurait réussi.
+      //
+      // ⚠ Et on REFUSE si le compte n'a pas de classe, plutôt que de poser une
+      // règle sans `className` : une règle à classe nulle est une règle OUVERTE
+      // À TOUS, donc l'inverse de ce que cette fixture éprouve.
+      data: { collectionId: collection.id, tenantId: tenant.id, className: classeDeLEtudiante(student) },
     });
     pose.push({ quoi: 'accessRule', id: rule.id });
     const link = await pub.collectionTitle.create({
@@ -411,7 +474,6 @@ async function createBig(blobPath: string, cekHex: string) {
     console.log(
       JSON.stringify({
         tenant: 'zinda',
-        token,
         userId: student.id,
         docId: record.id,
         recordId: record.id,

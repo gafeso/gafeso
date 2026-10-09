@@ -37,6 +37,19 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'espaceLecteur.consultations.retention',
+    nature: 'promet',
+    raison:
+      'Elle promet une DURÉE, et c’est la seule phrase qui explique pourquoi la ' +
+      'liste s’arrête. Sans elle, un étudiant dont l’historique commence il y a ' +
+      'douze mois croit que le produit a PERDU ses données — et il le croit à ' +
+      'raison, puisque rien à l’écran ne lui dit autre chose. ' +
+      '⚠ Elle doit donc dire le NOMBRE DE MOIS servi par l’API (jamais une durée ' +
+      'écrite en dur) ET que les consultations plus anciennes restent COMPTÉES ' +
+      'sans son nom : « supprimées » et « anonymisées » ne sont pas la même ' +
+      'promesse, et c’est la seconde que le produit tient.',
+  },
+  {
     cle: 'refusDeDroit.pagesLegales',
     nature: 'promet',
     raison:
@@ -46,26 +59,6 @@ export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
       '⚠ Ces pages engagent juridiquement l’établissement : quelqu’un qui ne peut ' +
       'pas les rédiger doit savoir QUI peut, sans quoi elles ne seront jamais ' +
       'publiées et le pied de page restera muet.',
-  },
-  {
-    cle: 'espaceLecteur.consultations.sortie',
-    nature: 'promet',
-    raison:
-      'C’est la SORTIE d’un écran qui annonce une absence — et une information ' +
-      'sans issue ne sert à rien. Elle doit dire OÙ le lecteur retrouve ses ' +
-      'documents en attendant que l’historique existe : le catalogue, et par ' +
-      'quoi l’y chercher. ⚠ Elle ne doit promettre aucune date ni aucune ' +
-      'livraison — « bientôt » daterait sa propre péremption.',
-  },
-  {
-    cle: 'espaceLecteur.horsLigne.sortie',
-    nature: 'promet',
-    raison:
-      'Même office, et une interdiction de plus : elle ne doit PAS promettre ' +
-      'l’application mobile. Elle existe, elle n’est pas publiée, et ce dépôt ne ' +
-      'publie rien — annoncer un téléchargement que personne ne peut obtenir ' +
-      'serait le faux qui retire le seul recours. Elle dit OÙ la lecture hors ' +
-      'connexion se fait, sans annoncer comment l’obtenir.',
   },
   {
     cle: 'refusDeDroit.reglesDeCirculation',

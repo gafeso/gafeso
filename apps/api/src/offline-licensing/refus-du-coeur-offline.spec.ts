@@ -124,7 +124,25 @@ function base(options: { embargoUntil: Date | null; deviceUserId?: string; revoq
           recordId: 'rec-1',
           fileFormat: 'PDF',
           encStatus: 'ready',
-          record: { id: 'rec-1', title: 'Thèse sous embargo' },
+          // ⚠ `contributors` EST OBLIGATOIRE dans cette doublure depuis le
+          // 9 octobre 2026 : `myDocuments` sert l'auteur principal, et il le
+          // lit dans la RELATION — pas dans la colonne `author`, qui est une
+          // dénormalisation transitoire.
+          //
+          // ⚠ Et le code ne porte PAS de `?.` sur ce tableau, délibérément :
+          // un `contributors?.[0]` rendrait `null` quand la relation n'est pas
+          // chargée, c'est-à-dire exactement le défaut silencieux que ces
+          // trois champs existent pour éviter. Une relation oubliée doit LEVER,
+          // pas rendre un champ vide — ici la requête est trois lignes
+          // au-dessus de la lecture, donc le seul cas possible est un test.
+          record: {
+            id: 'rec-1',
+            title: 'Thèse sous embargo',
+            category: 'droit',
+            publishYear: 2024,
+            author: 'Traoré, Awa',
+            contributors: [{ name: 'Traoré, Awa' }],
+          },
         },
       ]),
     },

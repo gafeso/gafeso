@@ -94,6 +94,15 @@ const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
       'n°27). Un seed qui écrit par Prisma ne passe ni les DTO ni les ' +
       'validations : ce tamis dit ce qu’il a laissé passer. Il ne fait que lire.',
   },
+  'opac/compte-filtre-exact-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'LE COMPTE FILTRÉ — il confronte ce que le MOTEUR dit à ce que la BASE ' +
+      'porte : deux `count(*)` et deux recherches. Il n’écrit nulle part, et ' +
+      'surtout pas dans l’index — une réindexation lancée depuis un test ' +
+      'toucherait celui que l’autre session emploie, et un garde qui modifie ' +
+      'ce qu’il mesure ne mesure plus rien.',
+  },
   'cataloging/formes-decomposees-en-base.spec.ts': {
     discipline: 'lecture-seule',
     motif:
@@ -178,7 +187,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT quatorze — une quinzième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT quinze — une seizième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

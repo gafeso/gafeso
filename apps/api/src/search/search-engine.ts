@@ -40,6 +40,12 @@ export interface RecordSearchDoc {
   publishYear: number | null;
   recordType: string;
   coverUrl: string | null;
+  /**
+   * ⚠ L'EXISTENCE d'un document numérique — filtrable, pour que le compte soit
+   * EXACT. Voir `FILTERABLE_ATTRIBUTES`, qui porte le motif et ce qui a dû être
+   * fermé avant de l'indexer.
+   */
+  hasDigital: boolean;
 }
 
 export interface SearchParams {
@@ -140,6 +146,27 @@ export const FILTERABLE_ATTRIBUTES = [
   'publishYear',
   'recordType',
   'keywords',
+  /**
+   * ⭐ `hasDigital` FILTRABLE — pour que le compte soit EXACT.
+   *
+   * *Ajouté le 9 octobre 2026.* Le filtre « a un document numérique » se lisait
+   * jusqu'ici EN BASE (`parcourir`, `nouveautes`), et son commentaire disait
+   * pourquoi : « le document indexé ne porte aucune notion de fichier
+   * numérique, et l'y ajouter coûterait une réindexation plus une
+   * synchronisation à la suppression qui n'existe pas ».
+   *
+   * ⚠ LA SYNCHRONISATION EXISTE DÉSORMAIS, et c'est ce qui autorise ce champ :
+   * `DigitalCopyService.reindexerApresTransition` est appelée aux DEUX
+   * transitions — téléversement et suppression —, et la seconde manquait.
+   * L'ordre a compté : fermer les écrivains d'abord, indexer ensuite.
+   *
+   * ⚠ ET IL FAUT L'INDEX POUR UN COMPTE EXACT. Post-filtrer après la recherche
+   * rendrait `totalHits`, `totalPages` et les facettes FAUX — la page
+   * annoncerait douze résultats et en montrerait trois. C'est le motif écrit
+   * dans `parcourir`, et il vaut dans l'autre sens : ce qui doit compter juste
+   * doit être filtré par le moteur.
+   */
+  'hasDigital',
 ] as const;
 
 export const SORTABLE_ATTRIBUTES = ['title', 'publishYear'] as const;

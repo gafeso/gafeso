@@ -6,6 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { useModulesActifs } from '@/lib/modules-actifs';
+import { VoletUsage, type ChargeUsage } from '@/components/volet-usage';
 import { LIBELLES } from '@/lib/libelles';
 import { Alert } from '@/components/ui';
 import {
@@ -74,6 +75,11 @@ export default function StatsPage() {
    * de toute façon été une seconde source pour une même valeur.
    */
   const circulation = modulesActifs === null || modulesActifs.includes('circulation');
+  /*
+   * ⚠ `null` = pas encore su, distinct d'un volet VIDE. Et l'échec vaut `null`
+   * aussi : un volet absent vaut mieux qu'un volet qui affirme zéro.
+   */
+  const [usage, setUsage] = useState<ChargeUsage | null>(null);
   const canView = functions?.includes('statistiques.voir');
   const params = useSearchParams();
   const router = useRouter();
@@ -106,6 +112,27 @@ export default function StatsPage() {
     qs.set('granularity', granularity);
     return qs;
   }, [from, to, granularity]);
+
+  useEffect(() => {
+    // ⚠ Une panne d'usage ne doit pas emporter l'écran : `catch → null`, et le
+    // volet ne se rend pas. Les autres volets gardent leur sens sans lui.
+    /*
+     * ⚠ `?${periodQs()}` — LE POINT D'INTERROGATION. `periodQs()` rend un
+     * `URLSearchParams` SANS lui, et les trois autres appels du fichier
+     * l'ajoutent. Le mien ne l'avait pas : l'API recevait
+     * `/stats/usagegranularity=day` et rendait 404, donc `usage` restait `null`
+     * et le volet ne se rendait PAS.
+     *
+     * ⭐ Et l'écran n'avait l'air de rien : pas de message, pas de trou — juste
+     * une section absente. C'est ce qu'un `catch → null` produit quand il est
+     * juste : il protège l'écran, et il cache la cause. La recette ne l'a pas
+     * vu non plus ; c'est l'INSTRUMENTATION de l'appel qui l'a dit, parce que
+     * l'absence d'un volet ne dit jamais POURQUOI il est absent.
+     */
+    api<ChargeUsage>(`/stats/usage?${periodQs()}`)
+      .then(setUsage)
+      .catch(() => setUsage(null));
+  }, [periodQs]);
 
   const exportUrl = (dataset: string) => `/api/stats/export?dataset=${dataset}&${periodQs()}`;
   const reportUrl = () => `/api/stats/report?${periodQs()}`;
@@ -269,6 +296,14 @@ export default function StatsPage() {
             </ChartCard>
           </div>
           )}
+
+          {/*
+            ⚠ L'USAGE NUMÉRIQUE EST SERVI PAR UNE AUTRE ROUTE (`/stats/usage`),
+            et il ne dépend PAS du module `circulation` : une bibliothèque sans
+            rayon a des consultations en ligne et des téléchargements. C'est
+            même le seul volet qui lui reste.
+          */}
+          {usage && <VoletUsage usage={usage} />}
 
           {/* Désherbage + système */}
           {/* ⚠ « Jamais empruntés » est un outil de DÉSHERBAGE : il sert à

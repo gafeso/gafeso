@@ -512,7 +512,12 @@ describe('CatalogingService — notices', () => {
       digitalCopy: { id: 'dc-1', recordId: 'rec-1' },
     });
     await service.deleteRecord(db, 'zinda', 'rec-1');
-    expect(digitalCopy.remove).toHaveBeenCalledWith(db, 'rec-1');
+    // ⚠ LE SLUG EST PASSÉ DEPUIS LE 9 OCTOBRE 2026 : `remove()` réindexe la
+    // notice, et une réindexation a besoin de savoir DANS QUEL INDEX écrire.
+    // C'est le compilateur qui a énuméré les deux appelants de production, pas
+    // un balayage — et ce test est le troisième site, celui qu'un `grep` sur
+    // `remove(` aurait manqué parmi les dizaines d'autres `remove`.
+    expect(digitalCopy.remove).toHaveBeenCalledWith(db, 'zinda', 'rec-1');
     expect(db.biblioRecord.delete).toHaveBeenCalled();
   });
 

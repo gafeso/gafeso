@@ -90,6 +90,28 @@ const COMPTES = [
     etudiant: false,
   },
   {
+    /**
+     * ⚠ TROISIÈME COMPTE, tranché par Jean le 9 octobre 2026 — et c'est un
+     * compte DE PLUS, pas un élargissement du bibliothécaire.
+     *
+     * Mesuré : `statistiques.voir` n'est portée que par ADMIN (25 fonctions),
+     * ni par LIBRARIAN (7) ni par MANAGER (5). Aucun des deux premiers comptes
+     * ne pouvait donc atteindre l'écran des statistiques — celui qui, pour un
+     * établissement sans rayonnages, remplace le comptoir comme vue de gestion.
+     *
+     * ⚠ POURQUOI PAS ÉLARGIR `recette-bib@`, et ce n'est pas une préférence :
+     * un bibliothécaire qui porterait 25 fonctions ne démontrerait plus un
+     * bibliothécaire. Le produit tient une règle métier là-dessus — « le
+     * bibliothécaire lit en ligne mais ne télécharge pas » —, et un compte de
+     * recette qui la contredit ferait capturer un écran que personne n'aura.
+     */
+    email: 'recette-admin@exemple.bf',
+    role: 'ADMIN',
+    firstName: 'Recette',
+    lastName: 'Administrateur',
+    etudiant: false,
+  },
+  {
     email: 'recette-etu@exemple.bf',
     role: 'STUDENT',
     firstName: 'Recette',

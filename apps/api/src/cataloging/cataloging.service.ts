@@ -10,6 +10,7 @@ import { Readable } from 'stream';
 import { Marc, Record as MarcRecord } from 'marcjs';
 import {
   buildRecordSearchDoc,
+  INCLUDE_POUR_INDEX,
   RecordSearchDoc,
   SearchService,
 } from '../search/search.service';
@@ -207,10 +208,7 @@ export class CatalogingService {
     if (recordIds.length === 0) return { indexed: 0 };
     const records = await db.biblioRecord.findMany({
       where: { id: { in: recordIds } },
-      include: {
-        contributors: { orderBy: { position: 'asc' } },
-        keywords: { include: { keyword: true } },
-      },
+      include: INCLUDE_POUR_INDEX,
     });
     await this.safeIndex(slug, records.map((r) => this.toSearchDoc(r)));
     return { indexed: records.length };
@@ -275,10 +273,7 @@ export class CatalogingService {
         },
         keywords: keywordLinks(keywords),
       },
-      include: {
-        contributors: { orderBy: { position: 'asc' } },
-        keywords: { include: { keyword: true } },
-      },
+      include: INCLUDE_POUR_INDEX,
     });
     await this.safeIndex(slug, [this.toSearchDoc(record)]);
     return aplatirNotice(record);
@@ -344,10 +339,7 @@ export class CatalogingService {
             : {}),
           ...(keywords.length ? { keywords: keywordLinks(keywords) } : {}),
         },
-        include: {
-          contributors: { orderBy: { position: 'asc' } },
-          keywords: { include: { keyword: true } },
-        },
+        include: INCLUDE_POUR_INDEX,
       });
       ids.push(record.id);
       docs.push(this.toSearchDoc(record));
@@ -462,10 +454,7 @@ export class CatalogingService {
             : {}),
           ...(importedKeywords.length ? { keywords: keywordLinks(importedKeywords) } : {}),
         },
-        include: {
-          contributors: { orderBy: { position: 'asc' } },
-          keywords: { include: { keyword: true } },
-        },
+        include: INCLUDE_POUR_INDEX,
       });
       docs.push(this.toSearchDoc(record));
       imported++;
@@ -731,10 +720,7 @@ export class CatalogingService {
           : {}),
         ...(keywords ? { keywords: { deleteMany: {}, ...keywordLinks(keywords) } } : {}),
       },
-      include: {
-        contributors: { orderBy: { position: 'asc' } },
-        keywords: { include: { keyword: true } },
-      },
+      include: INCLUDE_POUR_INDEX,
     });
     await this.safeIndex(slug, [this.toSearchDoc(record)]);
     return aplatirNotice(record);
@@ -788,7 +774,16 @@ export class CatalogingService {
       // avec elle (MinIO + ligne) plutôt que de bloquer la suppression.
       // Sans ce nettoyage, db.biblioRecord.delete() plante en 500 (clé
       // étrangère digital_copies.record_id).
-      await this.digitalCopy.remove(db, id);
+      // ⚠ LE SLUG EST PASSÉ, et la réindexation qui suit est SANS EFFET ICI :
+      // la notice entière est supprimée trois lignes plus bas, et `safeRemove`
+      // la retire de l'index. La réindexation écrira donc un document que le
+      // retrait effacera aussitôt.
+      //
+      // ⚠ Et c'est le bon ordre quand même : si `biblioRecord.delete` échouait,
+      // la notice resterait AVEC son `hasDigital` remis à faux — ce qui est
+      // vrai, puisque le document vient de partir. L'inverse laisserait l'index
+      // promettre un document supprimé.
+      await this.digitalCopy.remove(db, slug, id);
     }
     await db.biblioRecord.delete({ where: { id } });
     await this.safeRemove(slug, id);
@@ -867,10 +862,7 @@ export class CatalogingService {
   /** Réindexation complète de l'école (vide l'index puis réindexe tout). */
   async reindexAll(db: TenantDb, slug: string) {
     const records = await db.biblioRecord.findMany({
-      include: {
-        contributors: { orderBy: { position: 'asc' } },
-        keywords: { include: { keyword: true } },
-      },
+      include: INCLUDE_POUR_INDEX,
     });
     await this.search.ensureIndex(slug);
     await this.search.clearIndex(slug);

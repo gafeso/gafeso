@@ -152,10 +152,22 @@ describe('la version publiée', () => {
       expect(dockerfile, `ARG ${nom}`).toMatch(new RegExp(`^ARG ${nom}=`, 'm'));
       expect(dockerfile, `ENV ${nom}`).toMatch(new RegExp(`^ENV ${nom}=\\$${nom}$`, 'm'));
     }
+    // ⚠ CE TEST A ATTRAPÉ MON PROPRE CHANGEMENT, le 9 octobre 2026, et c'est
+    // exactement son office. Il exigeait la forme `${GAFESO_VERSION:-…}` — avec
+    // son DÉFAUT. Or c'est ce défaut qui a produit l'image muette de rc7 : il
+    // rendait l'oubli indiscernable du choix, et il est parti.
+    //
+    // ⚠ Et l'assertion devait changer de SENS, pas seulement de motif : elle
+    // exigeait un défaut, elle exige maintenant son ABSENCE. Un test qui aurait
+    // seulement été « assoupli » (`\$\{GAFESO_VERSION`) aurait laissé revenir le
+    // défaut sans rien dire. La propriété complète — le compose SANS défaut ET
+    // le Dockerfile qui refuse — est tenue par `version-au-build.spec.ts`, avec
+    // ses quatre contrôles négatifs ; celle-ci garde la CHAÎNE ARG → ENV → code.
     const compose = source('docker/docker-compose.prod.yml');
-    expect(compose, 'compose doit passer les deux arguments au build de l\'api')
-      .toMatch(/args:\s*\n\s*GAFESO_VERSION: \$\{GAFESO_VERSION:-/);
-    expect(compose).toMatch(/GAFESO_COMMIT: \$\{GAFESO_COMMIT:-/);
+    const composeCode = compose.replace(/^\s*#.*$/gm, ' ');
+    expect(composeCode, 'compose doit passer les deux arguments au build de l\'api')
+      .toMatch(/args:\s*(?:\n\s*)+GAFESO_VERSION: \$\{GAFESO_VERSION\}/);
+    expect(composeCode).toMatch(/GAFESO_COMMIT: \$\{GAFESO_COMMIT\}/);
     // Et le script qui les CALCULE existe, publié, exécutable.
     expect(source('scripts/version-du-depot.sh')).toContain('--exact-match');
   });

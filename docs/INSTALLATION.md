@@ -275,6 +275,54 @@ minio         Up 21 hours (healthy)
 web           Up 21 hours (healthy)
 ```
 
+### 3.1 bis ⭐ L'ASSISTANT D'INSTALLATION — si vous n'avez pas employé `install.sh`
+
+`install.sh` fait tout et vous laisse une instance prête. Si vous avez monté la
+pile **à la main** (`docker compose … up -d`), l'application vous accueille avec
+un **assistant** : `https://<votre-domaine>/installation`.
+
+**Comment vous y entrez**, et c'est la seule part qui demande un geste au
+serveur : au premier démarrage, l'API dépose un **jeton d'amorçage** dans un
+fichier, à l'intérieur du conteneur.
+
+```bash
+docker compose -f docker/docker-compose.prod.yml exec api \
+  cat /app/etat/jeton-installation.txt
+```
+
+Vous collez la valeur dans l'assistant, qui l'échange contre une session de
+**30 minutes**.
+
+> 🔴 **NE COLLEZ JAMAIS CE JETON AILLEURS** — ni dans un ticket, ni sur un
+> forum, ni dans une conversation. Pour demander de l'aide, donnez le **CHEMIN**
+> du fichier, jamais sa valeur. Le fichier le répète en première ligne, parce
+> que c'est là que le risque vit : sous les yeux de celui qui cherche de l'aide.
+
+Ce que l'assistant fait, et dans cet ordre :
+
+| Étape | Ce qu'elle vous demande |
+|---|---|
+| **Constat** | rien — elle vous MONTRE ce que le serveur voit : base joignable, stockage, recherche, courriel configuré ou non |
+| **Courriel** | un envoi d'ESSAI, à une adresse que vous donnez. Il part vraiment, et l'assistant dit s'il est parti |
+| **Modules** | lesquels activer pour cet établissement — voir §3.5 pour une bibliothèque sans rayonnages |
+| **Terminer** | crée le premier administrateur et **efface le jeton** |
+
+⚠ **Le jeton est effacé à la fin, et l'assistant se ferme définitivement.** Ses
+routes répondent alors **`410 Gone`** — « cette route a existé et n'existe
+plus », et non `404`, qui vous ferait chercher une faute de frappe. Il n'y a pas
+de « rentrer dans l'assistant pour corriger » : tout ce qu'il règle est réglable
+ensuite depuis le back-office.
+
+⚠ **Une exception, et elle est voulue** : `GET /api/installation/etat` survit, et
+rend `{"requise": false}`. C'est elle qui permet à l'application de choisir entre
+l'assistant et l'écran de connexion — y compris après une restauration de
+sauvegarde, qui ne rouvre pas l'assistant.
+
+⚠ **L'essai de courriel est le seul moment où vous saurez avant vos usagers.**
+Un SMTP mal réglé ne casse rien de visible : les comptes se créent, les écrans
+fonctionnent, et les liens de définition de mot de passe ne partent pas. Faites
+l'essai, et lisez son verdict.
+
 ### 3.2 Les trois gestes à ne pas remettre à plus tard
 
 **Noter les identifiants.** Ils s'affichent une seule fois. Le mot de passe
@@ -296,6 +344,57 @@ et à usage unique**.
 
 Si ce lien expire avant que vous l'utilisiez, il se régénère depuis le
 back-office : *Administration → Comptes → le compte → Lien d'activation*.
+
+### 3.4 Les pages légales — à rédiger AVANT d'ouvrir au public
+
+Chaque établissement rédige ses **mentions légales** et sa **politique de
+confidentialité** : *Administration → Pages légales*. Elles sont servies sur les
+pages publiques, sans authentification.
+
+⚠ **Un modèle NON COMPLÉTÉ ne se publie pas**, et le produit le tient : tant
+qu'une page n'est pas publiée, elle est servie VIDE au public — jamais à moitié
+remplie. « Rédigé mais vide » et « jamais rédigé » sont deux états distincts,
+et c'est voulu : un brouillon qui fuirait sur la page publique ferait dire à
+votre établissement des choses qu'il n'a pas écrites.
+
+### 3.5 ⭐ UNE BIBLIOTHÈQUE SANS RAYONNAGES — éteindre la circulation physique
+
+*Pour un établissement à distance : étudiants dispersés, aucun exemplaire
+physique, pas de comptoir.*
+
+Gafeso ne suppose pas que vous prêtez des livres. La **circulation physique**
+est un module qu'on éteint : *Administration → Modules → Circulation physique*.
+
+⚠ **Éteindre la circulation éteint AUSSI ses dépendants** — `amendes` et
+`rappels` — et le produit vous le DIT avant de valider. C'est cohérent : il n'y
+a pas d'amende sans prêt, ni de rappel de retour sans retour.
+
+**Ce qui disparaît** : le guichet, le récolement, les règles de circulation, les
+règles de prêt. **Ce qui reste**, et c'est l'essentiel pour un établissement à
+distance :
+
+| Reste | Ce que l'étudiant en fait |
+|---|---|
+| le catalogue public | il cherche, et voit `hasDigital` sur chaque notice |
+| la lecture EN LIGNE | il lit dans le navigateur, sans téléchargement |
+| la lecture HORS LIGNE | il emporte le document sur son téléphone (licence liée à l'appareil) |
+| le contrôle d'accès par classe et abonnement | il ne voit que ce que sa filière autorise |
+| les statistiques | consultations et téléchargements, **agrégés** |
+| le dépôt de mémoires et thèses | le circuit complet, directeur compris |
+
+⚠ **Les statistiques ne dépendent PAS de la circulation** : elles ne demandent
+que le catalogue. Avec la circulation éteinte, le volet des prêts est **absent**
+et l'API dit POURQUOI — elle ne rend pas des zéros. Un zéro et « ce service
+n'existe pas ici » ne se lisent pas de la même façon.
+
+⚠ **Et une application mobile le sait sans jeton** : `GET /tenancy/current`
+porte `circulationActive`, pour qu'elle ne promette pas un comptoir à des
+étudiants qui n'en ont pas.
+
+> ⚠ **Ce qui n'est PAS prévu** : rallumer la circulation après avoir fonctionné
+> sans elle ne crée pas d'exemplaires rétroactivement. Les notices restent, les
+> exemplaires n'existent que si quelqu'un les saisit. Éteindre est réversible ;
+> ce qui n'a pas été saisi ne se devine pas.
 
 ---
 
@@ -407,21 +506,81 @@ celui de l'installation en service.
 > ⚠ Une restauration **écrase** les données en place. Arrêtez l'application
 > (`api`, `web`) avant de commencer.
 
-La procédure complète est dans
-[`scripts/backup/README.md`](../scripts/backup/README.md). En résumé :
-restaurer le dump PostgreSQL avec `psql`, remplacer le contenu du volume MinIO,
-redémarrer, puis **réindexer la recherche** — l'index n'est pas dans la
-sauvegarde et se reconstruit depuis la base.
+🔴 **NE RESTAUREZ PAS « avec `psql` ».** Ce résumé disait exactement cela, et
+c'est la forme qui perd des données. Mesuré le 6 octobre 2026 sur un cluster
+jetable :
+
+| Ce qu'on observe | Ce qui se passe |
+|---|---|
+| **code de sortie 0** | `psql` ne rend 1 qu'avec `ON_ERROR_STOP` |
+| **8 erreurs invisibles** | elles sont préfixées `psql:fichier:ligne:` — un `grep '^ERROR'` en compte ZÉRO |
+| 🔴 **une table sans contrainte passe de 2 à 4 lignes** | `CREATE TABLE` échoue, et le `COPY` **AJOUTE** |
+
+> ⭐ Les tables qui ont survécu l'ont été **par leur clé primaire, pas par
+> prudence**. Chez vous, les tables SANS contrainte d'unicité sont celles qui
+> portent l'historique : journal d'audit, rappels envoyés, contributeurs.
+
+**La procédure qui a un VERDICT est dans
+[`scripts/backup/README.md`](../scripts/backup/README.md)** — suivez-la en
+entier, elle est courte. Elle porte les deux choses que ce résumé ne peut pas
+porter : `ON_ERROR_STOP`, et les deux comptes à vérifier APRÈS (le code de
+sortie ne dit rien).
+
+⚠ **Et si votre sauvegarde est un `pg_dumpall` pris à la main** — pas une
+archive de `backup.sh` —, elle n'a **aucun mode de restauration sûr** : sa
+sortie contient toujours `CREATE ROLE postgres`, qui existe toujours, donc
+`ON_ERROR_STOP` s'arrête ligne 15 sur TOUT cluster. Ce n'est pas une option
+manquante, c'est une propriété du format. Employez :
+
+```bash
+scripts/backup/restaurer-pg-dumpall.sh --restaurer <fichier.sql> <base>
+```
+
+Il extrait la section de la base visée, prend un filet `--clean`, recrée la base
+vide et rejoue avec `ON_ERROR_STOP=1` — et il **refuse** si la base est absente
+du fichier, si sa section ne contient aucun `COPY`, ou si le filet est vide.
+
+Ensuite, dans les deux cas : remplacer le contenu du volume MinIO, redémarrer,
+puis **réindexer la recherche** — l'index n'est pas dans la sauvegarde et se
+reconstruit depuis la base.
 
 ### 4.2 Mettre à jour
 
 ```bash
-git pull
+git fetch --tags
+git checkout v1.0.0-rc7          # la VERSION, jamais `main`
 $COMPOSE up -d --build
 ```
 
 Les migrations de base de données s'appliquent automatiquement au démarrage de
-l'`api`.
+l'`api`. Il n'y a **aucune étape manuelle**.
+
+⚠ **ON SE PLACE SUR UNE ÉTIQUETTE, PAS SUR `main`.** Ce paragraphe disait
+`git pull`, et c'était faux de deux façons :
+
+- `main` avance ; une étiquette ne bouge pas. Un build fait sur `main` porte le
+  dernier commit, pas la version que vous croyez déployer ;
+- et l'application le DIRA : `GET /health` rend alors
+  `"version": "non étiquetée"`. C'est honnête, et ce n'est pas ce que vous
+  voulez lire le jour où vous cherchez quelle version tourne.
+
+Les versions disponibles :
+
+```bash
+git tag -l 'v*' | sort -V | tail -5
+```
+
+⚠ **Avant de monter, lisez ce que la version DÉFAIT.** `DEPLOY.md` porte un
+chapitre par version qui change les données : ce qui est réversible, ce qui ne
+l'est pas, et le fichier qui le défait. Une version qui se déploie ne se défait
+pas forcément.
+
+**Quelle version tourne, à cet instant :**
+
+```bash
+curl -s https://<votre-domaine>/api/health
+# → {"status":"ok","version":"v1.0.0-rc7","commit":"c792b1b",…}
+```
 
 > **Une exception à connaître : le fichier `docker/Caddyfile`.** Il est monté
 > dans le conteneur, pas copié dans l'image. `up -d --build` ne redémarre donc
@@ -510,6 +669,9 @@ comprendrait après coup.
 | `port is already allocated` sur 80 ou 443 | Un autre serveur web (Apache, nginx) occupe déjà le port | `sudo ss -ltnp \| grep -E ':(80\|443)'`. Libérez-le, ou installez avec `--http-port` / `--https-port` |
 | `.env.prod existe déjà` | Une installation est déjà présente ; l'installateur refuse d'écraser vos secrets | Relancez avec `--force` (**conserve les données**). Voir l'avertissement du §4.4 avant d'envisager `-v` |
 | Un service reste `unhealthy` au démarrage | Le plus souvent : la base n'est pas encore prête (patientez), ou un secret manque dans `.env.prod` | `$COMPOSE logs <service>` |
+| L'`api` **redémarre en boucle** et son journal dit `REFUS DE DÉMARRER — <VARIABLE> est VIDE` (ou « porte une valeur d'EXEMPLE », ou « fait N caractères, M au minimum ») | Un secret de production est absent, trop court, ou encore à sa valeur d'exemple. Le produit REFUSE de démarrer plutôt que de servir avec un secret devinable | `$COMPOSE logs api \| grep "REFUS DE DÉMARRER"` — il liste **les six d'un coup**, pas le premier. Corrigez-les tous, puis `$COMPOSE up -d api` |
+| Le journal dit `POSTGRES_PASSWORD (lu dans DATABASE_URL, que le conteneur reçoit) est VIDE` — **et la valeur est bien dans votre `.env.prod`** | Ce que vous ÉDITEZ n'est pas ce que le processus LIT : le conteneur `api` ne reçoit pas `POSTGRES_PASSWORD`, il reçoit `DATABASE_URL`, qui la contient. La panne de rc4, le 6 octobre | `$COMPOSE exec api printenv \| cut -d= -f1 \| sort` — la liste de ce que le conteneur reçoit VRAIMENT. Si `DATABASE_URL` y est sans mot de passe, c'est elle qu'il faut corriger |
+| L'`api` boucle sur `P1000: Authentication failed for user` **sans aucun message de refus** | Le mot de passe est assez LONG pour passer le contrôle — donc ce n'est pas un refus de secret — mais il ne correspond pas à celui du volume PostgreSQL. ⚠ PostgreSQL fixe son mot de passe à l'**initialisation du volume** : le changer dans `.env.prod` après coup ne le change PAS dans la base | `$COMPOSE logs db \| grep "password authentication"`. Si le volume a été initialisé avec un autre mot de passe, c'est la base qu'il faut remettre d'accord (`ALTER USER … PASSWORD …`) — pas le fichier. ⚠ Et un mot de passe FAIBLE, lui, produirait le refus ci-dessus, pas ce `P1000` : le contrôle des secrets passe AVANT les migrations |
 
 ---
 
@@ -520,16 +682,35 @@ Ce que ce document **ne garantit pas**, et qu'il vaut mieux savoir :
 - **Il décrit une installation mono-serveur.** La répartition sur plusieurs
   machines, la réplication PostgreSQL et la haute disponibilité ne sont ni
   documentées ni testées.
-- **La procédure de restauration est documentée mais n'a pas été éprouvée sur
-  un incident réel.** Faites un essai de restauration sur un serveur de test
-  avant d'en avoir besoin — c'est le seul moyen de savoir qu'elle fonctionne
-  chez vous. Une sauvegarde jamais restaurée est une hypothèse.
+- **La restauration est ÉPROUVÉE sur une base jetable, pas sur un incident
+  réel — et la nuance est précise.** `scripts/recette-sauvegarde-restauree.sh`
+  sauvegarde, DÉTRUIT, restaure et COMPARE ; `scripts/backup/restaurer-pg-dumpall.sh`
+  refuse dans trois cas mesurés. Ce qui n'est PAS éprouvé : une restauration de
+  VOS données, sur VOTRE serveur, après un vrai incident — la seule qui compte
+  pour vous.
+
+  ⚠ Cette ligne disait auparavant « documentée mais n'a pas été éprouvée », ce
+  qui sous-estimait ce qui l'est : les deux recettes ont chacune trouvé un vrai
+  défaut à leur première exécution — `backup.sh` appelait `pg_dump` **sans
+  `--clean`**, et le `README` documentait de verser le dump dans la base
+  EXISTANTE, ce qui ne restaurait pas. **Une limite qui sous-estime fait
+  douter de ce qui a été mesuré.**
+
+  Faites quand même l'essai chez vous : une sauvegarde jamais restaurée reste
+  une hypothèse, et c'est de la VÔTRE qu'il s'agit.
 - **Le tableau de diagnostic recense les pannes rencontrées**, pas toutes les
   pannes possibles. Un symptôme absent de ce tableau n'est pas un symptôme
   impossible.
 - **La montée de version de PostgreSQL** (par exemple 16 → 17) n'est pas
   couverte : elle demande un dump et un rechargement, pas un simple
   `docker compose up`.
+- **Le RETOUR en arrière d'une version n'est documenté que pour les versions qui
+  changent les données**, et chapitre par chapitre dans
+  [DEPLOY.md](../DEPLOY.md). Une version qui se déploie ne se défait pas
+  forcément : lisez son chapitre AVANT de monter, pas après.
+- **La restauration du volume MinIO n'est pas éprouvée par une recette.** Les
+  deux recettes ci-dessus portent sur PostgreSQL. Les fichiers numériques se
+  restaurent en remplaçant le contenu du volume, et personne ne l'a mesuré.
 
 ---
 

@@ -431,7 +431,7 @@ export class CatalogingController {
     @CurrentTenant() tenant: ResolvedTenant | null,
     @Param('id') id: string,
   ) {
-    const { db } = this.ctx(tenant);
-    return this.digitalCopy.remove(db, id);
+    const { db, slug } = this.ctx(tenant);
+    return this.digitalCopy.remove(db, slug, id);
   }
 }

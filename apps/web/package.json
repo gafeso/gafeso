@@ -13,7 +13,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "budget": "next build && BUDGET=1 vitest run tests/budget-des-pages-publiques.spec.ts"
   },
   "dependencies": {
     "next": "^15.5.22",

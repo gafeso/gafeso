@@ -316,6 +316,66 @@ export class TenancyController {
   }
 
   /**
+   * ⭐ L'ÉTAT BRUT DES RÉGLAGES — brouillons compris. Réservé à qui peut ÉCRIRE.
+   *
+   * *Ajoutée le 9 octobre 2026, signalée par une recette du front — et le
+   * danger n'était pas l'affichage, c'était l'ÉCRITURE.*
+   *
+   * `GET /tenancy/home` est PUBLIQUE : elle passe les pages légales par
+   * `pourLePublic()`, qui remplace toute page non publiée par du vide. C'est
+   * juste pour un visiteur, et inutilisable pour un ÉDITEUR : aucune route ne
+   * rendait l'état non publié.
+   *
+   * > ⚠⚠ **Et `PATCH /tenancy/settings` fait un REMPLACEMENT COMPLET de
+   * > `pagesLegales`.** Un écran qui n'a pas pu lire l'état courant et qui
+   * > enregistre quand même ÉCRASE tout — y compris une page PUBLIÉE que
+   * > personne ne voulait retirer. Le front a donc dû refuser d'enregistrer
+   * > tant qu'il n'avait pas lu, ce qui rendait l'éditeur inutilisable.
+   *
+   * ⚠ GARDÉE PAR `etablissement.apparence` — la MÊME fonction que l'écriture,
+   * exactement. Un brouillon est un texte que l'établissement n'a pas voulu
+   * publier : le lire doit demander le droit de l'écrire, ni plus (ce serait
+   * une porte de plus) ni moins (qui peut écrire doit pouvoir relire ce qu'il
+   * va remplacer).
+   *
+   * ⚠ ET ELLE NE REND QUE CE QUE L'ÉDITEUR REMPLACE. Pas les couleurs, pas le
+   * logo, pas la politique 2FA : chacun a sa route, et un objet fourre-tout
+   * ferait voyager des réglages que l'appelant n'a pas demandés — c'est le
+   * défaut que le gel du contrat de notice existe pour empêcher.
+   */
+  @Get('settings')
+  @UseGuards(JwtAuthGuard, FunctionsGuard)
+  @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Pages légales BRUTES de l’école courante (brouillons compris)',
+    description:
+      'Réservé à `etablissement.apparence` — la même fonction que l’écriture. ' +
+      '⚠ `GET /tenancy/home` filtre les brouillons (route publique) : un ' +
+      'éditeur qui s’y fierait enregistrerait un remplacement complet sans ' +
+      'avoir vu ce qu’il écrase.',
+  })
+  async readSettings(@CurrentTenant() tenant: ResolvedTenant | null) {
+    if (!tenant) {
+      throw new BadRequestException(
+        'Tenant non résolu : domaine inconnu ou école non provisionnée.',
+      );
+    }
+    const record = await this.prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { settings: { select: { pagesLegales: true } } },
+    });
+    // ⚠ NORMALISÉ, PAS BRUT-DE-BASE. `normaliserPagesLegales` garantit la FORME
+    // — les deux clés présentes, `publieeLe` à `null` quand rien n'est publié —
+    // pour qu'un éditeur n'ait pas à distinguer « colonne nulle » (jamais
+    // rédigé) de « page vide ». Le CONTENU, lui, n'est pas filtré : c'est tout
+    // l'objet de cette route.
+    return {
+      pagesLegales: normaliserPagesLegales(record?.settings?.pagesLegales),
+    };
+  }
+
+  /**
    * Modifie les couleurs de l'école courante — jamais un tenantId arbitraire :
    * toujours celui résolu depuis le Host (multi-tenant strict). Réservé à
    * etablissement.gerer (que seul Administrateur porte par défaut).

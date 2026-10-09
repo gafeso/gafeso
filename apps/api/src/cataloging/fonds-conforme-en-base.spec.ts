@@ -727,6 +727,129 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     ).toEqual([]);
   }, 60_000);
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔴 TROUVÉES LE 9 OCTOBRE 2026, et pas en cherchant un défaut du fonds.
+  //
+  // La session mobile avait écrit en passation un AVERTISSEMENT :
+  //
+  //   « `category` doit rester la MÊME CHAÎNE que celle servie par
+  //     `/opac/search` et `/opac/records/:id` : la teinte de la couverture
+  //     composée en dépend, et un accent différent donnerait deux couleurs au
+  //     même domaine. »
+  //
+  // ⭐ Pris comme MOTIF DE RECHERCHE plutôt que rangé — et il a trouvé. Les
+  // deux règles ci-dessous sont les deux moitiés de ce qu'il désignait.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it('⚠ LE DOMAINE D’UNE NOTICE EXISTE AU VOCABULAIRE — `resolveCategory` l’exige', async () => {
+    // `resolveCategory` ne pose JAMAIS une chaîne libre : elle rend le `name`
+    // CANONIQUE de la table `categories`, après rapprochement sans accents, et
+    // LÈVE si rien ne correspond. Une notice dont le domaine n'est pas au
+    // vocabulaire n'a donc pas pu être écrite par le produit.
+    //
+    // 🔴 ET LE COÛT N'EST PAS THÉORIQUE — mesuré par l'effet, sur l'API de dev :
+    // un `PATCH /cataloging/records/:id` qui RENVOIE le domaine servi tel quel
+    // répond **200** et REMPLACE la valeur en silence (`medecine` → `médecine`).
+    // Le rapprochement sans accents est juste ; c'est le fonds qui est hors
+    // vocabulaire. Conséquence : à la première modification d'une notice, son
+    // domaine MIGRE — et le fonds porte alors DEUX orthographes du même
+    // domaine, donc deux teintes de couverture pour un seul domaine.
+    //
+    // ⚠ LA FORME FAUTIVE, et c'est celle que ce constat appelle : retirer le
+    // repli sans accents de `resolveCategory`. Elle transformerait une
+    // réécriture silencieuse en REFUS DUR sur 6 409 notices — la
+    // bibliothécaire ne pourrait plus corriger une coquille de titre. Le repli
+    // est bon ; ce sont les DONNÉES qu'il faut canoniser, en une fois.
+    expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
+    const fautifs: string[] = [];
+    let examinees = 0;
+    for (const slug of ecoles) {
+      const [r] = await prisma.$queryRawUnsafe<
+        { total: number; hors: number; domaines: number }[]
+      >(
+        `SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE b.category IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM "tenant_${slug}".categories c WHERE c.name = b.category))::int AS hors,
+                count(DISTINCT b.category) FILTER (WHERE b.category IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM "tenant_${slug}".categories c WHERE c.name = b.category))::int AS domaines
+         FROM "tenant_${slug}".biblio_records b`,
+      );
+      examinees += r.total;
+      if (r.hors > 0) {
+        fautifs.push(
+          `${slug} : ${r.hors} notice(s) sur ${r.total}, ${r.domaines} domaine(s) distinct(s) hors vocabulaire`,
+        );
+      }
+    }
+    expect(examinees, 'aucune notice examinée : le tamis ne mesure rien').toBeGreaterThan(0);
+
+    // ⚠ DETTE DÉCLARÉE, et elle se refuse dans les DEUX SENS : une dette qui ne
+    // se rappelle qu'en s'aggravant laisserait passer sa propre résolution.
+    const DETTE_VOCABULAIRE = [
+      'horizon : 6040 notice(s) sur 8000, 8 domaine(s) distinct(s) hors vocabulaire',
+      'zinda : 369 notice(s) sur 480, 8 domaine(s) distinct(s) hors vocabulaire',
+    ];
+    expect(
+      [...fautifs].sort(),
+      'Le fonds porte des domaines ABSENTS du vocabulaire :\n' +
+        fautifs.map((f) => `  · ${f}`).join('\n') +
+        '\n\nMesuré le 9 octobre 2026 : la table `categories` porte 28 noms ' +
+        'longs (style Dewey, « agronomie, agriculture et activités connexes ») ' +
+        'et le fonds 10 slugs courts (« medecine », « histoire »). DEUX ' +
+        'coïncident par hasard — `informatique` et `droit`.\n' +
+        'Si ce compte a CHANGÉ : canonisez le fonds en une fois (migration SQL ' +
+        'qui rapproche sans accents), corrigez le seed pour écrire les noms ' +
+        'canoniques, puis mettez ce compte à jour — ou retirez la dette.',
+    ).toEqual(DETTE_VOCABULAIRE);
+  }, 60_000);
+
+  it('⚠ TOUTE NOTICE PORTE SES 3 MOTS-CLÉS — règle serveur, cahier §4.1', async () => {
+    // `requireMinKeywords` REFUSE une notice sous `MIN_KEYWORDS`. À la
+    // MODIFICATION, le repli est `existing.keywords` : la règle est bien
+    // dessinée — on ne redemande pas les mots-clés pour corriger un titre.
+    //
+    // 🔴 Mais une notice qui n'en a AUCUN ne peut plus être modifiée du tout :
+    // le repli vaut zéro, la règle refuse, et la bibliothécaire doit inventer
+    // trois mots-clés pour corriger une coquille. Mesuré : 8 480 notices sur
+    // 8 480, c'est-à-dire TOUT le fonds de démonstration et TOUT le fonds
+    // d'échelle.
+    //
+    // ⚠ LA FORME FAUTIVE : exempter la modification de la règle. Elle rendrait
+    // le minimum inatteignable pour toujours — une notice sans mots-clés
+    // n'en recevrait jamais, et la recherche par sujet resterait vide. Ce sont
+    // les DONNÉES qu'il faut doter, pas la règle qu'il faut assouplir.
+    expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
+    const fautifs: string[] = [];
+    let examinees = 0;
+    for (const slug of ecoles) {
+      const [r] = await prisma.$queryRawUnsafe<{ total: number; sous: number }[]>(
+        `SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE (
+                  SELECT count(*) FROM "tenant_${slug}".record_keywords k
+                  WHERE k.record_id = b.id) < 3)::int AS sous
+         FROM "tenant_${slug}".biblio_records b`,
+      );
+      examinees += r.total;
+      if (r.sous > 0) fautifs.push(`${slug} : ${r.sous} notice(s) sur ${r.total} sous le minimum`);
+    }
+    expect(examinees, 'aucune notice examinée : le tamis ne mesure rien').toBeGreaterThan(0);
+
+    const DETTE_MOTS_CLES = [
+      'horizon : 8000 notice(s) sur 8000 sous le minimum',
+      'zinda : 480 notice(s) sur 480 sous le minimum',
+    ];
+    expect(
+      [...fautifs].sort(),
+      'Des notices sont SOUS le minimum de mots-clés :\n' +
+        fautifs.map((f) => `  · ${f}`).join('\n') +
+        '\n\n`requireMinKeywords` les refuse à l’enregistrement : toute ' +
+        'modification d’une de ces notices est BLOQUÉE jusqu’à ce que ' +
+        'quelqu’un invente trois mots-clés.\n' +
+        'Si ce compte a CHANGÉ : dotez le seed de mots-clés, puis mettez ce ' +
+        'compte à jour — ou retirez la dette.',
+    ).toEqual(DETTE_MOTS_CLES);
+  }, 60_000);
+
   it('⚠ SEUL UN COMPTE ÉTUDIANT PORTE UNE CLASSE', async () => {
     // `EnrollmentService` REFUSE d'inscrire un compte non-STUDENT dans une
     // classe. Une classe posée sur un compte de personnel lui donnerait les

@@ -431,6 +431,19 @@ export class OpacService {
       filter.push(`(${types.map((t) => `recordType = ${JSON.stringify(t)}`).join(' OR ')})`);
     }
     if (query.year !== undefined) filter.push(`publishYear = ${query.year}`);
+    // ⭐ FILTRÉ PAR LE MOTEUR, et c'est la raison d'être de l'attribut indexé.
+    //
+    // ⚠ Post-filtrer après la recherche rendrait `totalHits`, `totalPages` et
+    // les compteurs de facettes FAUX — la page annoncerait douze résultats et
+    // en montrerait trois. C'est le motif écrit dans `parcourir`, pris dans
+    // l'autre sens : ce qui doit COMPTER juste doit être filtré par le moteur.
+    //
+    // ⚠ Et on écrit `= true` / `= false`, jamais `hasDigital` seul : un filtre
+    // qui ne distingue pas les deux valeurs rendrait `avecFichier=false`
+    // équivalent à pas de filtre du tout, en silence.
+    if (query.avecFichier !== undefined) {
+      filter.push(`hasDigital = ${query.avecFichier ? 'true' : 'false'}`);
+    }
 
     // Recherche par champ (§5) : « titre » restreint aux attributs de titre
     // (jamais ISBN ni résumé) ; « categorie » filtre sur les catégories dont le

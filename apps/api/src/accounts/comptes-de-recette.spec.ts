@@ -165,16 +165,47 @@ describe('② il refuse de tourner ailleurs que sur cette machine', () => {
 });
 
 describe('③ la liste blanche des comptes EST la garantie', () => {
-  it('🔴 exactement deux adresses, et elles portent `recette-`', () => {
+  /**
+   * ⚠ PASSÉ DE DEUX À TROIS ADRESSES le 9 octobre 2026, et ce test a REFUSÉ
+   * l'ajout — c'est exactement son office. Il a fallu venir ici et l'écrire.
+   *
+   * Le troisième est `recette-admin@`, tranché par Jean après la mesure :
+   * `statistiques.voir` n'est portée que par ADMIN, donc ni le bibliothécaire
+   * ni l'étudiante ne pouvait atteindre l'écran des statistiques.
+   *
+   * ⚠ ET C'EST UN COMPTE DE PLUS, PAS UN ÉLARGISSEMENT : les droits de
+   * `recette-bib@` sont inchangés. Un bibliothécaire qui porterait 25 fonctions
+   * ne démontrerait plus un bibliothécaire, et ferait capturer un écran que
+   * personne n'aura.
+   */
+  it('🔴 exactement TROIS adresses, et elles portent `recette-`', () => {
     const emails = [...source.matchAll(/email:\s*'([^']+)'/g)].map((m) => m[1]);
     expect(
       emails.sort(),
-      'Ce script n’écrit que sur ces deux adresses. En ajouter une est une ' +
+      'Ce script n’écrit que sur ces adresses. En ajouter une est une ' +
         'DÉCISION : un compte de plus dans chaque école de développement, qu’il ' +
         'faudra reconnaître et retirer.\n' +
         '⚠ Et n’y mettez JAMAIS une adresse de démonstration (awa@, admin@…) : ' +
         'ce script RÉINITIALISE le mot de passe de ce qu’il touche.',
-    ).toEqual(['recette-bib@exemple.bf', 'recette-etu@exemple.bf']);
+    ).toEqual([
+      'recette-admin@exemple.bf',
+      'recette-bib@exemple.bf',
+      'recette-etu@exemple.bf',
+    ]);
+  });
+
+  it('🔴 les droits de `recette-bib@` restent ceux d’un BIBLIOTHÉCAIRE', () => {
+    // ⚠ Consigne explicite de Jean : « ne touche pas aux droits de
+    // recette-bib@ ». La tentation, le jour où une capture manque, sera de lui
+    // ajouter un rôle plutôt qu'un compte — et un compte de recette qui porte
+    // tous les droits ne démontre plus rien.
+    const bloc = /email: 'recette-bib@exemple\.bf',[\s\S]{0,200}?etudiant:/.exec(source)?.[0] ?? '';
+    expect(bloc.length, 'le relevé ne trouve pas le bloc : instrument faux').toBeGreaterThan(60);
+    expect(
+      bloc,
+      '`recette-bib@` doit rester LIBRARIAN. Si une capture manque, c’est un ' +
+        'compte de PLUS qu’il faut, pas un rôle de plus — voir `recette-admin@`.',
+    ).toMatch(/role: 'LIBRARIAN'/);
   });
 
   it('⚠ aucune adresse de démonstration n’est une CIBLE', () => {

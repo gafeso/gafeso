@@ -551,17 +551,72 @@ export class OfflineLicensesService {
    * chargement groupé de l'embargo qu'il faudra écrire — pas un second chemin
    * de décision.
    */
+  /**
+   * Les documents que CET utilisateur peut emporter hors ligne.
+   *
+   * ⚠ TROIS CHAMPS AJOUTÉS le 9 octobre 2026 — auteur principal, domaine,
+   * année —, et le motif est l'étagère mobile : une liste de titres seuls ne se
+   * trie ni ne se reconnaît. Deux mémoires du même intitulé y sont
+   * indiscernables, et c'est le cas NORMAL d'un fonds de thèses.
+   *
+   * ⚠ L'AUTEUR VIENT DES CONTRIBUTEURS, PAS DE `record.author`. La colonne est
+   * une dénormalisation transitoire (migration en deux temps) : elle porte le
+   * premier auteur principal, et le jour où elle sera retirée ce champ
+   * deviendrait vide SANS QUE RIEN NE LE DISE. On lit donc la source — le
+   * contributeur `AUTEUR_PRINCIPAL` de plus petite position — et on retombe sur
+   * la colonne, qui existe encore.
+   *
+   * ⚠ ET LES TROIS PEUVENT ÊTRE `null`, chacun pour une raison légitime : une
+   * notice sans auteur principal est refusée à la saisie mais peut venir d'un
+   * import MARC ; `category` est optionnelle ; `publishYear` aussi. Un `null`
+   * se DIT à l'écran — « auteur non renseigné » —, il ne s'affiche pas en blanc.
+   */
   async myDocuments(db: TenantDb, tenant: ResolvedTenant, user: JwtPayload) {
     const copies = await db.digitalCopy.findMany({
       where: { encStatus: 'ready', fileFormat: 'PDF' },
-      include: { record: { select: { id: true, title: true } } },
+      include: {
+        record: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            publishYear: true,
+            // La dénormalisation transitoire, en REPLI seulement.
+            author: true,
+            // La source : on prend le principal de plus petite position.
+            contributors: {
+              where: { role: 'AUTEUR_PRINCIPAL' },
+              orderBy: { position: 'asc' },
+              select: { name: true },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
-    const out: Array<{ docId: string; title: string; fileFormat: string }> = [];
+    const out: Array<{
+      docId: string;
+      title: string;
+      fileFormat: string;
+      auteur: string | null;
+      domaine: string | null;
+      annee: number | null;
+    }> = [];
     for (const copy of copies) {
       const droit = await this.droitHorsLigne(db, tenant, user.sub, copy.recordId);
       if (droit.accorde) {
-        out.push({ docId: copy.recordId, title: copy.record.title, fileFormat: copy.fileFormat });
+        out.push({
+          docId: copy.recordId,
+          title: copy.record.title,
+          fileFormat: copy.fileFormat,
+          // ⚠ `?? null` et non `?? ''` : une chaîne vide se lit comme un auteur
+          // dont le nom serait vide, et l'écran l'affiche en blanc. `null` dit
+          // « non renseigné », ce qui est une information.
+          auteur: copy.record.contributors[0]?.name ?? copy.record.author ?? null,
+          domaine: copy.record.category ?? null,
+          annee: copy.record.publishYear ?? null,
+        });
       }
     }
     return out;

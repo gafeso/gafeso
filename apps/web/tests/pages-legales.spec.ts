@@ -12,6 +12,8 @@
  * publiable**. Une page publique portant « Durée de conservation : [à
  * compléter] » sur le site d'une université serait pire que son absence.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LIBELLES } from '@/lib/libelles';
 import {
@@ -123,6 +125,60 @@ describe('le texte affiché vient de l’école, et sinon de la proposition', ()
     const bloc = MODELES.mentions.find((b) => b.id === 'logiciel')!;
     expect(texteDuBloc(bloc, { blocs: { logiciel: 'le nôtre' }, publieeLe: null })).toBe('le nôtre');
     expect(texteDuBloc(bloc, { blocs: {}, publieeLe: null })).toBe(bloc.propose);
+  });
+});
+
+describe('⚠⚠ ON N’ÉCRIT JAMAIS SANS AVOIR LU', () => {
+  /*
+   * LA GARANTIE LA PLUS IMPORTANTE DE CET ÉCRAN, et elle n'avait AUCUN test
+   * avant le 9 octobre 2026 — trouvée par une recette qui a montré « Cannot GET
+   * /tenancy/settings » : l'écran ne chargeait rien, et il offrait pourtant
+   * d'enregistrer.
+   *
+   * `PATCH /tenancy/settings` fait un REMPLACEMENT COMPLET de `pagesLegales`.
+   * Enregistrer sans avoir lu l'état courant l'ÉCRASE — y compris une page
+   * PUBLIÉE que personne ne voulait retirer.
+   *
+   * ⭐ C'est « une fonction qui ne peut pas accomplir son office ne doit pas
+   * sortir comme si elle l'avait accompli », appliqué à une ÉCRITURE : l'office
+   * est « modifier », et modifier sans avoir lu est écraser.
+   */
+  it('le refus EXISTE, et il explique le DANGER — pas la panne', () => {
+    const t = LIBELLES.pagesLegales.refusEnregistrerSansLecture;
+    // Il doit dire ce qu'on perdrait, sinon il se lit comme une panne qu'on
+    // contourne en réessayant — et réessayer est précisément le geste qui
+    // détruirait.
+    expect(t).toMatch(/remplacerait|écraserait/i);
+    expect(t).toMatch(/publiée/i);
+    expect(t).toMatch(/rechargez/i);
+  });
+
+  it('⚠ et la BORNE du brouillon est dite, pas seulement commentée', () => {
+    // Aucune route ne rend un brouillon : seule la version PUBLIÉE est
+    // relisible. Taire cette borne ferait croire à une perte de données.
+    const t = LIBELLES.pagesLegales.brouillonNonRelisible;
+    expect(t).toMatch(/publiée?s?/i);
+    expect(t).toMatch(/ne réapparaîtra pas|pas rechargé/i);
+  });
+
+  it('⚠ l’écran LIT une route qui existe', () => {
+    // ⚠ Le défaut d'origine : l'écran appelait `GET /tenancy/settings`, qui
+    // N'EXISTE PAS — et mes 14 cas doublaient `api()`, donc aucun ne pouvait me
+    // démentir. « Une doublure est une hypothèse, et un test vert ne confirme
+    // que moi. » Ce cas lit la SOURCE de l'écran et refuse la route fantôme.
+    const src = readFileSync(resolve(process.cwd(), 'app/admin/pages-legales/page.tsx'), 'utf-8');
+    const code = src.split('\n').filter((l) => !/^\s*(\*|\/\/)/.test(l)).join('\n');
+    expect(code).not.toMatch(/api<[^>]*>\(\s*'\/tenancy\/settings'/);
+    expect(code).toMatch(/'\/tenancy\/home'/);
+  });
+
+  it('⚠ et il REFUSE d’enregistrer tant qu’il n’a pas lu', () => {
+    // La garde est `if (!pages) { setErreur(…); return; }` — une sortie AVANT
+    // tout appel. On lit la source : un test de rendu ne peut pas prouver
+    // qu'aucune requête ne part.
+    const src = readFileSync(resolve(process.cwd(), 'app/admin/pages-legales/page.tsx'), 'utf-8');
+    expect(src).toMatch(/if \(!pages\)/);
+    expect(src).toMatch(/refusEnregistrerSansLecture/);
   });
 });
 

@@ -70,6 +70,10 @@ function doc(i: number): RecordSearchDoc {
     publishYear: 2020,
     recordType: 'book',
     coverUrl: null,
+    // ⚠ Obligatoire depuis le 9/10/2026 : `hasDigital` est indexé et
+    // FILTRABLE. Un jeu d'essai qui l'omet ne compile plus — c'est le
+    // COMPILATEUR qui énumère les sites, pas un balayage.
+    hasDigital: false,
   } as RecordSearchDoc;
 }
 

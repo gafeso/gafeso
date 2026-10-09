@@ -22,6 +22,7 @@ exports[`caractérisation — les trois champs dans le document de recherche > �
   ],
   "coverUrl": null,
   "defenseUniversity": "Université d’Exemple — Ouagadougou",
+  "hasDigital": false,
   "id": "rec-caracterisation",
   "isbn": "EXEMPLE-1301",
   "keywords": [

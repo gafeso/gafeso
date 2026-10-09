@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { BiblioRecord, DigitalFormat, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { buildRecordSearchDoc, SearchService } from '../search/search.service';
+import { INCLUDE_POUR_INDEX, buildRecordSearchDoc, SearchService } from '../search/search.service';
 import { aplatirChampsDeProfil } from './champs-de-profil';
 import { ContentIngestionService } from '../offline-licensing/content-ingestion.service';
 import {
@@ -195,6 +195,12 @@ export class DigitalCopyService {
     // Rend le document accessible SANS aucune manipulation supplémentaire.
     await this.attachToDefaultCollection(slug, recordId);
 
+    // ⚠ ICI, ET PAS DANS LE CHEMIN DES MÉTADONNÉES. Le pré-remplissage sort par
+    // `return record` quand le fichier n'apporte ni métadonnée ni couverture :
+    // l'indexation qui y vit ne s'exécute donc PAS dans ce cas, et l'index
+    // dirait « aucun document » sur une notice qui vient d'en recevoir un.
+    await this.reindexerApresTransition(db, slug, recordId, 'téléversement du document');
+
     // Ingestion offline (PDF) : blob AEAD chiffré + xref valide, EN PARALLÈLE du
     // clair. Best-effort — un échec (ex. xref irréparable) est consigné sur
     // DigitalCopy (encStatus/encError) mais ne casse JAMAIS la lecture en ligne.
@@ -288,10 +294,7 @@ export class DigitalCopyService {
         // Include complet : le document Meilisearch est REMPLACÉ en entier à
         // l'indexation — sans contributeurs/mots-clés ici, ils disparaîtraient
         // de la recherche à chaque upload de fichier.
-        include: {
-          contributors: { orderBy: { position: 'asc' } },
-          keywords: { include: { keyword: true } },
-        },
+        include: INCLUDE_POUR_INDEX,
       });
 
       try {
@@ -340,7 +343,55 @@ export class DigitalCopyService {
     return { url, expiresInSeconds: ttlSeconds, fileFormat: copy.fileFormat };
   }
 
-  async remove(db: TenantDb, recordId: string) {
+  /**
+   * ⭐ RÉINDEXE UNE NOTICE APRÈS UNE TRANSITION DE `hasDigital`.
+   *
+   * *Posée le 9 octobre 2026, AVANT d'indexer `hasDigital` — et c'est l'ordre
+   * qui compte.*
+   *
+   * `hasDigital` devient un attribut FILTRABLE de l'index. L'index cesse donc
+   * d'être un miroir du catalogue : il en devient une SECONDE SOURCE, et deux
+   * sources d'un même fait finissent par divergier. Mesuré avant d'indexer, il
+   * y avait DEUX transitions sans réindexation :
+   *
+   *   · `upload` sort par `return record` quand le fichier n'apporte aucune
+   *     métadonnée ni couverture — la copie est attachée, l'index dit encore
+   *     « aucun document » ;
+   *   · `remove` ne réindexait pas du tout — l'index garde `hasDigital: true`
+   *     sur une notice dont le document est parti, et la recherche filtrée le
+   *     propose à un lecteur qui obtiendra un 404.
+   *
+   * ⚠ Elle AVALE son échec, délibérément, comme `safeIndex` : une indexation
+   * ratée ne doit pas faire échouer un téléversement ni une suppression. Mais
+   * elle le DIT dans le journal, et le compte filtré (`totalHits` confronté au
+   * compte en base) est le garde qui voit la dérive — c'est un garde d'EFFET,
+   * pas une promesse.
+   */
+  private async reindexerApresTransition(
+    db: TenantDb,
+    slug: string,
+    recordId: string,
+    transition: string,
+  ): Promise<void> {
+    try {
+      const record = await db.biblioRecord.findUnique({
+        where: { id: recordId },
+        include: INCLUDE_POUR_INDEX,
+      });
+      if (!record) return;
+      await this.search.indexRecords(slug, [
+        buildRecordSearchDoc(aplatirChampsDeProfil(record)),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Réindexation après ${transition} échouée (notice ${recordId}) : ` +
+          `${(error as Error).message} — « hasDigital » dans l'index peut être ` +
+          'périmé pour cette notice. Lancez /cataloging/reindex.',
+      );
+    }
+  }
+
+  async remove(db: TenantDb, slug: string, recordId: string) {
     const copy = await db.digitalCopy.findUnique({ where: { recordId } });
     if (!copy) throw new NotFoundException('Aucun exemplaire numérique pour cette notice.');
     await db.digitalCopy.delete({ where: { recordId } });
@@ -348,6 +399,8 @@ export class DigitalCopyService {
     if (copy.encObjectKey) {
       await this.storage.deleteObject(copy.encObjectKey).catch(() => undefined);
     }
+    // ⚠ APRÈS la suppression : l'index doit cesser de dire « a un document ».
+    await this.reindexerApresTransition(db, slug, recordId, 'suppression du document');
     return { deleted: true };
   }
 }

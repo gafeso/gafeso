@@ -53,7 +53,10 @@ const CHAMPS_INDEXES = [
   'summary',
   'title',
   'titleComplement',
-];
+  // ⭐ Ajouté le 9 octobre 2026 — et c'est lui qui a fait basculer
+  // `CHAMPS_QUI_DEPENDENT_DU_FICHIER`, donc l'invariant du point n°9.
+  'hasDigital',
+].sort();
 
 /**
  * Ceux de ces champs qui DÉPENDENT de l'existence d'un fichier numérique.
@@ -62,7 +65,7 @@ const CHAMPS_INDEXES = [
  * ici un champ (`avecFichier`, `hasDigitalCopy`, un compteur de pages…), le
  * test ci-dessous exigera que `remove()` réindexe — et il aura raison.
  */
-const CHAMPS_QUI_DEPENDENT_DU_FICHIER: string[] = [];
+const CHAMPS_QUI_DEPENDENT_DU_FICHIER: string[] = ['hasDigital'];
 
 function doc() {
   return buildRecordSearchDoc({
@@ -88,6 +91,30 @@ function serviceEtDoublures(avecCopie = true) {
       ),
       delete: vi.fn().mockResolvedValue({}),
     },
+    // ⚠ INDISPENSABLE, ET TROUVÉ PAR UN TEST QUI PASSAIT POUR LA MAUVAISE
+    // RAISON. Sans `biblioRecord`, la réindexation de `remove()` lève à
+    // l'intérieur de son `try` et se fait AVALER : `indexRecords` n'était
+    // jamais appelée, et l'assertion « pas de réindexation » passait — sur un
+    // chemin qui n'avait pas été exercé. C'est « le jeu d'essai n'atteint pas
+    // le chemin ».
+    biblioRecord: {
+      findUnique: vi.fn(async () => ({
+        id: 'rec-1',
+        title: 'Le droit foncier rural',
+        author: 'Ouédraogo, Salif',
+        isbn: null,
+        category: 'droit',
+        language: 'fr',
+        publishYear: 2021,
+        recordType: 'book',
+        coverUrl: null,
+        contributors: [],
+        keywords: [],
+        // La copie vient d'être supprimée : `null` est ce qu'on attend, et
+        // c'est ce qui fait passer `hasDigital` à faux dans l'index.
+        digitalCopy: null,
+      })),
+    },
   };
   const service = new DigitalCopyService(
     storage as never,
@@ -106,7 +133,7 @@ describe('Le document indexé, et ce qu’il doit à un fichier', () => {
     // champ ajouté par quelqu'un qui n'a jamais entendu parler du point n°9 —
     // et c'est précisément cette personne que ce test protège.
     expect(Object.keys(doc()).sort()).toEqual(CHAMPS_INDEXES);
-    expect(CHAMPS_INDEXES.length).toBe(15);
+    expect(CHAMPS_INDEXES.length).toBe(16);
   });
 
   it('les champs dépendant du fichier sont bien des champs indexés', () => {
@@ -122,7 +149,7 @@ describe('⚠ L’INVARIANT DU POINT N°9, dans les deux sens', () => {
   it('aucun champ indexé ne dépend du fichier ⟹ remove() n’a pas à réindexer', async () => {
     const { service, search, db } = serviceEtDoublures();
 
-    await service.remove(db, 'rec-1');
+    await service.remove(db, 'zinda', 'rec-1');
 
     if (CHAMPS_QUI_DEPENDENT_DU_FICHIER.length === 0) {
       // Caractérisation, pas préférence : on enregistre que la suppression ne
@@ -148,13 +175,20 @@ describe('⚠ L’INVARIANT DU POINT N°9, dans les deux sens', () => {
     // absence ne dit rien de ce qui a lieu.
     const { service, search, storage, db } = serviceEtDoublures();
 
-    expect(await service.remove(db, 'rec-1')).toEqual({ deleted: true });
+    expect(await service.remove(db, 'zinda', 'rec-1')).toEqual({ deleted: true });
     expect(storage.deleteObject).toHaveBeenCalledTimes(2); // clair + chiffré
-    expect(search.indexRecords).not.toHaveBeenCalled();
+    // ⚠ RETOURNÉ le 9 octobre 2026 : cette ligne affirmait
+    // `not.toHaveBeenCalled()`. Depuis que `hasDigital` est indexé, la
+    // suppression DOIT réindexer — sinon l'index garde « a un document » sur
+    // une notice qui n'en a plus.
+    expect(
+      search.indexRecords,
+      'la suppression doit réindexer : `hasDigital` dépend du fichier',
+    ).toHaveBeenCalledTimes(1);
   });
 
   it('sans exemplaire numérique, elle refuse au lieu de rendre un succès vide', async () => {
     const { service, db } = serviceEtDoublures(false);
-    await expect(service.remove(db, 'rec-1')).rejects.toThrow(/Aucun exemplaire numérique/);
+    await expect(service.remove(db, 'zinda', 'rec-1')).rejects.toThrow(/Aucun exemplaire numérique/);
   });
 });

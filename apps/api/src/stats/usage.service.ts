@@ -169,8 +169,30 @@ export class UsageService {
       ORDER BY count(*) DESC
       LIMIT ${limite}
     `);
+    // ⭐ LE TITRE, AJOUTÉ LE 9 OCTOBRE 2026 — signalé par une recette à l'écran.
+    //
+    // L'écran des statistiques affichait SIX UUID à une bibliothécaire :
+    //
+    //     Documents les plus consultés
+    //       58dea9e9-3d82-457d-a510-34fcfabef66e   15 accès
+    //
+    // ⚠ Et ce n'était pas un défaut d'affichage : cette méthode ne rendait que
+    // `recordId`. « Une liste d'identifiants n'est pas une liste » — la même
+    // phrase écrite dans `/reader/consultations`, qui faisait DÉJÀ la jointure.
+    // Le front ne pouvait rien inventer.
+    //
+    // ⚠ `titre: null` POUR UNE NOTICE SUPPRIMÉE, pas une chaîne vide : l'usage
+    // reste compté — c'est le fait — mais la notice n'existe plus. L'écran doit
+    // pouvoir le DIRE (« notice retirée du catalogue ») au lieu d'afficher un
+    // blanc.
+    const titres = await db.biblioRecord.findMany({
+      where: { id: { in: [...new Set(lignes.map((l) => l.record_id))] } },
+      select: { id: true, title: true },
+    });
+    const parId = new Map(titres.map((t) => [t.id, t.title]));
     return lignes.map((l) => ({
       recordId: l.record_id,
+      titre: parId.get(l.record_id) ?? null,
       consultations: Number(l.consultations),
       telechargements: Number(l.telechargements),
     }));

@@ -96,8 +96,20 @@ services:
       # ⚠ La web n'en reçoit PAS : elle lit `GET /health`. Deux sources pour une
       # même valeur s'accordent PAR COÏNCIDENCE jusqu'au jour où l'une bouge.
       args:
-        GAFESO_VERSION: ${GAFESO_VERSION:-non étiquetée}
-        GAFESO_COMMIT: ${GAFESO_COMMIT:-inconnu}
+        # 🔴 PLUS AUCUN DÉFAUT ICI, ET C'EST LE POINT.
+        #
+        # `${GAFESO_VERSION:-non étiquetée}` substituait une réponse HONNÊTE à
+        # une version ABSENTE — donc un `up -d --build` lancé sans
+        # `eval "$(scripts/version-du-depot.sh --exporter)"` produisait une image
+        # qui répond « non étiquetée / inconnu », SANS AUCUN AVERTISSEMENT.
+        # Constaté au déploiement de rc7 sur la démonstration, 9 octobre 2026.
+        #
+        # ⚠ Le défaut était défendable en soi — « dire la vérité plutôt qu'un
+        # numéro plausible ». Il était faux à CET endroit : il rendait l'oubli
+        # indiscernable du choix. Sans lui, la variable arrive VIDE et l'image
+        # REFUSE de se construire en disant quoi lancer.
+        GAFESO_VERSION: ${GAFESO_VERSION}
+        GAFESO_COMMIT: ${GAFESO_COMMIT}
     restart: unless-stopped
     depends_on:
       db:
