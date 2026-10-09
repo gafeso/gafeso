@@ -898,6 +898,71 @@ planter l'OPAC/la constellation (`SearchService.search`, voir
 (catégories à 0 document) au lieu d'une erreur 500, le temps de relancer une
 réindexation.
 
+## 🔴 MONTÉE VERS `v1.0.0-rc6` — les deux migrations, et le retour en arrière
+
+*Mesuré le 9 octobre 2026 sur un cluster JETABLE, pas raisonné.*
+
+`prisma migrate deploy` tourne **automatiquement au démarrage du conteneur
+`api`** : il n'y a aucune étape manuelle à la montée. Ce chapitre existe pour
+dire ce qui se passe si l'on veut **revenir**.
+
+### Ce que rc6 ajoute
+
+| Migration | Depuis | Ce qu'elle fait |
+|---|---|---|
+| `20261006150000_pages_legales` | rc3 | `ALTER TABLE public.tenant_settings ADD COLUMN IF NOT EXISTS pages_legales jsonb` |
+| `20261006180000_usage_nominatif` | rc4 | 3 colonnes + 3 index sur `usage_events`, **dans chaque schéma d'école ET dans `public`**, puis `UPDATE kind='CONSULTATION' WHERE kind='LECTURE'` |
+
+Les deux sont **additives et idempotentes** (`IF NOT EXISTS`), et la seconde
+saute les schémas à demi provisionnés (`to_regclass … IS NULL`).
+
+⚠ `pages_legales` n'a **pas de défaut**, délibérément : `NULL` veut dire « cette
+école n'a rien rédigé », et un `'{}'::jsonb` rendrait « rédigé mais vide »
+indiscernable de « jamais rédigé ».
+
+### ⭐ RÉVERSIBILITÉ — ce qui est mesuré, et ce qui ne l'est pas
+
+| Question | Réponse | Comment elle a été obtenue |
+|---|---|---|
+| Une version ANTÉRIEURE démarre-t-elle sur une base montée à rc6 ? | ✅ **OUI** | `migrate deploy` de rc4 sur une base rc6 → **code 0**, « No pending migrations to apply ». Il TOLÈRE une migration enregistrée qu'il ne connaît pas |
+| L'ancien code casse-t-il sur les colonnes neuves ? | ✅ **NON** | elles sont nullables ; un `INSERT` qui ne les nomme pas réussit, et Prisma énumère ses colonnes au `SELECT` |
+| 🔴 L'ancien code lit-il la valeur renommée ? | 🔴 **OUI, et il compte ZÉRO** | le rapport annuel de rc4 fait `count(*) where kind='LECTURE'`. Mesuré : **3 lignes en base, 0 comptées** |
+
+> 🔴 **C'est le RENOMMAGE qu'il faut défaire pour revenir, pas les colonnes.**
+> Les retirer détruirait les `user_id` et `class_name` collectés depuis le
+> déploiement — la seule donnée que ce lot ait produite — et rien ne l'exige.
+
+### Le retour en arrière, et il REFUSE plutôt que de deviner
+
+```bash
+docker compose -f docker/docker-compose.prod.yml exec -T db   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v CONFIRME=oui   -f /dev/stdin < scripts/migrations/retour-avant-usage-nominatif.sql
+```
+
+⚠ **Il ne se lance pas sans `-v CONFIRME=oui`** : sans elle il LÈVE (code 3) et
+n'écrit rien. Un fichier qui modifie des données est écrit pour être LU avant
+d'être lancé.
+
+⭐ **Le discriminant est EXACT, et il est lu en base** : `started_at` de la
+migration dans `_prisma_migrations`. Toute ligne `CONSULTATION` antérieure a été
+RENOMMÉE ; toute ligne postérieure est une vraie consultation de rc6.
+
+⚠ **Et il n'y a pas d'autre discriminant** — `user_id IS NULL` ne marche PAS :
+une consultation de BIBLIOTHÉCAIRE est écrite sans auteur, délibérément. Elle
+est donc indiscernable d'une ligne renommée. C'est pourquoi le fichier **refuse**
+quand l'horodatage manque, au lieu de retomber sur un critère approchant.
+
+**Ce qu'il laisse, et il le DIT** : les consultations réellement enregistrées par
+rc6 restent en `CONSULTATION`, et l'ancien code ne les comptera pas. Ce n'est pas
+une perte de donnée — c'est un mot qu'il ne connaît pas. Le compte s'imprime,
+pour que personne ne le découvre dans un rapport.
+
+**Éprouvé dans les trois sens** sur un cluster jetable : sans `CONFIRME` → 3,
+données intactes ; horodatage absent → 3, données intactes ; nominal → 0,
+2 lignes rendues à `LECTURE`, 1 consultation de rc6 conservée. Second passage :
+0 ligne touchée.
+
+---
+
 ## Migrations Prisma — ajouter un changement de schéma
 
 Le développement local utilise `prisma db push` (pas de fichiers de

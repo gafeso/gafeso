@@ -25,6 +25,21 @@ vi.mock('@/lib/session', () => ({
   getUser: () => null,
   getToken: () => null,
 }));
+/*
+ * ⚠ LA CIRCULATION VIENT DE L'ÉTABLISSEMENT, PAS DE LA NOTICE — et ce fichier
+ * l'a appris en échouant. Les cas pilotaient `record.circulationActive` ; le
+ * contrat livré met le champ sur `/tenancy/current`, parce que c'est une
+ * propriété de l'ÉCOLE et non d'un document.
+ *
+ * ⚠ Le hook rend `true` tant qu'on ne sait pas : `undefined` et `true` se
+ * comportent pareil, seul `false` éteint. Un champ non encore servi n'éteint
+ * jamais la circulation partout — et un cas le garde plus bas.
+ */
+let CIRCULATION = true;
+vi.mock('@/lib/etablissement', () => ({
+  useCirculationActive: () => CIRCULATION,
+}));
+
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'r1' }),
   usePathname: () => '/opac/r1',
@@ -55,7 +70,8 @@ const BASE = {
 };
 
 /** ⚠ Le réseau ne répond jamais : on mesure le rendu, pas un chargement. */
-function monter(extra: Record<string, unknown>) {
+function monter(extra: Record<string, unknown>, circulation = true) {
+  CIRCULATION = circulation;
   vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
   return render(<FicheNotice initial={{ ...BASE, ...extra } as never} />);
 }
@@ -83,7 +99,7 @@ const cadenas = (hint: string) =>
 
 describe('circulation ÉTEINTE : plus aucune trace de rayon', () => {
   it('⚠ la section « Exemplaires & disponibilité » disparaît — TITRE COMPRIS', () => {
-    monter({ circulationActive: false, hasDigital: true });
+    monter({ hasDigital: true }, false);
     expect(titreExemplaires()).toBeNull();
     // Un titre sans contenu se lit comme une page cassée : on vérifie que
     // l'en-tête lui-même est parti, pas seulement son corps.
@@ -92,7 +108,7 @@ describe('circulation ÉTEINTE : plus aucune trace de rayon', () => {
   });
 
   it('⚠ aucun badge de disponibilité, et pas même le cadenas', () => {
-    monter({ circulationActive: false, hasDigital: false });
+    monter({ hasDigital: false }, false);
     for (const texte of [T.badgeDisponible, T.badgeIndisponible, T.badgeSansExemplaire]) {
       expect(screen.queryByText(texte)).toBeNull();
     }
@@ -104,14 +120,14 @@ describe('circulation ÉTEINTE : plus aucune trace de rayon', () => {
     // phrase de référence. Le cas visé est celui d'un MEMBRE sur une notice que
     // la bibliothèque référence sans en avoir ni exemplaire ni fichier : les
     // 119 notices mesurées sur zinda.
-    monter({ circulationActive: false, hasDigital: false, membersOnly: false });
+    monter({ hasDigital: false, membersOnly: false }, false);
     expect(screen.getByText(T.referenceSeule)).toBeTruthy();
     expect(screen.queryByText(T.sansVersionNumerique)).toBeNull();
     expect(screen.queryByText(/Aucun exemplaire/i)).toBeNull();
   });
 
   it('⚠ « Réserver » n’existe nulle part, même pas grisé', () => {
-    monter({ circulationActive: false, hasDigital: true });
+    monter({ hasDigital: true }, false);
     expect([...document.querySelectorAll('button')].filter((b) => /Réserver/i.test(b.textContent ?? ''))).toEqual([]);
   });
 });
@@ -120,7 +136,7 @@ describe('l’EXISTENCE d’une version en ligne est publique', () => {
   it('⚠ badge « Lecture en ligne disponible » pour un ANONYME quand hasDigital', () => {
     // La décision du 8 octobre 2026 : un étudiant à distance doit pouvoir savoir
     // AVANT de créer un compte s'il y a quelque chose à lire.
-    monter({ hasDigital: true, circulationActive: true });
+    monter({ hasDigital: true }, true);
     expect(screen.getByText(T.badgeLectureEnLigne)).toBeTruthy();
     // ⚠ et le cadenas de disponibilité ne le double pas : un seul badge.
     expect(cadenas(T.membresDisponibilite)).toBeNull();
@@ -129,13 +145,13 @@ describe('l’EXISTENCE d’une version en ligne est publique', () => {
   it('⚠ le champ ABSENT ne fait rien apparaître — l’écran ne spécule pas', () => {
     // Tant que l'API ne sert pas `hasDigital`, le comportement d'aujourd'hui est
     // conservé. C'est ce qui permet de livrer l'écran avant le champ.
-    monter({ circulationActive: true });
+    monter({}, true);
     expect(screen.queryByText(T.badgeLectureEnLigne)).toBeNull();
     expect(cadenas(T.membresDisponibilite)).toBeTruthy();
   });
 
   it('⚠ le refus de lecture est ASSUMÉ — plus de « SI une version existe »', () => {
-    monter({ circulationActive: true });
+    monter({}, true);
     expect(screen.getByText(new RegExp(T.lectureReserveeAuxMembres.slice(0, 30)))).toBeTruthy();
     expect(screen.queryByText(/Si une version numérique existe/i)).toBeNull();
   });
@@ -153,7 +169,7 @@ describe('l’EXISTENCE d’une version en ligne est publique', () => {
 
 describe('circulation ACTIVE : rien ne change', () => {
   it('la section et le cadenas reviennent', () => {
-    monter({ circulationActive: true });
+    monter({}, true);
     expect(titreExemplaires()).toBeTruthy();
     expect(cadenas(T.membresDisponibilite)).toBeTruthy();
   });

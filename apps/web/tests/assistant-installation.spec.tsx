@@ -80,6 +80,25 @@ async function ouvrirLAssistant() {
   await waitFor(() => expect(screen.getByText(T.constatTitre)).toBeTruthy());
 }
 
+describe('le titre de l’onglet ne nomme AUCUNE école', () => {
+  it('⚠ `absolute` : le gabarit racine n’y ajoute rien', async () => {
+    /*
+     * ⚠ TROUVÉ PAR UNE RECETTE le 9 octobre 2026, pas par ces tests. L'onglet
+     * affichait « Installer Gafeso · Université d'Exemple — Bibliothèque
+     * universitaire » : une chaîne nue est passée au `template` du gabarit
+     * PARENT. Sur une instance NEUVE il n'existe pas d'école — et c'est
+     * exactement le cas que cet écran existe pour traiter.
+     *
+     * ⭐ Le commentaire du fichier disait déjà « hériter du gabarit racine ferait
+     * apparaître un nom vide ». Il avait raison, et il décrivait une protection
+     * que le code ne fournissait pas : un texte qui décrit une sauvegarde est un
+     * test qui n'a pas été écrit.
+     */
+    const { metadata } = await import('@/app/installation/layout');
+    expect(metadata.title).toEqual({ absolute: 'Installer Gafeso' });
+  });
+});
+
 describe('TROIS états, pas deux', () => {
   it('⚠ `requise` inconnu : NI l’assistant NI « déjà installée »', async () => {
     etat = 'panne';

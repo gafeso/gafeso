@@ -73,6 +73,29 @@ function segmentsPublics(): string[] {
 /** Pages dont le titre doit porter un segment PROPRE, déclaré sous la racine. */
 const TITRE_PROPRE = [
   /*
+   * ⚠⚠ LES DEUX PAGES LÉGALES, ARRIVÉES ICI LE 9 OCTOBRE 2026 — et la raison de
+   * leur arrivée vaut d'être lue.
+   *
+   * Elles existaient depuis la veille, avec leur `generateMetadata`. Elles
+   * n'étaient PAS dans cette liste, et ce test était VERT : `segmentsPublics()`
+   * dérive sa population des listes publiques du MIDDLEWARE, où elles
+   * manquaient. Elles rendaient donc 307 vers /login.
+   *
+   * > ⭐⭐ **Un garde dont la population est dérivée de la chose mal configurée
+   * > ne peut pas voir la mauvaise configuration.** Il demandait « chaque page
+   * > publique a-t-elle un titre propre ? » ; une page wrongly non-publique
+   * > n'est pas dans sa population, et son vert était honnête.
+   *
+   * ⚠ C'est « deux familles de gardes, un seul inventaire » dans sa forme la
+   * plus retorse : la population n'était pas incomplète par oubli, elle était
+   * incomplète PAR LE DÉFAUT MÊME qu'on cherchait. Ce qui l'a trouvé est une
+   * recette — un `curl` sans cookie — et `pages-publiques-sans-cookie.spec.ts`
+   * le rejoue désormais en partant de la LISTE DÉCLARÉE, pas de la population
+   * dérivée.
+   */
+  '/confidentialite',
+  '/mentions-legales',
+  /*
    * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — et il est ici pour un motif
    * qui lui est propre : son titre ne nomme AUCUNE école, parce que sur une
    * instance neuve il n'en existe pas encore. Hériter du gabarit racine ferait

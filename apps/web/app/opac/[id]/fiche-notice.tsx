@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { dateLisible, lireEmbargo } from '@/lib/embargo';
 import { LIBELLES } from '@/lib/libelles';
+import { useCirculationActive } from '@/lib/etablissement';
 
 /** Les textes de la réservation, côté LECTEUR. */
 const T = LIBELLES.reservations;
@@ -66,22 +67,6 @@ interface RecordDetail {
    * arrive, sans autre changement.
    */
   hasDigital?: boolean;
-  /**
-   * ⭐ L'ÉTAT DU MODULE `circulation`, dans la charge PUBLIQUE.
-   *
-   * ⚠ POURQUOI ICI ET PAS PAR LE HOOK. Mesuré le 8 octobre 2026 :
-   * `GET /modules` rend **401 sans jeton**. La fiche publique ne peut donc pas
-   * connaître l'état du module autrement que par sa propre charge utile — et
-   * sans lui, une bibliothèque sans rayon afficherait « Exemplaires &
-   * disponibilité » à des étudiants qui n'ont pas de rayon.
-   *
-   * ⚠ UN BOOLÉEN ET PAS UNE ABSENCE, parce que `availability: null` veut DÉJÀ
-   * dire « vous êtes anonyme ». Les deux cas n'appellent pas le même écran :
-   * l'un dit « réservé aux membres », l'autre ne doit RIEN dire.
-   *
-   * ⚠ OPTIONNEL : absent, on garde le comportement d'aujourd'hui.
-   */
-  circulationActive?: boolean;
 }
 
 type RecordAccessStatus = { granted: true } | { granted: false; message: string };
@@ -107,6 +92,19 @@ const STATUS_LABELS: Record<string, string> = {
  * PLANCHER — jamais le mot de la fin.
  */
 export function FicheNotice({ initial = null }: { initial?: RecordDetail | null }) {
+  /*
+   * ⚠ L'ÉTAT DU MODULE VIENT DE L'ÉTABLISSEMENT, PAS DE LA NOTICE — correction
+   * du 8 octobre 2026. J'avais posé cet écran sur `record.circulationActive` ;
+   * le contrat livré met le champ sur `/tenancy/current`, et c'est la bonne
+   * place : la circulation est une propriété de l'ÉCOLE, pas d'un document.
+   *
+   * ⚠ Pas `GET /modules`, qui rend 401 sans jeton — mesuré des deux côtés, et
+   * c'est précisément pour ça que le champ existe sur une route publique.
+   *
+   * ⚠ `true` tant qu'on ne sait pas : un champ non encore servi n'éteint jamais
+   * la circulation partout.
+   */
+  const circulationActive = useCirculationActive();
   const { id } = useParams<{ id: string }>();
   const [record, setRecord] = useState<RecordDetail | null>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -212,7 +210,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
           rayon ne doit pas même voir le cadenas « disponibilité réservée aux
           membres », qui parle d'une disponibilité qui n'existe pas chez elle.
         */}
-        {record.circulationActive === false ? (
+        {!circulationActive ? (
           record.hasDigital ? (
             <Badge tone="green">{LIBELLES.ficheNotice.badgeLectureEnLigne}</Badge>
           ) : null
@@ -342,7 +340,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         lit comme une page cassée, pas comme une information absente. C'est la
         règle déjà appliquée à CONTACT dans le pied de la page d'accueil.
       */}
-      {record.circulationActive !== false && (
+      {circulationActive && (
       <>
       {record.membersOnly ? (
         <>
@@ -502,7 +500,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
                 quelqu'un qui ne pouvait de toute façon rien emprunter. La notice
                 est alors ce qu'elle est : une RÉFÉRENCE, utile à citer et à
                 demander ailleurs. */}
-          {record.circulationActive === false
+          {!circulationActive
             ? LIBELLES.ficheNotice.referenceSeule
             : LIBELLES.ficheNotice.sansVersionNumerique}
         </p>

@@ -29,7 +29,8 @@
     "seed:demo": "node scripts/seed-demo.mjs",
     "provision:production": "node scripts/provision-production.mjs",
     "reindex": "node scripts/reindex.mjs",
-    "test:base": "npm run test:base -w @gafeso/api"
+    "test:base": "npm run test:base -w @gafeso/api",
+    "comptes:recette": "dotenv -e .env -- node scripts/dev/comptes-de-recette.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.0"

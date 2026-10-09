@@ -17,6 +17,44 @@ export interface EtablissementCourant {
   slug: string;
   primaryColor: string;
   secondaryColor: string;
+  /**
+   * LA CIRCULATION PHYSIQUE EST-ELLE ACTIVE DANS CETTE ÉCOLE ?
+   *
+   * ⚠ ICI ET PAS SUR LA NOTICE, et c'est une correction du 8 octobre 2026 :
+   * j'avais posé le front sur `record.circulationActive`. Le contrat livré met
+   * le champ sur `/tenancy/current` et `/tenancy/descriptor` — ce qui est la
+   * bonne place, parce que c'est une propriété de l'ÉCOLE et non d'une notice.
+   *
+   * ⚠ Et pas sur `GET /modules`, qui rend **401 sans jeton** (mesuré des deux
+   * côtés) : l'OPAC anonyme ne pourrait pas le savoir.
+   *
+   * ⚠ OPTIONNEL : absent — une API plus ancienne —, on garde le comportement
+   * d'aujourd'hui. `undefined` et `true` se comportent pareil ; seul `false`
+   * éteint. Un champ non encore servi n'éteint JAMAIS la circulation partout.
+   */
+  circulationActive?: boolean;
+}
+
+/**
+ * La circulation physique, pour un écran.
+ *
+ * ⚠ `true` TANT QU'ON NE SAIT PAS : masquer sur une information qu'on n'a pas
+ * ferait disparaître des blocs auxquels l'école a droit, le temps d'un
+ * aller-retour réseau. La garantie reste l'API, qui refuse les routes d'un
+ * module inactif.
+ */
+export function useCirculationActive(): boolean {
+  const [actif, setActif] = useState(true);
+  useEffect(() => {
+    let vivant = true;
+    void chargerEtablissement().then((e) => {
+      if (vivant && e?.circulationActive === false) setActif(false);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
+  return actif;
 }
 
 let enCours: Promise<EtablissementCourant | null> | null = null;

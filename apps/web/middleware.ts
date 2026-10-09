@@ -51,7 +51,33 @@ const PUBLIC_EXACT = ['/', '/login', '/inscription', '/definir-mot-de-passe'];
  * que ce jeton ouvre. « Cacher sans refuser laisserait une porte ouverte » ; ici
  * on ne cache rien, et c'est l'API qui refuse.
  */
-const PUBLIC_PREFIXES = ['/opac', '/e/', '/.well-known/', '/marque/', '/demo/', '/installation'];
+/*
+ * ⚠ LES DEUX PAGES LÉGALES, AJOUTÉES LE 9 OCTOBRE 2026 — et c'est une RECETTE
+ * qui l'a trouvé, pas un test.
+ *
+ * Elles rendaient **307** : redirigées vers /login. Or le pied de page affiche
+ * leur lien dès qu'elles sont publiées — un visiteur qui cliquait « Mentions
+ * légales » tombait sur un écran de connexion. Des mentions légales derrière un
+ * mur d'authentification ne sont pas des mentions légales.
+ *
+ * ⚠ AUCUN TEST NE POUVAIT LE VOIR, et pas par négligence : mes douze cas
+ * montaient le COMPOSANT, et le middleware n'est pas dans ce qu'on monte. C'est
+ * « il existe des défauts qu'aucun test unitaire ne peut atteindre », et
+ * « vérifier connecté ne dit rien de ce que voit le public » — les deux à la
+ * fois, sur la seule classe d'écrans dont le public EST le dehors.
+ *
+ * Le garde qui le rejoue : `pages-publiques-sans-cookie.spec.ts`.
+ */
+const PUBLIC_PREFIXES = [
+  '/opac',
+  '/e/',
+  '/.well-known/',
+  '/marque/',
+  '/demo/',
+  '/installation',
+  '/mentions-legales',
+  '/confidentialite',
+];
 
 /**
  * Exposé pour le test. Cette liste est la seule chose qui sépare un fichier
