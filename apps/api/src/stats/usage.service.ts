@@ -56,15 +56,67 @@ export const SANS_AUTEUR: AuteurDUsage = { userId: null, className: null };
  */
 export const SEUIL_PUBLICATION = 5;
 
-/** Une ligne d'agrégat. `effectif` est le nombre de personnes DISTINCTES. */
-export interface LigneUsage {
-  readonly cle: string;
-  readonly consultations: number;
-  readonly telechargements: number;
-  readonly effectif: number;
-  /** `false` quand l'effectif est sous le seuil : les comptes sont alors masqués. */
-  readonly publiable: boolean;
-}
+/**
+ * ⭐⭐ UNE LIGNE D'AGRÉGAT — UNION DISCRIMINÉE, ET C'EST LA MOITIÉ DE LA PROTECTION.
+ *
+ * ## 🔴 CE QUE LA PREMIÈRE ÉCRITURE FAISAIT, et pourquoi c'était faux
+ *
+ * Elle portait quatre nombres et un booléen. Sous le seuil, les comptes étaient
+ * masqués **à `-1`** — alors que le commentaire d'à côté annonçait `null`. Deux
+ * conséquences, et la seconde est la grave :
+ *
+ * · `-1` EST UN NOMBRE DANS LA RÉPONSE. Un client qui ne lit pas `publiable`
+ *   affiche « -1 consultations », ce qui n'est pas une absence : c'est un faux.
+ * · ⚠ `effectif` SORTAIT QUAND MÊME. Or c'est précisément le nombre à cacher —
+ *   « L2 Droit : 3 personnes » dans une filière de trois nomme ces trois
+ *   personnes à qui connaît la filière. Le seuil masquait les comptes d'usage et
+ *   publiait l'effectif, c'est-à-dire la grandeur qui le déclenche.
+ *
+ * ## ⭐ POURQUOI UNE UNION, ET PAS DES CHAMPS `number | null`
+ *
+ * `number | null` laisserait le client lire `consultations` sans avoir regardé
+ * `publiable` — il obtiendrait `null`, qu'un `?? 0` transformerait en zéro, et
+ * « 0 consultation » est exactement le faux que ce seuil existe pour éviter.
+ *
+ * L'union rend la lecture IMPOSSIBLE sans la discrimination : le compilateur
+ * refuse `ligne.consultations` tant que `ligne.publiable` n'a pas été éprouvé.
+ * **La propriété n'est plus une convention, elle est structurelle.**
+ *
+ * ⚠ Et sous le seuil il n'y a AUCUN nombre — ni compte, ni effectif, ni
+ * sentinelle. La branche non publiable ne porte aucun champ numérique : on ne
+ * peut donc pas en lire un par distraction, ni en inventer un par repli.
+ *
+ * ## ⚠ CE QUI RESTE VISIBLE, ET C'EST VOULU
+ *
+ * La LIGNE subsiste, avec sa clé et son motif. Une absence muette se lirait
+ * comme un zéro — leçon du 15 septembre, mot pour mot. Le motif dit la RÈGLE
+ * (« moins de 5 lecteurs »), jamais l'effectif réel.
+ */
+export type LigneUsage =
+  | {
+      readonly cle: string;
+      readonly publiable: true;
+      /** Le nombre de personnes DISTINCTES — jamais d'événements. */
+      readonly effectif: number;
+      readonly consultations: number;
+      readonly telechargements: number;
+    }
+  | {
+      readonly cle: string;
+      readonly publiable: false;
+      /** Dit la RÈGLE, jamais le nombre : il serait la donnée à protéger. */
+      readonly motif: string;
+    };
+
+/**
+ * Le motif servi sous le seuil. Une seule définition — un texte recopié
+ * divergerait, et c'est celui qui explique à une bibliothécaire pourquoi sa
+ * colonne est vide.
+ */
+export const MOTIF_SOUS_LE_SEUIL =
+  `Moins de ${SEUIL_PUBLICATION} lecteurs distincts : les nombres ne sont pas ` +
+  `publiés, car ils désigneraient des personnes identifiables dans un si petit ` +
+  `effectif.`;
 
 /** Rétention du NOM. Les agrégats, eux, sont conservés. */
 export const RETENTION_NOMINATIVE_MOIS = 12;
@@ -226,9 +278,13 @@ export class UsageService {
    * collègue peut nommer.
    *
    * ⚠ LA LIGNE SOUS LE SEUIL N'EST PAS SUPPRIMÉE, elle est MASQUÉE et le DIT
-   * (`publiable: false`, comptes à `null`). Une absence muette se lit comme un
-   * zéro, et c'est le faux que ce seuil existe pour éviter — leçon du
+   * (`publiable: false`, un motif, et AUCUN nombre). Une absence muette se lit
+   * comme un zéro, et c'est le faux que ce seuil existe pour éviter — leçon du
    * 15 septembre, mot pour mot.
+   *
+   * ⚠ Corrigé le 9 octobre 2026 : cette phrase annonçait « comptes à `null` » et
+   * le code écrivait **-1**, en servant `effectif` par-dessus. Le commentaire
+   * décrivait la bonne intention d'un code qui ne la tenait pas.
    */
   async parFiliere(db: TenantDb, debut: Date, fin: Date): Promise<LigneUsage[]> {
     const lignes = await db.$queryRaw<
@@ -249,16 +305,21 @@ export class UsageService {
       GROUP BY class_name
       ORDER BY class_name
     `);
-    return lignes.map((l) => {
+    return lignes.map((l): LigneUsage => {
       const effectif = Number(l.effectif);
-      const publiable = effectif >= SEUIL_PUBLICATION;
+      const cle = l.class_name as string;
+      // ⚠ AUCUN NOMBRE SOUS LE SEUIL — la branche n'en porte pas, donc il n'y a
+      // rien à masquer, rien à oublier de masquer, et rien qu'un repli puisse
+      // transformer en zéro.
+      if (effectif < SEUIL_PUBLICATION) {
+        return { cle, publiable: false, motif: MOTIF_SOUS_LE_SEUIL };
+      }
       return {
-        cle: l.class_name as string,
-        // ⚠ Masqués à -1 plutôt qu'à 0 : un zéro se lit comme une mesure.
-        consultations: publiable ? Number(l.consultations) : -1,
-        telechargements: publiable ? Number(l.telechargements) : -1,
+        cle,
+        publiable: true,
         effectif,
-        publiable,
+        consultations: Number(l.consultations),
+        telechargements: Number(l.telechargements),
       };
     });
   }

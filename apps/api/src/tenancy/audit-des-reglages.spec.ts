@@ -49,6 +49,34 @@ const CHAMPS_DEPLACES: Record<string, string> = {
   require2fa: 'PATCH /auth/policy',
 };
 
+/**
+ * ⭐ UNE TROISIÈME NATURE : les champs qui ne sont pas des RÉGLAGES.
+ *
+ * ⚠ Ajoutée le 9 octobre 2026, et le choix de ne PAS les ranger dans l'une des
+ * deux listes existantes est délibéré. `pagesLegalesVersion` n'est ni tracé (ce
+ * n'est pas un réglage qui change) ni déplacé (il n'a jamais été ailleurs) :
+ * c'est une PRÉCONDITION d'écriture.
+ *
+ * Le forcer dans `CHAMPS_DEPLACES` aurait été un faux — et pire, un faux que ce
+ * fichier aurait ensuite VÉRIFIÉ : le test suivant exige que le refus NOMME la
+ * nouvelle route, donc il aurait fallu inventer une route. Le forcer dans
+ * `TRACE_ATTENDUE` aurait exigé une clé d'audit qui ne décrit aucun changement.
+ *
+ * ⚠ « Si les deux s'écrivaient pareil, la liste deviendrait l'endroit où l'on
+ * enterre les trouvailles. » Une troisième nature coûte six lignes ; une
+ * mauvaise case coûte un test qui vérifie une fiction.
+ *
+ * ⚠ ET CE QU'IL GARDE EST TRACÉ, LUI : une écriture des pages légales
+ * journalise `changedPagesLegales`. Le jeton ne change rien — il décide si le
+ * changement a lieu. Un refus 409 n'écrit rien, donc il n'y a rien à tracer.
+ */
+const CHAMPS_NON_REGLAGES: Record<string, string> = {
+  pagesLegalesVersion:
+    'jeton de concurrence, pas un réglage : il conditionne l’écriture des pages ' +
+    'légales (409 si périmé) et ne modifie aucun état. Le changement qu’il garde ' +
+    'est tracé par `changedPagesLegales`.',
+};
+
 const DTO = readFileSync(
   join(__dirname, 'dto/update-tenant-settings.dto.ts'),
   'utf-8',
@@ -72,15 +100,29 @@ describe('audit des réglages de l’école', () => {
     // office — il a refusé le lot en NOMMANT le champ, et il a obligé à venir
     // choisir ce qu'on trace. Un texte juridique mérite au moins autant de
     // trace que l'accueil.
-    expect(champs.length).toBe(7);
+    expect(champs.length).toBe(8);
     expect(champs).toContain('require2fa'); // le champ qui a motivé le lot
+    // ⚠ 7 → 8 le 9 octobre 2026 : `pagesLegalesVersion`, jeton de concurrence.
+    expect(champs).toContain('pagesLegalesVersion');
   });
 
-  it('⚠ CHAQUE champ du DTO est SOIT tracé, SOIT déclaré déplacé', () => {
+  it('⚠ CHAQUE champ du DTO est tracé, déplacé, ou déclaré NON-RÉGLAGE', () => {
     const orphelins = champs.filter(
-      (c) => !(c in TRACE_ATTENDUE) && !(c in CHAMPS_DEPLACES),
+      (c) =>
+        !(c in TRACE_ATTENDUE) &&
+        !(c in CHAMPS_DEPLACES) &&
+        !(c in CHAMPS_NON_REGLAGES),
     );
-    expect(orphelins, 'champs sans trace ni déplacement déclaré').toEqual([]);
+    expect(
+      orphelins,
+      'Champ(s) du DTO que rien ne déclare. TROIS ISSUES, et il faut en choisir une :\n' +
+        '  · un réglage qui change un état → TRACE_ATTENDUE avec sa clé d’audit, et TRACEZ-LE ;\n' +
+        '  · il a déménagé → CHAMPS_DEPLACES, et le refus doit NOMMER sa nouvelle route ;\n' +
+        '  · ce n’est pas un réglage (jeton, précondition) → CHAMPS_NON_REGLAGES, avec le\n' +
+        '    motif qui dit ce qu’il fait et où le changement qu’il garde est tracé.\n' +
+        '⚠ Ne le rangez pas dans une case commode : une mauvaise case fait vérifier une\n' +
+        '  fiction par les tests d’à côté.',
+    ).toEqual([]);
   });
 
   it('⚠ un champ DÉPLACÉ est refusé, et le refus NOMME sa nouvelle route', () => {

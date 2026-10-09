@@ -59,7 +59,7 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement ONZE', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement DOUZE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
@@ -100,6 +100,13 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'stats/usage-nominatif-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
       'tenancy/isolement-des-ecoles-en-base.spec.ts',
+      // ⭐ DOUZIÈME, le 9 octobre 2026 : la course sur les pages légales.
+      // Classé GLOBALE, et ce garde m'a mis en garde contre exactement ce geste
+      // — « ne le classez pas en GLOBALE pour vous débloquer ». Le motif tient
+      // au critère (c) qu'il nomme lui-même : la propriété éprouvée est le
+      // niveau d'isolation du MOTEUR sur `public.tenant_settings`, et rien
+      // là-dedans ne peut dériver d'une école à l'autre.
+      'tenancy/version-des-pages-legales-en-base.spec.ts',
     ]);
   });
 
@@ -201,6 +208,15 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
   };
 
   const GLOBALES: Record<string, string> = {
+    // ⚠ PAS par école, et c'est un CHOIX mesuré. La propriété éprouvée est celle
+    // du MOTEUR — un `UPDATE … WHERE version = $n` réévalue son prédicat après le
+    // verrou de ligne — et elle ne peut pas « dériver » d'une école à l'autre :
+    // c'est PostgreSQL qui la porte, pas le schéma. La parcourir par école
+    // multiplierait une course de 300 ms sans rien mesurer de plus, et
+    // `tenant_settings` vit de toute façon dans `public`.
+    'version-des-pages-legales-en-base.spec.ts':
+      'la course se joue sur `public.tenant_settings` et éprouve le niveau ' +
+      'd’isolation du moteur, pas le schéma d’une école',
     'hierarchie-en-base.spec.ts':
       'le trigger de hiérarchie vit dans `public` — il n’y en a qu’un, pas un par école',
     'nom-de-collection-en-base.spec.ts':

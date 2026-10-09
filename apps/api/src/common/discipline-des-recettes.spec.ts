@@ -68,6 +68,16 @@ const MARQUE_ATTENDUE = /const MARQUE = /;
  * écrite plus bas, mesurée plutôt que supposée.
  */
 const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
+  'tenancy/version-des-pages-legales-en-base.spec.ts': {
+    discipline: 'nettoyage-recense',
+    motif:
+      'elle ÉCRASE `pages_legales` de la première école — une colonne qui porte, ' +
+      'en développement, les pages réellement rédigées. Le contenu d’AVANT est ' +
+      'capturé dans le `beforeAll`, et l’`afterAll` le remet par `UPDATE`. ' +
+      '⚠ Elle retient aussi si la LIGNE existait : une école jamais réglée n’en a ' +
+      'pas, et « je supprime ce que j’ai créé » effacerait alors des réglages qui ' +
+      'préexistaient. Deux états d’avant, deux restaurations.',
+  },
   'stats/usage-nominatif-en-base.spec.ts': {
     discipline: 'nettoyage-recense',
     motif:
@@ -187,7 +197,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT quinze — une seizième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT seize — une dix-septième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

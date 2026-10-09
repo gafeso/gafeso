@@ -33,7 +33,7 @@ import { ResolvedTenant, TenancyService } from './tenancy.service';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { mergeHomeTokens } from './home-theme';
 import { heroSlidesEffectives, normalizeHomeContent } from './home-content';
-import { normaliserPagesLegales, pourLePublic } from './pages-legales';
+import { etatDesPagesLegales, normaliserPagesLegales, pourLePublic } from './pages-legales';
 import { enrollmentUrl, qrPng, qrPosterPdf } from './enrollment-qr';
 
 /**
@@ -348,12 +348,15 @@ export class TenancyController {
   @RequiresFunctions(FONCTIONS.ETABLISSEMENT_APPARENCE)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Pages légales BRUTES de l’école courante (brouillons compris)',
+    summary:
+      'Pages légales BRUTES de l’école courante (brouillons compris), AVEC leur version',
     description:
       'Réservé à `etablissement.apparence` — la même fonction que l’écriture. ' +
       '⚠ `GET /tenancy/home` filtre les brouillons (route publique) : un ' +
       'éditeur qui s’y fierait enregistrerait un remplacement complet sans ' +
-      'avoir vu ce qu’il écrase.',
+      'avoir vu ce qu’il écrase. ' +
+      'Rend `{ pagesLegales, version }` ; `version` se renvoie tel quel dans le ' +
+      '`PATCH`, qui répond 409 sur une version périmée plutôt que d’écraser.',
   })
   async readSettings(@CurrentTenant() tenant: ResolvedTenant | null) {
     if (!tenant) {
@@ -370,9 +373,12 @@ export class TenancyController {
     // pour qu'un éditeur n'ait pas à distinguer « colonne nulle » (jamais
     // rédigé) de « page vide ». Le CONTENU, lui, n'est pas filtré : c'est tout
     // l'objet de cette route.
-    return {
-      pagesLegales: normaliserPagesLegales(record?.settings?.pagesLegales),
-    };
+    //
+    // ⭐ ET LE JETON DE VERSION SORT AVEC, parce qu'il n'a de sens qu'ici : le
+    // `PATCH` fait un remplacement complet, et c'est cette lecture-ci qui dit à
+    // l'éditeur SUR QUOI il écrit. Le renvoyer tel quel au `PATCH` est la seule
+    // chose qui distingue « j'ai relu » de « j'écrase à l'aveugle ».
+    return etatDesPagesLegales(record?.settings?.pagesLegales);
   }
 
   /**

@@ -248,12 +248,35 @@ describe.runIf(VIVANT)('la trace d’usage, EN BASE', () => {
       const mienne = lignes.find((l) => l.cle === 'RECETTE_FILIERE');
       expect(mienne, 'la filière de la recette doit apparaître').toBeTruthy();
       // UNE seule personne distincte : sous le seuil de 5.
-      expect(mienne!.effectif).toBe(1);
       expect(mienne!.publiable, `1 personne < seuil ${SEUIL_PUBLICATION}`).toBe(false);
-      // ⚠ MASQUÉ À -1, PAS À 0 : un zéro se lit comme une mesure. Et la ligne
-      // reste présente — « une absence muette se lit comme un zéro ».
-      expect(mienne!.consultations).toBe(-1);
-      expect(mienne!.telechargements).toBe(-1);
+
+      // ⭐ ET LA PROPRIÉTÉ QUE CE TEST EXISTE POUR TENIR : **AUCUN NOMBRE**.
+      //
+      // ⚠ Elle ne se vérifie PAS champ par champ. Nommer `consultations`,
+      // `telechargements` et `effectif` serait un relevé de ce à quoi on a
+      // pensé — et le jour où un quatrième compte s'ajoute, il sortirait en
+      // silence. On inspecte donc la charge ENTIÈRE et on compte les nombres.
+      const valeurs = Object.entries(mienne!).filter(([, v]) => typeof v === 'number');
+      expect(
+        valeurs,
+        'sous le seuil, la ligne ne doit porter AUCUN nombre — ni compte, ni ' +
+          'effectif, ni sentinelle. Trouvés : ' +
+          valeurs.map(([k, v]) => `${k}=${String(v)}`).join(', '),
+      ).toEqual([]);
+
+      // ⚠ Et le motif DIT la règle sans dire le nombre : l'effectif réel est
+      // précisément la donnée que le seuil protège.
+      expect(mienne!.publiable).toBe(false);
+      if (mienne!.publiable === false) {
+        expect(mienne!.motif).toContain(String(SEUIL_PUBLICATION));
+        expect(
+          mienne!.motif,
+          'le motif ne doit pas révéler l’effectif réel (1 personne ici)',
+        ).not.toMatch(/\b1\b/);
+      }
+
+      // ⚠ La LIGNE reste présente — « une absence muette se lit comme un zéro ».
+      expect(mienne!.cle).toBe('RECETTE_FILIERE');
     }));
 
   it('⭐ au-delà du seuil, les comptes SORTENT', () =>
@@ -271,9 +294,20 @@ describe.runIf(VIVANT)('la trace d’usage, EN BASE', () => {
         new Date(Date.now() + 60_000),
       );
       const mienne = lignes.find((l) => l.cle === 'RECETTE_FILIERE')!;
-      expect(mienne.effectif).toBe(SEUIL_PUBLICATION);
-      expect(mienne.publiable).toBe(true);
-      expect(mienne.consultations).toBeGreaterThan(0);
+
+      // ⭐ LE TÉMOIN D'ABSENCE DU SEUIL : il doit prouver que le masquage sait
+      // dire NON. Sans ce cas, un seuil qui masquerait TOUT serait
+      // indiscernable d'un seuil juste — et plus rassurant, puisqu'il ne
+      // publierait jamais rien.
+      expect(mienne.publiable, `${SEUIL_PUBLICATION} personnes ≥ seuil`).toBe(true);
+      if (mienne.publiable === true) {
+        expect(mienne.effectif).toBe(SEUIL_PUBLICATION);
+        expect(mienne.consultations).toBeGreaterThan(0);
+        // ⚠ Et on COMPTE les nombres ici aussi, dans l'autre sens : au-dessus du
+        // seuil la ligne en porte, et c'est la moitié qui manquait.
+        const valeurs = Object.values(mienne).filter((v) => typeof v === 'number');
+        expect(valeurs.length, 'au-dessus du seuil, les comptes SORTENT').toBeGreaterThanOrEqual(3);
+      }
     }));
 
   it('⭐ LA PURGE retire le NOM et garde la LIGNE — l’agrégat survit', () =>

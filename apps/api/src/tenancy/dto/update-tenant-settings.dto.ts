@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsObject, IsOptional, Matches, Validate } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsObject,
+  IsOptional,
+  Matches,
+  Min,
+  Validate,
+  ValidateIf,
+} from 'class-validator';
 import { BandeauAccueilValide } from './hero-slides.validator';
 import { PagesLegalesValides } from './pages-legales.validator';
 import { ReglageDeplace } from './reglage-deplace.validator';
@@ -87,4 +96,54 @@ export class UpdateTenantSettingsDto {
   @IsObject({ message: 'pagesLegales doit être un objet.' })
   @Validate(PagesLegalesValides)
   pagesLegales?: Record<string, unknown>;
+
+  /**
+   * ⭐⭐ LE JETON DE VERSION — OBLIGATOIRE DÈS QUE `pagesLegales` EST PRÉSENT.
+   *
+   * ## 🔴 Ce que l'absence de contrôle coûtait, et ce n'est pas une gêne
+   *
+   * Cette route fait un REMPLACEMENT COMPLET. Deux personnes qui ouvrent
+   * l'éditeur au même moment écrivaient donc l'une sur l'autre **en silence** :
+   * la seconde emportait une page que la première venait de PUBLIER, et aucune
+   * des deux ne pouvait le savoir. Sur un texte juridique signé par
+   * l'établissement, c'est une page publiée qui disparaît sans trace.
+   *
+   * ## ⚠ POURQUOI IL N'EST PAS `@IsOptional()`
+   *
+   * Un jeton optionnel se contourne EN L'OMETTANT — et l'omission est le cas
+   * par défaut de tout client qui n'a pas été mis au courant. Le contrôle
+   * n'aurait alors protégé que ceux qui le demandent, c'est-à-dire personne le
+   * jour où ça compte. **Un garde qu'on désarme en ne disant rien n'en est pas
+   * un.**
+   *
+   * ## ⚠ ET POURQUOI IL N'EST EXIGÉ QUE SI `pagesLegales` EST LÀ
+   *
+   * La même route écrit aussi les couleurs, l'accueil, le treillis. Les exiger
+   * versionnés casserait tous les appelants qui changent une couleur — et ils
+   * ne remplacent rien qu'un autre pourrait être en train de rédiger. La borne
+   * est donc l'UNITÉ REMPLACÉE, pas la route.
+   *
+   * ## ⚠ POURQUOI DANS LE CORPS, ET NON EN `If-Match`
+   *
+   * Les deux sont corrects ; en avoir deux ne l'est pas — « deux mécanismes pour
+   * une même propriété finissent par diverger ». Le corps l'emporte pour une
+   * raison mesurée dans ce dépôt : un en-tête peut être retiré ou réécrit par un
+   * mandataire (`Host` est purement et simplement JETÉ par `fetch`), et une
+   * protection qui s'évapore en silence au passage d'un proxy est pire qu'une
+   * protection absente. Le corps, lui, arrive ou la requête échoue.
+   */
+  @ValidateIf((o: UpdateTenantSettingsDto) => o.pagesLegales !== undefined)
+  @IsInt({
+    message:
+      'pagesLegalesVersion est obligatoire pour écrire les pages légales : ' +
+      'renvoyez la valeur « version » rendue par GET /tenancy/settings. ' +
+      'Sans elle, cette écriture pourrait effacer une page publiée entre-temps.',
+  })
+  @Min(0, { message: 'pagesLegalesVersion ne peut pas être négative.' })
+  @ApiPropertyOptional({
+    description:
+      'Version lue par GET /tenancy/settings. OBLIGATOIRE si pagesLegales est ' +
+      'fourni. Une version périmée → 409, jamais un écrasement.',
+  })
+  pagesLegalesVersion?: number;
 }
