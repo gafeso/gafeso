@@ -728,6 +728,103 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
   }, 60_000);
 
   // ───────────────────────────────────────────────────────────────────────────
+  // ⭐⭐ UNE DETTE SE DÉCLARE PAR SON NUMÉRATEUR SEUL
+  //
+  // *Corrigé le 9 octobre 2026, après que ces deux dettes ont refusé DIX
+  // commits du front. Signalé par Jean.*
+  //
+  // Je les avais déclarées « 369 notice(s) sur 480 ». Le dénominateur faisait
+  // donc partie de la COMPARAISON — et la dette s'est rompue le jour où le
+  // script de recette a déposé le guide d'utilisation : une notice de plus,
+  // PARFAITEMENT CONFORME, et le garde a refusé.
+  //
+  // 🔴 C'est l'inverse exact de ce qu'une dette doit faire. Elle existe pour
+  // crier quand le fonds EMPIRE ou quand il guérit. Ici elle criait parce que
+  // le fonds avait GRANDI, sans qu'aucune notice fautive n'ait bougé.
+  //
+  // ⚠ Et le coût n'est pas l'alerte : c'est qu'elle a accusé quelqu'un d'autre.
+  // Le front a reçu un refus sur un fonds que son lot n'avait pas touché, avec
+  // un message qui parlait de domaines hors vocabulaire. « Un garde qui crie à
+  // tort se fait désactiver » — et celui-ci criait sur dix commits sains.
+  //
+  // ⭐ LA RÈGLE : **ce qui se compare est le NUMÉRATEUR, par école.** Le total
+  // s'AFFICHE, parce qu'un numérateur sans son ordre de grandeur ne se lit pas
+  // — mais il ne décide jamais.
+  //
+  // ⚠ Le signe qui l'annonce, et il vaut pour toute dette chiffrée : la valeur
+  // déclarée contient quelque chose que le PRODUIT NORMAL fait bouger. Un
+  // total de notices grandit à chaque catalogage ; c'est le métier, pas une
+  // dérive.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** Le relevé d'une école : ce qui est fautif, et le contexte qui l'éclaire. */
+  interface ReleveDeDette {
+    ecole: string;
+    /** ⭐ LA SEULE grandeur comparée. */
+    fautives: number;
+    /** Affiché, jamais comparé — il bouge au rythme du catalogage. */
+    total: number;
+    /** Ce que la ligne dit en plus, pour le lecteur. */
+    detail?: string;
+  }
+
+  /**
+   * Les clés de comparaison : `école:numérateur`, et rien d'autre.
+   *
+   * ⚠ Exportée du corps du `describe` pour que les témoins synthétiques
+   * traversent CETTE fonction, et pas une regex à côté. Un témoin posé sur
+   * autre chose que le chemin réel n'éprouve pas l'instrument.
+   */
+  function clesDeDette(releve: ReleveDeDette[]): string[] {
+    return releve
+      .filter((r) => r.fautives > 0)
+      .map((r) => `${r.ecole}:${r.fautives}`)
+      .sort();
+  }
+
+  /** La même chose depuis la déclaration — une seule forme, deux lecteurs. */
+  function clesDeclarees(dette: Record<string, number>): string[] {
+    return Object.entries(dette)
+      .map(([ecole, n]) => `${ecole}:${n}`)
+      .sort();
+  }
+
+  /** Ce que le message MONTRE : le numérateur avec son ordre de grandeur. */
+  function lignesLisibles(releve: ReleveDeDette[]): string {
+    return releve
+      .filter((r) => r.fautives > 0)
+      .map(
+        (r) =>
+          `  · ${r.ecole} : ${r.fautives} sur ${r.total}` +
+          (r.detail ? ` — ${r.detail}` : ''),
+      )
+      .join('\n');
+  }
+
+  it('⭐ TÉMOIN : une notice CONFORME de plus ne change RIEN à la dette', () => {
+    // C'est le cas qui a cassé, et il doit rester vert pour toujours : même
+    // numérateur, total différent.
+    const avant: ReleveDeDette[] = [{ ecole: 'zinda', fautives: 369, total: 480 }];
+    const apres: ReleveDeDette[] = [{ ecole: 'zinda', fautives: 369, total: 481 }];
+    expect(clesDeDette(apres)).toEqual(clesDeDette(avant));
+  });
+
+  it('⭐ TÉMOIN : une notice FAUTIVE de plus fait bouger la dette', () => {
+    // Le témoin d'ABSENCE : sans lui, une comparaison qui ignorerait TOUT
+    // serait indiscernable d'une comparaison juste — et plus rassurante.
+    const avant: ReleveDeDette[] = [{ ecole: 'zinda', fautives: 369, total: 480 }];
+    const apres: ReleveDeDette[] = [{ ecole: 'zinda', fautives: 370, total: 481 }];
+    expect(clesDeDette(apres)).not.toEqual(clesDeDette(avant));
+    expect(clesDeDette(apres)).toEqual(['zinda:370']);
+  });
+
+  it('⭐ TÉMOIN : une école qui GUÉRIT sort du relevé', () => {
+    // Une dette qui ne se rappelle qu'en s'aggravant laisserait passer sa
+    // propre résolution.
+    expect(clesDeDette([{ ecole: 'zinda', fautives: 0, total: 481 }])).toEqual([]);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // 🔴 TROUVÉES LE 9 OCTOBRE 2026, et pas en cherchant un défaut du fonds.
   //
   // La session mobile avait écrit en passation un AVERTISSEMENT :
@@ -761,7 +858,7 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // bibliothécaire ne pourrait plus corriger une coquille de titre. Le repli
     // est bon ; ce sont les DONNÉES qu'il faut canoniser, en une fois.
     expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
-    const fautifs: string[] = [];
+    const releve: ReleveDeDette[] = [];
     let examinees = 0;
     for (const slug of ecoles) {
       const [r] = await prisma.$queryRawUnsafe<
@@ -775,32 +872,43 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
          FROM "tenant_${slug}".biblio_records b`,
       );
       examinees += r.total;
-      if (r.hors > 0) {
-        fautifs.push(
-          `${slug} : ${r.hors} notice(s) sur ${r.total}, ${r.domaines} domaine(s) distinct(s) hors vocabulaire`,
-        );
-      }
+      releve.push({
+        ecole: slug,
+        fautives: r.hors,
+        total: r.total,
+        detail: `${r.domaines} domaine(s) distinct(s) hors vocabulaire`,
+      });
     }
     expect(examinees, 'aucune notice examinée : le tamis ne mesure rien').toBeGreaterThan(0);
 
     // ⚠ DETTE DÉCLARÉE, et elle se refuse dans les DEUX SENS : une dette qui ne
     // se rappelle qu'en s'aggravant laisserait passer sa propre résolution.
-    const DETTE_VOCABULAIRE = [
-      'horizon : 6040 notice(s) sur 8000, 8 domaine(s) distinct(s) hors vocabulaire',
-      'zinda : 369 notice(s) sur 480, 8 domaine(s) distinct(s) hors vocabulaire',
-    ];
+    // ⭐ 09/10/2026 — LES DÉNOMINATEURS ONT BOUGÉ, ET CES DETTES L'ONT DIT.
+    // Le guide d'utilisation a été déposé par `comptes-de-recette.mjs` : une
+    // notice de plus par école. Le NUMÉRATEUR, lui, n'a pas bougé — le guide
+    // porte le domaine `informatique`, qui EST au vocabulaire, et ses trois
+    // mots-clés. Une notice créée par la ROUTE du produit ne peut pas aggraver
+    // ces deux dettes : c'est la route qui applique les règles.
+    //
+    // ⚠ Et c'est la dette qui a refusé le push, pas une relecture. « Un compte
+    // exact ne dit pas que le code est juste, il oblige à revenir le regarder. »
+    // ⭐ LE NUMÉRATEUR SEUL. Ajouter une notice conforme ne doit RIEN changer.
+    const DETTE_VOCABULAIRE: Record<string, number> = { horizon: 6040, zinda: 369 };
     expect(
-      [...fautifs].sort(),
-      'Le fonds porte des domaines ABSENTS du vocabulaire :\n' +
-        fautifs.map((f) => `  · ${f}`).join('\n') +
-        '\n\nMesuré le 9 octobre 2026 : la table `categories` porte 28 noms ' +
-        'longs (style Dewey, « agronomie, agriculture et activités connexes ») ' +
-        'et le fonds 10 slugs courts (« medecine », « histoire »). DEUX ' +
-        'coïncident par hasard — `informatique` et `droit`.\n' +
+      clesDeDette(releve),
+      'Le NOMBRE de notices à domaine hors vocabulaire a changé :\n' +
+        lignesLisibles(releve) +
+        '\n\n⚠ Seul le NOMBRE DE FAUTIVES est comparé — le total est là pour ' +
+        'l’ordre de grandeur. Si le total a bougé et pas les fautives, ce test ' +
+        'ne dit RIEN : il est vert.\n\n' +
+        'Mesuré le 9 octobre 2026 : la table `categories` porte 28 noms longs ' +
+        '(style Dewey, « agronomie, agriculture et activités connexes ») et le ' +
+        'fonds 10 slugs courts (« medecine », « histoire »). DEUX coïncident ' +
+        'par hasard — `informatique` et `droit`.\n' +
         'Si ce compte a CHANGÉ : canonisez le fonds en une fois (migration SQL ' +
         'qui rapproche sans accents), corrigez le seed pour écrire les noms ' +
         'canoniques, puis mettez ce compte à jour — ou retirez la dette.',
-    ).toEqual(DETTE_VOCABULAIRE);
+    ).toEqual(clesDeclarees(DETTE_VOCABULAIRE));
   }, 60_000);
 
   it('⚠ TOUTE NOTICE PORTE SES 3 MOTS-CLÉS — règle serveur, cahier §4.1', async () => {
@@ -819,7 +927,7 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
     // n'en recevrait jamais, et la recherche par sujet resterait vide. Ce sont
     // les DONNÉES qu'il faut doter, pas la règle qu'il faut assouplir.
     expect(joignable, MESSAGE_BASE_INJOIGNABLE).toBe(true);
-    const fautifs: string[] = [];
+    const releve: ReleveDeDette[] = [];
     let examinees = 0;
     for (const slug of ecoles) {
       const [r] = await prisma.$queryRawUnsafe<{ total: number; sous: number }[]>(
@@ -830,24 +938,23 @@ describe.runIf(process.env.PG_LIVE === '1')('Le fonds passe les règles du produ
          FROM "tenant_${slug}".biblio_records b`,
       );
       examinees += r.total;
-      if (r.sous > 0) fautifs.push(`${slug} : ${r.sous} notice(s) sur ${r.total} sous le minimum`);
+      releve.push({ ecole: slug, fautives: r.sous, total: r.total });
     }
     expect(examinees, 'aucune notice examinée : le tamis ne mesure rien').toBeGreaterThan(0);
 
-    const DETTE_MOTS_CLES = [
-      'horizon : 8000 notice(s) sur 8000 sous le minimum',
-      'zinda : 480 notice(s) sur 480 sous le minimum',
-    ];
+    const DETTE_MOTS_CLES: Record<string, number> = { horizon: 8000, zinda: 480 };
     expect(
-      [...fautifs].sort(),
-      'Des notices sont SOUS le minimum de mots-clés :\n' +
-        fautifs.map((f) => `  · ${f}`).join('\n') +
-        '\n\n`requireMinKeywords` les refuse à l’enregistrement : toute ' +
+      clesDeDette(releve),
+      'Le NOMBRE de notices sous le minimum de mots-clés a changé :\n' +
+        lignesLisibles(releve) +
+        '\n\n⚠ Seul le NOMBRE DE FAUTIVES est comparé — le total est là pour ' +
+        'l’ordre de grandeur.\n\n' +
+        '`requireMinKeywords` les refuse à l’enregistrement : toute ' +
         'modification d’une de ces notices est BLOQUÉE jusqu’à ce que ' +
         'quelqu’un invente trois mots-clés.\n' +
         'Si ce compte a CHANGÉ : dotez le seed de mots-clés, puis mettez ce ' +
         'compte à jour — ou retirez la dette.',
-    ).toEqual(DETTE_MOTS_CLES);
+    ).toEqual(clesDeclarees(DETTE_MOTS_CLES));
   }, 60_000);
 
   it('⚠ SEUL UN COMPTE ÉTUDIANT PORTE UNE CLASSE', async () => {

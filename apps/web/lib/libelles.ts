@@ -665,6 +665,43 @@ export const LIBELLES = {
    * `TenantSettings.pagesLegales`, et son modèle de blocs dans
    * `lib/pages-legales.ts`.
    */
+  /**
+   * LE FILTRE PUBLIC « Lecture en ligne disponible ».
+   *
+   * ⚠ IL N'EXISTAIT PAS PARCE QU'UN COMMENTAIRE DISAIT QU'IL ÉTAIT IMPOSSIBLE.
+   * `app/opac/page.tsx` portait : « /opac/search ne peut pas porter ce filtre —
+   * il se lit en base, le moteur n'en sait rien, et le post-filtrer rendrait
+   * totalHits et les compteurs faux. » C'était EXACT, et rc8 l'a rendu faux :
+   * `hasDigital` est devenu un attribut filtrable de l'index, et le DTO de la
+   * route le dit mot pour mot — « Filtré PAR LE MOTEUR […] c'est ce qui rend
+   * totalHits et les facettes EXACTS sur une recherche plein texte. »
+   *
+   * Mesuré sur zinda le 9 octobre 2026, deux fois dans la journée :
+   *
+   *     le matin  : 480 notices — 155 avec fichier + 325 sans = 480 ✅
+   *     le soir   : 481 notices — 156 avec fichier + 325 sans = 481 ✅
+   *
+   * ⚠ LE +1 N'EST PAS UNE DÉRIVE DU FILTRE, et c'est l'arithmétique qui le
+   * dit : « sans fichier » est resté à 325, donc la notice ajoutée en porte
+   * un. Le backend a ajouté « Gafeso — Guide d'utilisation » à chaque école de
+   * développement ce jour-là. Un nombre mesuré porte sa date pour cette
+   * raison exacte.
+   */
+  filtreNumerique: {
+    /** La case, et elle dit un ÉTAT du document, pas une capacité du produit. */
+    libelle: 'Lecture en ligne disponible',
+    /**
+     * ⚠ Dit ce que le filtre fait, et ce qu'il ne promet PAS. « Disponible »
+     * est l'existence d'une version en ligne — l'ACCÈS reste gardé par la
+     * classe et l'abonnement, et le dire ici évite la déception au clic.
+     */
+    aide:
+      'Ne montrer que les documents qui ont une version numérique. L’accès à la ' +
+      'lecture dépend ensuite de votre classe et de votre abonnement.',
+    /** La pastille de filtre actif, pour pouvoir le retirer. */
+    pastille: 'Lecture en ligne',
+  },
+
   pagesLegales: {
     mentions: 'Mentions légales',
     confidentialite: 'Politique de confidentialité',
@@ -696,6 +733,28 @@ export const LIBELLES = {
     publier: 'Publier cette page',
     depublier: 'Retirer de la ligne',
     enregistrer: 'Enregistrer',
+
+    /**
+     * ⚠ LES NOMS ACCESSIBLES DES TROIS COMMANDES, PAGE PAR PAGE.
+     *
+     * L'écran porte DEUX sections — mentions, confidentialité — et chacune a
+     * son « Enregistrer », son « Publier cette page », son « Retirer de la
+     * ligne ». À l'œil, aucune ambiguïté : le bouton est sous sa section. Pour
+     * qui n'a pas l'écran, ce sont deux commandes au MÊME nom, et rien ne dit
+     * laquelle enregistre quoi.
+     *
+     * ⭐ Trouvé gratuitement par le harnais : `getByRole` a refusé de choisir,
+     * et `cibler-par-le-nom-accessible.spec.ts` a refusé le contournement par
+     * position. « Ce qui est ambigu pour `getByRole` est ambigu pour une
+     * personne qui n'a pas l'écran. »
+     *
+     * ⚠ Le texte VISIBLE reste court — « Enregistrer » sous sa section se lit
+     * très bien. C'est le nom ANNONCÉ qui se précise, et un `aria-label`
+     * annoncé est un texte à traduire : il vit donc ici.
+     */
+    enregistrerPage: (page: string) => `Enregistrer — ${page}`,
+    publierPage: (page: string) => `Publier — ${page}`,
+    depublierPage: (page: string) => `Retirer de la ligne — ${page}`,
     nonPubliee: 'Non publiée — invisible du public, et son lien n’est pas affiché.',
 
     /**
@@ -715,16 +774,28 @@ export const LIBELLES = {
       'si l’erreur persiste, signalez-la avant de réessayer.',
 
     /**
-     * ⚠ LA BORNE, DITE À L'ÉCRAN. Aucune route ne rend un BROUILLON : seule la
-     * version PUBLIÉE est relisible (`GET /tenancy/home` passe par
-     * `pourLePublic`). Un texte saisi puis enregistré sans être publié ne se
-     * retrouvera donc pas au prochain chargement — et le taire ferait croire à
-     * une perte de données.
+     * ⚠ LE CONFLIT DE VERSION — et ce qui est à nous est le GESTE, pas le texte.
+     *
+     * `PATCH /tenancy/settings` exige `pagesLegalesVersion` depuis rc9, et rend
+     * 409 quand elle est périmée. Le message du serveur dit déjà tout ce qu'il
+     * faut : quelle version a été lue, laquelle est en base, et qu'il faut
+     * RELIRE avant d'enregistrer. Il s'affiche donc TEL QUEL — le réécrire ici
+     * donnerait deux formulations du même refus, qui divergeraient le jour où
+     * l'une change, et c'est le lecteur qui paierait la différence.
+     *
+     * Ce qui manquait n'était pas une phrase : c'était une SORTIE. Un refus qui
+     * n'offre rien à faire laisse devant un bouton qui ne marchera plus jamais.
      */
-    brouillonNonRelisible:
-      'Seules les pages déjà publiées sont rechargées ici. Un texte enregistré sans ' +
-      'être publié ne réapparaîtra pas tant que l’API ne saura pas le relire : ' +
-      'publiez, ou gardez votre texte de côté.',
+    conflitTitre: 'Quelqu’un a modifié cette page entre-temps',
+    conflitRelire: 'Relire la version actuelle',
+    /**
+     * ⚠ Dit ce que « Relire » COÛTE, parce que ça coûte quelque chose : le
+     * texte en cours de saisie est perdu. Un bouton qui jette du travail sans
+     * le dire se clique une fois, puis plus jamais.
+     */
+    conflitPerte:
+      'Relire remplacera ce que vous venez d’écrire par le texte actuellement ' +
+      'enregistré. Copiez vos modifications ailleurs si vous voulez les reprendre.',
   },
 
   installation: {
@@ -1214,11 +1285,21 @@ export const LIBELLES = {
      * (`recordType`, `publishYear`) : elles ne se traduisent pas, elles se
      * traduisent EN — c'est tout l'objet de cette table.
      */
+    /**
+     * ⚠ TOUT CHAMP QUI PEUT PORTER UNE PASTILLE EST ICI, et c'est une
+     * OBLIGATION, pas une liste de courtoisie : `nomDuChamp` retombe sur
+     * l'identifiant BRUT quand la table ne connaît pas la clé. Un champ oublié
+     * ne casse rien — il affiche « avecFichier · Lecture en ligne » et annonce
+     * « Retirer le filtre avecFichier », c'est-à-dire un nom de code à un
+     * lecteur. Mesuré : c'est exactement ce que `avecFichier` a fait avant
+     * d'entrer ici. Le garde est dans `opac-filtre-lecture-en-ligne.spec.tsx`.
+     */
     champs: {
       recordType: 'Type de document',
       category: 'Domaine',
       language: 'Langue',
       publishYear: 'Année',
+      avecFichier: 'Disponibilité',
     },
     /**
      * ⚠ Sans cette sortie, l'écran est un cul-de-sac. À zéro résultat, les

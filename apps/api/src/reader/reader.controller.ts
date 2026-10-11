@@ -274,18 +274,52 @@ export class ReaderController {
       orderBy: { expiresAt: 'asc' },
       select: { id: true, recordId: true, deviceId: true, expiresAt: true },
     });
-    const titres = await db.biblioRecord.findMany({
+    // ⭐ LE MÊME TRIO QUE PARTOUT AILLEURS — auteur, domaine, année.
+    //
+    // ⚠ Cette route n'en servait AUCUN : `{ recordId, titre, appareilId,
+    // expireLe }`. Or c'est l'étagère hors-ligne du lecteur sur le web, et
+    // c'est l'écran où une couverture sert le PLUS : on y cherche un document
+    // qu'on a déjà pris, donc on le reconnaît avant de le lire.
+    //
+    // ⚠ Signalé et MESURÉ par le front le 11 octobre 2026 — troisième route du
+    // même trio. Les trois autres (`/opac/search`, `/opac/records/:id`,
+    // `/offline/my-documents`) le servaient déjà : ce n'était pas un travail
+    // neuf, c'était un contrat INÉGAL d'une route à l'autre.
+    const notices = await db.biblioRecord.findMany({
       where: { id: { in: [...new Set(baux.map((b) => b.recordId))] } },
-      select: { id: true, title: true },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        publishYear: true,
+        // ⚠ L'auteur vient du CONTRIBUTEUR principal, `author` n'étant qu'un
+        // repli — c'est la même règle que `/offline/my-documents`, et deux
+        // règles pour un même nom finiraient par diverger.
+        author: true,
+        contributors: {
+          where: { role: 'AUTEUR_PRINCIPAL' },
+          select: { name: true },
+          orderBy: { position: 'asc' },
+          take: 1,
+        },
+      },
     });
-    const parId = new Map(titres.map((t) => [t.id, t.title]));
+    const parId = new Map(notices.map((n) => [n.id, n]));
     return {
-      documents: baux.map((b) => ({
-        recordId: b.recordId,
-        titre: parId.get(b.recordId) ?? null,
-        appareilId: b.deviceId,
-        expireLe: b.expiresAt,
-      })),
+      documents: baux.map((b) => {
+        const n = parId.get(b.recordId);
+        return {
+          recordId: b.recordId,
+          titre: n?.title ?? null,
+          // ⚠ `null`, jamais `''` : une chaîne vide se compose comme un champ
+          // rempli, et la couverture afficherait une ligne blanche.
+          auteur: n?.contributors[0]?.name ?? n?.author ?? null,
+          domaine: n?.category ?? null,
+          annee: n?.publishYear ?? null,
+          appareilId: b.deviceId,
+          expireLe: b.expiresAt,
+        };
+      }),
     };
   }
 }

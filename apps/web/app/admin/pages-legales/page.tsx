@@ -42,6 +42,20 @@ export default function PagesLegalesPage() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  /**
+   * ⚠ LA VERSION LUE, et elle est le COUPLE de `pages` : les deux viennent du
+   * même GET, et enregistrer avec l'une sans l'autre n'a pas de sens.
+   * `null` veut dire « pas lu », jamais « version 0 » — la version 0 est un
+   * état légitime (aucune écriture encore), et la confondre avec l'absence
+   * ferait écrire sur une lecture qui n'a pas eu lieu.
+   */
+  const [version, setVersion] = useState<number | null>(null);
+  /**
+   * Le message du serveur sur un 409, GARDÉ TEL QUEL. Distinct de `erreur`
+   * parce qu'il appelle un geste — relire — que les autres erreurs n'appellent
+   * pas.
+   */
+  const [conflit, setConflit] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
     try {
@@ -49,28 +63,40 @@ export default function PagesLegalesPage() {
       // `GET /tenancy/home` ne rend que ce qui est PUBLIÉ, donc il ne montrerait
       // jamais un brouillon. C'est le même piège que l'accueil, déjà tranché là.
       /*
-       * ⚠⚠ `GET /tenancy/settings` N'EXISTE PAS — mesuré le 9 octobre 2026 par
-       * une recette : l'écran affichait « Cannot GET /tenancy/settings ». Je
-       * l'avais écrit contre une route que je n'avais jamais appelée, et c'est
-       * exactement « une doublure est une hypothèse, et un test vert ne confirme
-       * que moi » : mes 14 cas doublaient `api()`, donc aucun ne pouvait me
-       * démentir.
+       * ⚠ `GET /tenancy/settings` EXISTE DEPUIS rc8, et c'est elle qu'il faut :
+       * elle rend les pages légales BRUTES, brouillons compris, et elle est
+       * gardée par `etablissement.apparence` — la même fonction que l'écriture.
        *
-       * Les routes qui existent sont `GET /tenancy/home` (le PUBLIÉ seulement,
-       * via `pourLePublic`), `GET /current`, `GET /descriptor`, et
-       * `PATCH /settings`. Aucune ne rend un BROUILLON.
+       * ⚠ PAS `GET /tenancy/home` : cette route PUBLIQUE filtre les brouillons
+       * (`pourLePublic`). Un éditeur qui s'y fierait enregistrerait un
+       * remplacement complet sans avoir vu ce qu'il écrase — et c'est écrit dans
+       * la description de la route, par la main qui l'a posée.
        *
-       * ⚠ On lit donc le PUBLIÉ en attendant la route, et c'est une borne
-       * écrite, pas un contournement : un brouillon enregistré n'est pas
-       * relisible, et la demande est en passation.
+       * ⚠ MON ÉCRAN L'A APPELÉE AVANT QU'ELLE EXISTE, et une recette l'a montré
+       * (« Cannot GET /tenancy/settings ») : mes quatorze cas doublaient `api()`,
+       * donc aucun ne pouvait me démentir. Elle existe maintenant ; le défaut
+       * était d'avoir écrit contre un contrat que je n'avais pas vérifié.
        */
-      const r = await api<{ pagesLegales?: Record<ClePageLegale, PageLegale> }>(
-        '/tenancy/home',
-      );
+      /*
+       * ⚠ `version` EST ARRIVÉE EN rc9, et elle n'est pas optionnelle pour nous :
+       * `PATCH` l'EXIGE (400 sans elle) et rend 409 si elle est périmée. Mesuré
+       * contre l'API : « pagesLegalesVersion est obligatoire pour écrire les
+       * pages légales : renvoyez la valeur « version » rendue par
+       * GET /tenancy/settings ».
+       */
+      const r = await api<{
+        pagesLegales?: Record<ClePageLegale, PageLegale>;
+        version?: number;
+      }>('/tenancy/settings');
       setPages({
         mentions: r.pagesLegales?.mentions ?? VIDE,
         confidentialite: r.pagesLegales?.confidentialite ?? VIDE,
       });
+      // ⚠ `?? null` et PAS `?? 0` : un serveur qui ne rendrait pas la version
+      // nous laisserait écrire avec un zéro INVENTÉ, qui serait accepté tant
+      // que personne n'a encore écrit — puis refusé, sans qu'on sache pourquoi.
+      setVersion(typeof r.version === 'number' ? r.version : null);
+      setConflit(null);
     } catch (err) {
       setErreur(err instanceof ApiError ? err.message : String(err));
     }
@@ -94,21 +120,47 @@ export default function PagesLegalesPage() {
      * sortir comme si elle l'avait accompli », appliqué à une ÉCRITURE : ici
      * l'office est « modifier », et modifier sans avoir lu est écraser.
      */
-    if (!pages) {
+    /*
+     * ⚠ ET LA VERSION EST DANS LE MÊME REFUS, pas dans un second. Sans elle,
+     * le serveur rendrait 400 — mais le refus doit se dire ICI, parce que le
+     * motif est le même : on n'écrit pas sur une lecture qui n'a pas eu lieu.
+     * Deux refus pour une seule garantie finiraient par diverger.
+     */
+    if (!pages || version === null) {
       setErreur(T.refusEnregistrerSansLecture);
       return;
     }
     setErreur(null);
     setNotice(null);
+    setConflit(null);
     setEnCours(true);
     try {
       await api('/tenancy/settings', {
         method: 'PATCH',
-        body: JSON.stringify({ pagesLegales: suivant }),
+        body: JSON.stringify({ pagesLegales: suivant, pagesLegalesVersion: version }),
       });
       setPages(suivant);
+      /*
+       * ⚠ ON RELIT, ON N'INCRÉMENTE PAS. Mesuré : la réponse du PATCH rend les
+       * réglages ENTIERS et ne porte AUCUNE `version` (vingt-cinq clés, pas
+       * celle-là). Poser `version + 1` serait supposer le pas du compteur —
+       * exact aujourd'hui, et faux le jour où le serveur compte autrement.
+       * Sans relecture, le second enregistrement d'une même session partirait
+       * avec une version périmée et récolterait un 409 que rien n'explique.
+       */
+      await charger();
       setNotice(T.enregistrer);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        /*
+         * ⚠ LE MESSAGE DU SERVEUR, TEL QUEL. Il nomme la version lue, la
+         * version actuelle, et le geste — « RELISEZ la page avant
+         * d'enregistrer ». Le réécrire ici donnerait deux formulations d'un
+         * même refus, et c'est le lecteur qui paierait leur divergence.
+         */
+        setConflit(err.message);
+        return;
+      }
       setErreur(err instanceof ApiError ? err.message : String(err));
     } finally {
       setEnCours(false);
@@ -127,12 +179,43 @@ export default function PagesLegalesPage() {
     <main id={ID_CONTENU} className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="font-serif text-2xl font-bold">{T.editeurTitre}</h1>
       <p className="mt-2 text-sm text-muted">{T.editeurAide}</p>
-      {/* ⚠ LA BORNE EST DITE À L'ÉCRAN, pas seulement en commentaire : un texte
-          enregistré sans être publié ne se relit pas, et le taire ferait croire
-          à une perte de données. */}
-      <Alert tone="warning" className="mt-3">{T.brouillonNonRelisible}</Alert>
+      {/*
+        ⚠ LA BORNE EST PARTIE AVEC SA CAUSE. Elle disait « un texte enregistré
+        sans être publié ne réapparaîtra pas » — vrai jusqu'à rc8, où
+        `GET /tenancy/settings` a commencé à rendre les brouillons. La garder
+        aurait été exactement le défaut que ce dépôt traque : un avertissement
+        EXACT devenu mensonge quand sa condition disparaît.
+      */}
       {erreur && <Alert tone="error" className="mt-4">{erreur}</Alert>}
       {notice && <Alert tone="success" className="mt-4">{notice}</Alert>}
+      {/*
+        ⚠ LE CONFLIT PORTE SA SORTIE. Un refus qui informe sans offrir de geste
+        laisse devant un bouton « Enregistrer » qui ne marchera plus jamais :
+        la version en mémoire est périmée pour toujours, et chaque nouvel essai
+        rendra le même 409. « Relire » est la seule issue, donc elle est là.
+
+        Et elle DIT ce qu'elle coûte — le texte en cours est remplacé. Un
+        bouton qui jette du travail sans l'annoncer se clique une fois.
+      */}
+      {conflit && (
+        <Alert tone="error" className="mt-4">
+          <strong className="block">{T.conflitTitre}</strong>
+          {/* Le message du SERVEUR, tel quel : il nomme les deux versions. */}
+          <span className="mt-1 block">{conflit}</span>
+          <span className="mt-2 block text-sm">{T.conflitPerte}</span>
+          <Button
+            variant="ghost"
+            className="mt-3 min-h-11"
+            disabled={enCours}
+            onClick={() => {
+              setConflit(null);
+              void charger();
+            }}
+          >
+            {T.conflitRelire}
+          </Button>
+        </Alert>
+      )}
       {!pages && !erreur && <p className="mt-6 text-sm text-muted">{LIBELLES.commun.chargement}</p>}
 
       {pages &&
@@ -191,6 +274,9 @@ export default function PagesLegalesPage() {
                 <Button
                   type="button"
                   disabled={enCours}
+                  /* ⚠ Deux sections, deux « Enregistrer » : le texte visible
+                     suffit sous sa section, le nom ANNONCÉ doit dire laquelle. */
+                  aria-label={T.enregistrerPage(T[cle])}
                   onClick={() => void envoyer({ ...pages, [cle]: page })}
                 >
                   {T.enregistrer}
@@ -205,6 +291,7 @@ export default function PagesLegalesPage() {
                       type="button"
                       variant="ghost"
                       disabled={enCours}
+                      aria-label={T.depublierPage(T[cle])}
                       onClick={() =>
                         void envoyer({ ...pages, [cle]: { ...page, publieeLe: null } })
                       }
@@ -215,6 +302,7 @@ export default function PagesLegalesPage() {
                     <Button
                       type="button"
                       disabled={enCours}
+                      aria-label={T.publierPage(T[cle])}
                       onClick={() =>
                         void envoyer({
                           ...pages,

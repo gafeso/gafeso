@@ -66,7 +66,14 @@ describe('fiche d’une notice qui n’existe pas', () => {
     brancherNotice(true);
     render(<FicheNotice />);
 
-    expect(await screen.findByText('Un titre')).toBeInTheDocument();
+    // ⚠ L'ANCRE est un RÔLE, pas un texte : la couverture composée porte le
+    // même titre en `<tspan>` sous `aria-hidden`, et `findByText` — qui
+    // n'honore pas `aria-hidden` — trouvait deux « Un titre ». `findByRole`
+    // l'honore, donc il désigne le `<h1>` seul : une ancre plus forte, et la
+    // SEULE qui autorise l'assertion d'ABSENCE qui suit.
+    expect(
+      await screen.findByRole('heading', { name: 'Un titre' }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

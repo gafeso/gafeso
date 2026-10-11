@@ -75,18 +75,48 @@ function OpacSearch() {
   const [dans, setDans] = useState(urlDans); // mode de recherche (contrôlé)
   const [category, setCategory] = useState<string | null>(params.get('category'));
   const [recordType, setRecordType] = useState<string | null>(params.get('recordType'));
+  /**
+   * ⭐ LE FILTRE « Lecture en ligne disponible », ET POURQUOI IL ARRIVE SI TARD.
+   *
+   * Cet écran portait, trois lignes plus bas, un commentaire qui disait que ce
+   * filtre était IMPOSSIBLE sur la recherche. Il était EXACT quand il a été
+   * écrit, et rc8 l'a rendu faux : `hasDigital` est devenu un attribut
+   * FILTRABLE de l'index, et le DTO de `/opac/search` porte désormais
+   * `avecFichier` en le disant mot pour mot — « Filtré PAR LE MOTEUR […] c'est
+   * ce qui rend totalHits et les facettes EXACTS sur une recherche plein
+   * texte. »
+   *
+   * ⚠ C'est « un avertissement exact devient un mensonge quand sa condition
+   * disparaît », appliqué non pas à un texte d'écran mais à un COMMENTAIRE qui
+   * décourageait d'écrire le code. Personne ne relit un commentaire qui a l'air
+   * juste — et celui-là a empêché une fonctionnalité pendant une version.
+   *
+   * Mesuré avant d'écrire : 480 notices, 155 avec fichier, 325 sans, et
+   * 155 + 325 = 480. Le filtre ne perd rien.
+   */
+  const [avecFichier, setAvecFichier] = useState(params.get('avecFichier') === '1');
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   /**
    * Mode PARCOURS : la liste des documents numériques, servie par
    * /opac/parcourir (filtre `avecFichier`, lu en base).
    *
-   * ⚠ C'est un mode, pas un filtre de recherche. /opac/search ne peut pas
-   * porter ce filtre — il se lit en base, le moteur n'en sait rien, et le
-   * post-filtrer rendrait totalHits et les compteurs faux. Lancer une
-   * recherche QUITTE donc le parcours : le formulaire pousse une URL sans
-   * `numeriques`, et l'écran repasse en recherche. C'est explicite à l'écran,
-   * pas silencieux — la pastille de parcours disparaît avec le mode.
+   * ⚠ CE COMMENTAIRE DISAIT L'INVERSE, ET IL ÉTAIT JUSTE JUSQU'À rc8 :
+   * « /opac/search ne peut pas porter ce filtre — il se lit en base, le moteur
+   * n'en sait rien, et le post-filtrer rendrait totalHits et les compteurs
+   * faux. » rc8 a rendu `hasDigital` filtrable PAR LE MOTEUR, et la recherche
+   * accepte maintenant `avecFichier` avec des compteurs exacts. Le filtre
+   * existe donc, sur la recherche — voir `avecFichier` ci-dessus.
+   *
+   * Ce mode-ci SUBSISTE pour ce qu'il est : parcourir le fonds numérique sans
+   * requête, par pages, servi par `/opac/parcourir`. Lancer une recherche
+   * QUITTE le parcours : le formulaire pousse une URL sans `numeriques`, et
+   * l'écran repasse en recherche. C'est explicite à l'écran, pas silencieux —
+   * la pastille de parcours disparaît avec le mode.
+   *
+   * ⚠ Et la case du filtre n'est PAS rendue en mode parcours : la liste y est
+   * déjà entièrement numérique, donc la case n'y filtrerait rien. Une case
+   * inerte est un défaut, pas une commodité.
    */
   const parcours = params.get('numeriques') === '1';
   const [pageParcours, setPageParcours] = useState(1);
@@ -105,7 +135,14 @@ function OpacSearch() {
   const [pageRecherche, setPageRecherche] = useState(1);
 
   const search = useCallback(
-    async (query: string, mode: string, cat: string | null, type: string | null, page: number) => {
+    async (
+      query: string,
+      mode: string,
+      cat: string | null,
+      type: string | null,
+      fichier: boolean,
+      page: number,
+    ) => {
       setError(null);
       try {
         const qs = new URLSearchParams();
@@ -113,6 +150,11 @@ function OpacSearch() {
         if (mode && mode !== 'tout') qs.set('dans', mode);
         if (cat) qs.set('category', cat);
         if (type) qs.set('recordType', type);
+        // ⚠ `'true'`, et pas `'1'` : le DTO ne reconnaît QUE les formes
+        // explicites (`true`/`false`/`1`/`0`) et refuse le reste par une 400 —
+        // « une faute de frappe doit se voir ». Vérifié : `avecFichier=lol`
+        // rend 400, il ne vaut PAS « non ».
+        if (fichier) qs.set('avecFichier', 'true');
         qs.set('page', String(page));
         qs.set('limit', String(PAR_PAGE_RECHERCHE));
         const data = await api<SearchResponse>(
@@ -163,16 +205,16 @@ function OpacSearch() {
       void parcourir(pageParcours);
       return;
     }
-    void search(urlQ, urlDans, category, recordType, pageRecherche);
+    void search(urlQ, urlDans, category, recordType, avecFichier, pageRecherche);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlQ, urlDans, category, recordType, parcours, pageParcours, pageRecherche]);
+  }, [urlQ, urlDans, category, recordType, avecFichier, parcours, pageParcours, pageRecherche]);
 
   // ⚠ TOUT CHANGEMENT DE CRITÈRE RAMÈNE EN PAGE 1. Sans cela, affiner une
   // recherche depuis la page 7 demanderait la page 7 d'un résultat qui en
   // compte deux : une liste vide sur une recherche qui trouve.
   useEffect(() => {
     setPageRecherche(1);
-  }, [urlQ, urlDans, category, recordType]);
+  }, [urlQ, urlDans, category, recordType, avecFichier]);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -187,7 +229,7 @@ function OpacSearch() {
     const url = qs.toString() ? `/opac?${qs}` : '/opac';
     // Même requête active : relancer directement (l'URL ne changerait pas).
     if (q === urlQ && dans === urlDans) {
-      void search(q, dans, category, recordType, 1);
+      void search(q, dans, category, recordType, avecFichier, 1);
     } else {
       router.push(url);
     }
@@ -225,6 +267,16 @@ function OpacSearch() {
             valeur: category,
             libelle: category,
             retirer: () => setCategory(null),
+          },
+        ]
+      : []),
+    ...(avecFichier
+      ? [
+          {
+            champ: 'avecFichier',
+            valeur: '1',
+            libelle: LIBELLES.filtreNumerique.pastille,
+            retirer: () => setAvecFichier(false),
           },
         ]
       : []),
@@ -281,6 +333,34 @@ function OpacSearch() {
           <Link href="/opac" className="text-sm text-muted underline underline-offset-2">
             {LIBELLES.opac.parcoursQuitter}
           </Link>
+        </div>
+      )}
+
+      {/*
+        ⭐ LE FILTRE « Lecture en ligne disponible ».
+        ⚠ PAS EN MODE PARCOURS : la liste y est déjà entièrement numérique,
+        donc la case n'y filtrerait rien. Une case inerte est un défaut.
+        ⚠ Et il s'affiche SANS attendre les résultats, contrairement aux
+        facettes : il ne dépend d'aucune distribution, et le faire disparaître
+        à zéro résultat en ferait un cul-de-sac — exactement le défaut que les
+        pastilles construites depuis L'ÉTAT corrigent juste au-dessus.
+      */}
+      {!parcours && (
+        <div className="mt-4">
+          <label className="flex w-fit items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-ocre"
+              checked={avecFichier}
+              onChange={(e) => setAvecFichier(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold">{LIBELLES.filtreNumerique.libelle}</span>
+              {/* ⚠ Dit ce que « disponible » ne promet PAS : l'existence d'une
+                  version en ligne, jamais le droit de la lire. */}
+              <span className="mt-0.5 block text-muted">{LIBELLES.filtreNumerique.aide}</span>
+            </span>
+          </label>
         </div>
       )}
 

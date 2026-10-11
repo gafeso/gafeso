@@ -68,6 +68,14 @@ const MARQUE_ATTENDUE = /const MARQUE = /;
  * écrite plus bas, mesurée plutôt que supposée.
  */
 const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
+  'tenancy/index-des-ecoles-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'il interroge `pg_index` et `information_schema` — il ne crée ni index ni ' +
+      'table. ⚠ La moitié SQL a bien été éprouvée contre une vraie divergence, ' +
+      'mais dans une transaction ANNULÉE et sur un schéma d’essai hors ' +
+      '`tenant_%` : la mesure a eu lieu, et rien n’a persisté.',
+  },
   'tenancy/version-des-pages-legales-en-base.spec.ts': {
     discipline: 'nettoyage-recense',
     motif:
@@ -197,7 +205,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT seize — une dix-septième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT dix-sept — une dix-huitième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

@@ -31,6 +31,24 @@ const CHARGE: ChargeUsage = {
   parFiliere: [
     { cle: 'L1_DROIT', consultations: 40, telechargements: 7, effectif: 31, publiable: true },
     // ⚠ LA LIGNE SOUS LE SEUIL : comptes à -1, effectif en clair à 3.
+    /*
+     * ⚠ CETTE LIGNE DÉCRIT UNE FORME QUE rc9 NE SERT PLUS — et c'est VOULU.
+     *
+     * Mesuré le 9 octobre 2026 contre l'API : sous le seuil, `/stats/usage`
+     * rend exactement `{ cle, publiable, motif }` — ni `consultations`, ni
+     * `telechargements`, ni `effectif`. Le serveur ne confie donc plus le
+     * nombre à l'écran.
+     *
+     * ⭐ La doublure continue de le lui confier, exprès : c'est la DÉFENSE EN
+     * PROFONDEUR que Jean a demandée le 9 octobre — « le backend le retire de
+     * la réponse sous le seuil ; garde ton masquage côté écran en défense ».
+     * Un écran qui masque ce qu'il reçoit reste juste si la route régresse ;
+     * un écran qui compte sur la route ne masque plus rien ce jour-là.
+     *
+     * ⚠ NE PAS « MODERNISER » cette doublure pour la faire ressembler à la
+     * réponse actuelle : elle serait alors incapable de distinguer un écran
+     * qui masque d'un écran qui n'a rien à masquer.
+     */
     { cle: 'M2_MEDECINE', consultations: -1, telechargements: -1, effectif: 3, publiable: false },
   ],
   seuilDePublication: 5,

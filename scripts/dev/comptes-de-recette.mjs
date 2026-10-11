@@ -48,10 +48,15 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { emettreLienMotDePasse } from '../lib/lien-mot-de-passe.mjs';
 import { listerLesEcoles, ouvrirEcole, regleDuProduit } from '../lib/base-tenant.mjs';
+import {
+  engendrerGuidePdf,
+  NOM_DU_FICHIER,
+  TITRE_DE_LA_NOTICE,
+} from './engendrer-guide-pdf.mjs';
 
 const ROUGE = '\x1b[0;31m';
 const VERT = '\x1b[0;32m';
@@ -224,7 +229,12 @@ async function principal() {
     try {
       const annee = await anneeDeLEcole(db, slug);
       const enTetesDeLEcole = await enTetesPour(slug, apiUrl);
-      const ctx = { apiUrl, appUrl, motDePasse, annee, enTetesDeLEcole };
+      // ⚠ `slug` PORTÉ PAR LE CONTEXTE, et ce n'est pas une commodité : la carte
+      // des sessions est clé par école ET par adresse. Les deux écoles de
+      // développement portent LES MÊMES adresses (`recette-bib@exemple.bf`…) —
+      // une clé sans école aurait servi la session de `zinda` sur `horizon`,
+      // c'est-à-dire une session d'un autre établissement.
+      const ctx = { slug, apiUrl, appUrl, motDePasse, annee, enTetesDeLEcole };
       for (const compte of COMPTES) {
         await poserLeCompte(db, slug, compte, ctx);
         poses += 1;
@@ -235,6 +245,23 @@ async function principal() {
       // de rendre possible — on se connecte par `POST /auth/login`, avec un
       // mot de passe, comme n'importe qui. Aucun jeton n'est fabriqué.
       await doterLEtudiante(db, slug, ctx);
+
+      // ⑥ UNE CONSULTATION ET UN BAIL — et l'appel est ICI, pas à la fin de
+      // `doterLEtudiante`, pour une raison mesurée.
+      //
+      // 🔴 Je l'y avais mis. Les trois `return;` de l'étape ⑤ — « le guide est
+      // déjà en place », « la notice porte un autre document », « aucune notice
+      // où le poser » — sautaient donc la dotation. Ils veulent dire « CETTE
+      // ÉTAPE est finie » ; ils disent « la FONCTION est finie ».
+      //
+      // ⚠ Et le défaut ne se serait pas vu au premier passage : au premier, ⑤
+      // téléverse et ne sort pas tôt. Il n'apparaît qu'à partir du SECOND —
+      // c'est-à-dire sur tous les passages suivants, et aucun n'aurait rien
+      // signalé. C'est en lançant deux fois que je l'ai vu, une fois de plus.
+      //
+      // ⚠ L'ordre compte quand même : un bail exige un document `ready`, donc
+      // ⑥ vient APRÈS ⑤.
+      await doterLaLectrice(ctx, db);
     } finally {
       await db.$disconnect();
     }
@@ -491,7 +518,56 @@ async function poserLeCompte(db, slug, compte, ctx) {
       (classe ? ` · classe ${classe.name}` : ''),
   );
 
+  // ⭐ ON NE RÉÉCRIT PAS UN MOT DE PASSE DÉJÀ BON — et ce n'est pas une
+  // économie, c'est la condition pour que ce script reste relançable.
+  //
+  // ⚠ Mesuré en le lançant DEUX FOIS, comme « idempotent » l'exige :
+  // `POST /accounts/set-password` est une route PUBLIQUE, donc BRIDÉE — à bon
+  // droit, c'est elle qui protège le produit du bourrage de jetons. Deux
+  // passages rapprochés rendaient donc **HTTP 429**, et le script sortait en 1
+  // sur une base pourtant dans l'état voulu.
+  //
+  // ⚠ La cible est un ÉTAT, jamais une écriture : « ce compte peut se connecter
+  // avec le mot de passe de recette ». On le DEMANDE au produit, par la route
+  // de connexion — la seule qui réponde vraiment à cette question.
+  if (await peutDejaSeConnecter(ctx, compte.email)) {
+    info(`${compte.email} · mot de passe déjà en place — rien à réécrire`);
+    return;
+  }
   await definirLeMotDePasseParLeProduit(db, id, slug, ctx);
+}
+
+/**
+ * Le compte ouvre-t-il une session avec le mot de passe de recette ?
+ *
+ * ⚠ RÉPOND `false` SUR TOUT CE QUI N'EST PAS UN SUCCÈS FRANC — y compris sur un
+ * 429 ou une panne réseau. Le pire que ça produise est une tentative d'écriture
+ * de plus, qui refusera proprement ; l'inverse — croire la connexion possible
+ * sans l'avoir obtenue — laisserait un compte sans mot de passe utilisable, et
+ * personne ne le saurait avant d'essayer de s'en servir.
+ */
+async function peutDejaSeConnecter(ctx, email) {
+  const res = await fetch(`${ctx.apiUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...ctx.enTetesDeLEcole },
+    body: JSON.stringify({ email, password: ctx.motDePasse }),
+  }).catch(() => null);
+  // ⭐ ON GARDE LA SESSION OBTENUE. Sans ça, ce contrôle COÛTE une connexion au
+  // lieu d'en économiser une — et c'est exactement ce qui a déplacé le 429.
+  if (res?.ok) {
+    const cookie = (res.headers.getSetCookie?.() ?? [])
+      .map((c) => c.split(';')[0])
+      .join('; ');
+    if (cookie) sessions.set(`${ctx.slug}|${email}`, cookie);
+  }
+  // ⚠ `res.ok`, PAS `status === 200` : NestJS rend **201** sur un `@Post`, et
+  // j'avais supposé 200. Le contrôle renvoyait donc `false` sur une connexion
+  // RÉUSSIE — le script réécrivait le mot de passe à chaque passage, et
+  // retombait sur le 429 qu'on venait de corriger.
+  //
+  // ⭐ Mesuré, pas déduit : les trois comptes rendent 201. « Une doublure est
+  // une hypothèse » vaut aussi pour un code de réponse qu'on n'a pas appelé.
+  return res?.ok === true;
 }
 
 /**
@@ -611,9 +687,40 @@ async function doterLEtudiante(db, slug, ctx) {
   // `DigitalCopyService.upload` : le reproduire ici doublerait la crypto de
   // contenu. S'il n'y en a aucun, on le DIT — un compte qui promet une étagère
   // vide est le « plein qui invite à agir » que ce produit corrige partout.
-  const pret = await db.digitalCopy.count({ where: { encStatus: 'ready' } });
-  if (pret > 0) {
-    info(`documents prêts pour le hors-ligne : ${pret} — rien à téléverser`);
+  // ⭐ L'IDEMPOTENCE PORTE SUR *LE GUIDE*, PAS SUR « UN DOCUMENT QUELCONQUE ».
+  //
+  // ⚠ Elle disait avant : « s'il existe au moins une copie `ready`, il n'y a
+  // rien à faire ». C'était juste tant qu'on voulait UN document hors-ligne
+  // n'importe lequel. Ça ne l'est plus : `zinda` en porte 155, donc le guide
+  // n'aurait JAMAIS été déposé — le script aurait annoncé « rien à téléverser »
+  // sur une école où le document attendu est absent.
+  //
+  // « La cible doit être un ÉTAT, jamais une quantité à ajouter. » L'état visé
+  // est ici nommé : la notice du guide porte le guide.
+  const { id: idDuGuide, raison } = await assurerLaNoticeDuGuide(ctx, db, session);
+  if (!idDuGuide) {
+    avert(raison);
+    return;
+  }
+  const dejaLa = await db.digitalCopy.findUnique({
+    where: { recordId: idDuGuide },
+    select: { originalName: true, encStatus: true, fileSizeBytes: true },
+  });
+  if (dejaLa?.originalName === NOM_DU_FICHIER && dejaLa.encStatus === 'ready') {
+    info(
+      `le guide est déjà en place · ${dejaLa.fileSizeBytes} octets, chiffré — rien à téléverser`,
+    );
+    return;
+  }
+  if (dejaLa) {
+    // ⚠ ON NE REMPLACE PAS LE FICHIER DE QUELQU'UN. « On n'ajoute pas, jamais
+    // on retire » : si cette notice porte autre chose, c'est que quelqu'un l'y
+    // a mis, et le défaire serait décider à sa place.
+    avert(
+      `la notice « ${TITRE_DE_LA_NOTICE} » porte déjà un AUTRE document ` +
+        `(« ${dejaLa.originalName} », ${dejaLa.encStatus ?? 'non chiffré'}). ` +
+        'Il n’est pas remplacé. Retirez-le vous-même si c’est voulu.',
+    );
     return;
   }
   // Aucun : on en POSE un, par la route de téléversement du produit.
@@ -625,34 +732,20 @@ async function doterLEtudiante(db, slug, ctx) {
   // contenu du produit — et un raccourci non chiffré « coûte toujours moins
   // cher qu'on ne croit, et plus cher qu'on ne le voit » : c'est exactement ce
   // qu'avait fait le seed, qui promettait 155 documents hors-ligne pour UN seul.
-  // ⚠ UNE SEULE CONDITION, ET ELLE A SON MOTIF : la notice ne doit pas DÉJÀ
-  // porter un document — on ne remplace pas le fichier de quelqu'un.
   //
-  // ⚠ J'avais ajouté `items: { none: {} }` sans savoir pourquoi, « pour être
-  // sûr ». Toutes les 8 000 notices de `horizon` portent des exemplaires : le
-  // filtre vidait donc la population, et le script annonçait « aucune notice
-  // SANS document » sur une école qui en a huit mille. Une condition ajoutée
-  // sans motif ne protège de rien et peut tout retirer — mesuré avant de la
-  // retirer : 8 000 sans elle, 0 avec.
-  const notice = await db.biblioRecord.findFirst({
-    where: { digitalCopy: null },
-    select: { id: true, title: true },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (!notice) {
-    avert(
-      `« ${slug} » n'a aucune notice SANS document où en poser un : l'étagère ` +
-        'mobile restera vide. (On ne remplace pas le fichier d’une notice qui ' +
-        'en a un : ce serait écraser le travail de quelqu’un.)',
-    );
-    return;
-  }
-  const pdf = pdfMinimal(slug, notice.title);
+  // ⚠ CE BLOC NE CHOISIT PLUS DE NOTICE AU HASARD. Il en visait « la plus
+  // récente sans document », et le commentaire qui vivait ici racontait un
+  // `items: { none: {} }` ajouté sans motif, qui vidait la population sur
+  // `horizon`. La leçon reste vraie et n'a plus de code à décrire ici : le
+  // guide a SA notice, nommée, et c'est `assurerLaNoticeDuGuide` qui la pose.
+  const { octets, pages } = await engendrerGuidePdf();
+  const pdf = Buffer.from(octets);
+  const notice = { id: idDuGuide, title: TITRE_DE_LA_NOTICE };
   const formulaire = new FormData();
   // ⚠ PAS de Content-Type imposé : c'est le navigateur — ici undici — qui pose
   // la frontière multipart. L'imposer casse l'envoi, et le produit répond
   // « … is not valid JSON ». Ce dépôt l'a déjà payé une fois.
-  formulaire.append('file', new Blob([pdf], { type: 'application/pdf' }), 'recette-hors-ligne.pdf');
+  formulaire.append('file', new Blob([pdf], { type: 'application/pdf' }), NOM_DU_FICHIER);
   const res = await fetch(`${ctx.apiUrl}/cataloging/records/${notice.id}/digital-copy`, {
     method: 'POST',
     headers: { cookie: session, ...ctx.enTetesDeLEcole },
@@ -677,7 +770,10 @@ async function doterLEtudiante(db, slug, ctx) {
     select: { encStatus: true, encError: true },
   });
   if (copie?.encStatus === 'ready') {
-    info(`document hors-ligne posé · « ${notice.title} » (chiffré par le produit)`);
+    info(
+      `guide déposé · « ${notice.title} » · ${pages} pages, ${pdf.length} octets ` +
+        '(chiffré par le produit)',
+    );
   } else {
     avert(
       `le fichier est en ligne mais PAS préparé pour le hors-ligne ` +
@@ -685,44 +781,211 @@ async function doterLEtudiante(db, slug, ctx) {
         "La lecture en ligne marche ; l'étagère mobile restera vide.",
     );
   }
+
 }
 
 /**
- * Un PDF d'une page, écrit à la main — aucune dépendance.
+ * ⭐ DE QUOI RECETTER LES DEUX ÉCRANS DU LECTEUR.
  *
- * ⚠ Il porte un xref VALIDE : l'ingestion hors-ligne le répare au besoin
- * (pdf-lib), mais un fichier déjà correct évite de mesurer la réparation quand
- * on voulait mesurer le chiffrement.
+ * ⚠ Signalé par le FRONT le 11 octobre 2026, et signalé comme une LIMITE de sa
+ * mesure plutôt que comme un défaut : « `/reader/consultations` et
+ * `/reader/hors-ligne` rendent 200 avec une population VIDE pour
+ * `recette-etu@` ; mes relevés sur ces routes ne mesurent donc rien, et les
+ * deux écrans que j'ai livrés n'ont aucune donnée à montrer ».
+ *
+ * C'était exact, et c'est à ce script de le combler : il existe pour que les
+ * comptes de recette portent ce qu'une recette doit voir. **Un écran qu'on ne
+ * peut pas recetter est un écran qu'on livre sans l'avoir regardé.**
+ *
+ * ## ⚠ TOUT PASSE PAR LES ROUTES DU PRODUIT, y compris la clé d'appareil
+ *
+ * · la CONSULTATION s'écrit en demandant l'URL de lecture — c'est
+ *   `OpacService.getReadUrl` qui journalise, et rien d'autre ne le fait ;
+ * · le BAIL exige un APPAREIL, donc une vraie clé publique EC P-256. On en
+ *   engendre une ici, comme un téléphone le ferait. ⚠ La clé PRIVÉE ne quitte
+ *   pas ce processus et n'est jamais écrite : on n'en a pas besoin — le script
+ *   ne déchiffre rien, il vérifie seulement que le bail est délivré.
+ *
+ * ⚠ ET ON NE FABRIQUE NI L'UN NI L'AUTRE EN BASE. Écrire un `UsageEvent` ou un
+ * `OfflineLicense` par Prisma produirait exactement ce que le tamis traque : un
+ * état que le produit n'aurait pas accepté de créer.
  */
-function pdfMinimal(slug, titre) {
-  const texte = `Gafeso - document de recette (${slug})`;
-  const flux = `BT /F1 14 Tf 60 760 Td (${texte.replace(/[()\\]/g, '')}) Tj ET`;
-  const objets = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ' +
-      '/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  let corps = '%PDF-1.4\n';
-  const offsets = [];
-  objets.forEach((o, i) => {
-    offsets.push(corps.length);
-    corps += `${i + 1} 0 obj\n${o}\nendobj\n`;
+async function doterLaLectrice(ctx, db) {
+  const etu = COMPTES.find((c) => c.etudiant);
+
+  // La session de L'ÉTUDIANTE — c'est son étagère et ses consultations.
+  const session = await seConnecter(ctx, etu.email);
+
+  // Un document qu'elle a le droit de lire ET qui est prêt pour le hors-ligne.
+  const copie = await db.digitalCopy.findFirst({
+    where: { encStatus: 'ready' },
+    select: { recordId: true, record: { select: { title: true } } },
+    orderBy: { uploadedAt: 'desc' },
   });
-  const debutXref = corps.length;
-  corps += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n`;
-  for (const o of offsets) corps += `${String(o).padStart(10, '0')} 00000 n \n`;
-  corps +=
-    `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R ` +
-    `/Title (${titre.slice(0, 60).replace(/[()\\]/g, '')}) >>\n` +
-    `startxref\n${debutXref}\n%%EOF\n`;
-  return Buffer.from(corps, 'latin1');
+  if (!copie) {
+    avert(
+      'aucun document prêt pour le hors-ligne : ni consultation ni bail ne ' +
+        'peuvent être posés. Les deux écrans du lecteur resteront vides en recette.',
+    );
+    return;
+  }
+
+  // ── ① LA CONSULTATION, par la route qui la journalise.
+  const dejaVues = await db.usageEvent.count({ where: { userId: (await db.user.findUnique({ where: { email: etu.email }, select: { id: true } }))?.id ?? '' } });
+  if (dejaVues > 0) {
+    info(`consultations de la lectrice : ${dejaVues} déjà présente(s) — rien à faire`);
+  } else {
+    const res = await fetch(`${ctx.apiUrl}/opac/records/${copie.recordId}/read-url`, {
+      headers: { cookie: session, ...ctx.enTetesDeLEcole },
+    });
+    if (res.ok) {
+      info(`consultation posée · « ${copie.record.title} » (par la route de lecture)`);
+    } else {
+      avert(
+        `l'URL de lecture a été refusée (HTTP ${res.status}) : aucune ` +
+          "consultation n'est journalisée. L'écran « Mes consultations » restera vide.",
+      );
+    }
+  }
+
+  // ── ② LE BAIL : un appareil, puis une licence.
+  const baux = await db.offlineLicense.count({ where: { expiresAt: { gt: new Date() } } });
+  if (baux > 0) {
+    info(`baux hors-ligne en cours : ${baux} déjà présent(s) — rien à faire`);
+    return;
+  }
+
+  // ⚠ Une VRAIE clé EC P-256, SPKI DER en base64 — ce que le DTO exige, et ce
+  // qu'un téléphone enverrait. La privée reste dans ce processus.
+  const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const spki = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+
+  const appareil = await fetch(`${ctx.apiUrl}/offline/devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: session, ...ctx.enTetesDeLEcole },
+    body: JSON.stringify({ publicKey: spki, label: 'Appareil de recette', platform: 'android' }),
+  });
+  if (!appareil.ok) {
+    avert(
+      `l'enregistrement de l'appareil a été refusé (HTTP ${appareil.status}) : ` +
+        "aucun bail ne peut être émis. L'écran « Mes documents hors ligne » restera vide.",
+    );
+    return;
+  }
+  const { id: deviceId } = await appareil.json();
+
+  const licence = await fetch(`${ctx.apiUrl}/offline/licenses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: session, ...ctx.enTetesDeLEcole },
+    body: JSON.stringify({ docId: copie.recordId, deviceId }),
+  });
+  if (!licence.ok) {
+    const corps = await licence.text().catch(() => '');
+    avert(
+      `l'émission du bail a été refusée (HTTP ${licence.status}) : ${corps.slice(0, 200)}`,
+    );
+    return;
+  }
+  info(`bail hors-ligne émis · « ${copie.record.title} » (par les routes du produit)`);
 }
+
+/**
+ * ⭐ LA NOTICE DU GUIDE — idempotente par son TITRE.
+ *
+ * ## Pourquoi une notice À ELLE, et pas la première venue
+ *
+ * Le script posait son document sur « la notice la plus récente sans
+ * document ». Pour une recette qui voulait UN fichier hors-ligne, c'était
+ * assez. Pour les captures du magasin, non : on ne sait pas sur quelle œuvre on
+ * tombe, le titre affiché change d'une école à l'autre, et la capture montre
+ * une thèse dont nous ne sommes pas l'éditeur.
+ *
+ * ⚠ ET C'EST LE POINT QUI COMPTE : une capture publiée sur une boutique
+ * d'applications est une PUBLICATION. Y montrer la couverture et le texte d'un
+ * ouvrage sous droits est une republication sans licence, quelle que soit la
+ * bonne foi — et l'écran de lecture en montre plusieurs pages. Le guide, lui,
+ * est à nous, sous AGPL-3.0, et il décrit le produit qu'on démontre.
+ *
+ * ## ⚠ CRÉÉE PAR LA ROUTE, JAMAIS PAR PRISMA
+ *
+ * « Un seed qui écrit DIRECTEMENT en base contourne les règles d'écriture du
+ * produit » — et ce produit en a trois qui mordent ici : un `AUTEUR_PRINCIPAL`
+ * exigé, au moins trois mots-clés, et un domaine qui doit EXISTER au
+ * vocabulaire de l'école. Les trois sont respectées parce que c'est la route
+ * qui les applique, pas parce que je les ai recopiées.
+ *
+ * ⚠ `informatique` est choisi pour une raison mesurée : c'est l'un des deux
+ * domaines du fonds de développement qui figure AUSSI dans la table
+ * `categories`. Un domaine hors vocabulaire ferait lever `resolveCategory`.
+ */
+async function assurerLaNoticeDuGuide(ctx, db, session) {
+  const existante = await db.biblioRecord.findFirst({
+    where: { title: TITRE_DE_LA_NOTICE },
+    select: { id: true },
+  });
+  if (existante) return { id: existante.id, raison: '' };
+
+  const res = await fetch(`${ctx.apiUrl}/cataloging/records`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      cookie: session,
+      ...ctx.enTetesDeLEcole,
+    },
+    body: JSON.stringify({
+      title: TITRE_DE_LA_NOTICE,
+      contributors: [{ name: 'ResurgiTech SARL', role: 'AUTEUR_PRINCIPAL' }],
+      recordType: 'ouvrage',
+      category: 'informatique',
+      keywords: ['gafeso', 'bibliothèque', 'mode d’emploi'],
+      publishYear: 2026,
+      summary:
+        'Le guide d’utilisation de Gafeso : catalogue, prêts, lecteurs et ' +
+        'bibliothèque numérique. Publié avec le logiciel sous licence AGPL-3.0.',
+    }),
+  });
+  if (!res.ok) {
+    const corps = await res.text().catch(() => '');
+    return {
+      id: null,
+      raison:
+        `la notice du guide n'a pas pu être créée (HTTP ${res.status}) : ` +
+        `${corps.slice(0, 300)}`,
+    };
+  }
+  const cree = await res.json();
+  info(`notice du guide créée · « ${TITRE_DE_LA_NOTICE} »`);
+  return { id: cree.id, raison: '' };
+}
+
+
+/**
+ * ⭐ LES SESSIONS DÉJÀ OUVERTES, PAR ÉCOLE ET PAR COMPTE.
+ *
+ * ⚠ MESURÉ EN RELANÇANT : `POST /auth/login` est BRIDÉE, à bon droit — c'est
+ * elle qui protège le produit du bourrage de mots de passe. Mon contrôle « ce
+ * compte peut-il déjà se connecter ? » ajoutait UN login par compte, soit six
+ * par passage, et le script épuisait le quota avant d'arriver à ses propres
+ * connexions. Le 429 s'était simplement DÉPLACÉ.
+ *
+ * ⭐ Et le remède n'est pas de desserrer la bride, ni d'attendre entre deux
+ * appels : c'est de ne pas jeter ce qu'on vient d'obtenir. Un contrôle qui
+ * REUSSIT a, par définition, une session en main.
+ */
+const sessions = new Map();
 
 /** Ouvre une session par `POST /auth/login` — avec un mot de passe, comme tout le monde. */
 async function seConnecter(ctx, email) {
+  // ⚠ TÉMOIN : une clé sans école mélangerait deux établissements. Le défaut
+  // s'écrit `undefined|recette-bib@exemple.bf` et ne lève nulle part.
+  if (!ctx.slug) {
+    refuse('le contexte ne porte pas de `slug` : la carte des sessions mélangerait les écoles.', [
+      'Ajoutez `slug` au `ctx` construit dans `principal()`.',
+    ]);
+  }
+  const cle = `${ctx.slug}|${email}`;
+  const dejaOuverte = sessions.get(cle);
+  if (dejaOuverte) return dejaOuverte;
   const res = await fetch(`${ctx.apiUrl}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...ctx.enTetesDeLEcole },
@@ -730,6 +993,27 @@ async function seConnecter(ctx, email) {
   });
   if (!res.ok) {
     const corps = await res.text().catch(() => '');
+    // ⭐ UN 429 N'EST PAS UNE PROPRIÉTÉ VIOLÉE : C'EST UNE MESURE IMPOSSIBLE.
+    //
+    // La même distinction que pour les gardes vivants — « la propriété est
+    // violée » contre « la base est injoignable ». Ici le compte va
+    // probablement très bien ; c'est le quota qui est épuisé. Dire « connexion
+    // refusée » tout court envoie chercher un défaut de mot de passe qui
+    // n'existe pas.
+    //
+    // ⚠ MESURÉ : `POST /auth/login` est bridée à **10 par minute**
+    // (`@Throttle` dans `auth.controller.ts`), et ce script consomme UNE
+    // connexion par compte et par école — six au total. Deux passages dans la
+    // même minute dépassent donc, et c'est la bride qui fait son travail.
+    if (res.status === 429) {
+      refuse(`trop de connexions en une minute pour « ${email} » (HTTP 429).`, [
+        'Ce n’est PAS un défaut de ce compte : `POST /auth/login` est bridée à',
+        '10 par minute, et ce script en consomme six (trois comptes, deux écoles).',
+        '',
+        'Relancez dans une minute. La bride protège le produit du bourrage de',
+        'mots de passe — on ne la desserre pas pour un script de recette.',
+      ]);
+    }
     refuse(`connexion de « ${email} » refusée (HTTP ${res.status}).`, [
       corps.slice(0, 300),
       '',
@@ -737,9 +1021,9 @@ async function seConnecter(ctx, email) {
       'c’est que `POST /accounts/set-password` n’a pas écrit ce qu’on croit.',
     ]);
   }
-  // ⚠ Le cookie reste dans CE processus : il n'est ni imprimé ni écrit. C'est
-  // la même exigence que pour un jeton fabriqué — sauf qu'ici il vient d'une
-  // vraie connexion.
+  // ⚠ Le cookie reste dans CE processus : il n'est ni imprimé ni écrit, et la
+  // carte qui le retient meurt avec le processus. C'est la même exigence que
+  // pour un jeton fabriqué — sauf qu'ici il vient d'une vraie connexion.
   const cookies = (res.headers.getSetCookie?.() ?? [])
     .map((c) => c.split(';')[0])
     .join('; ');

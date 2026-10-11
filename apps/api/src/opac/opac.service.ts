@@ -85,6 +85,17 @@ export interface NoticeRecente {
   publishYear: number | null;
   recordType: string;
   coverUrl: string | null;
+  /**
+   * Le DOMAINE, et c'est `biblioRecord.category` — la même chaîne que
+   * `/opac/search` et `/opac/records/:id`, jamais une variante.
+   *
+   * ⚠ Il manquait ici alors que `/opac/search` le servait. Mesuré par le FRONT
+   * le 11 octobre 2026 : la couverture composée en tire sa teinte, donc la page
+   * d'accueil et le parcours affichaient une couverture d'une AUTRE COULEUR que
+   * la fiche du même document. Un document ne peut pas avoir deux couvertures
+   * selon l'écran.
+   */
+  category: string | null;
   /** Il existe un document numérique — rien de plus. Voir `marqueursNumeriques`. */
   hasDigital: boolean;
   /** Ce document est préparé pour la lecture HORS LIGNE. Voir `marqueursNumeriques`. */
@@ -132,6 +143,33 @@ export function decouperListe(brut?: string): string[] {
     .map((v) => v.trim())
     .filter((v) => v.length > 0);
 }
+
+/**
+ * ⭐ LA PROJECTION DE VITRINE — UNE SEULE FOIS.
+ *
+ * `nouveautes` et `parcourir` la portaient TOUTES LES DEUX, à l'identique.
+ * Elles décrivent le même objet (`NoticeRecente`) pour le même usage : la carte
+ * d'une notice dans une liste publique. Ce n'était donc pas une distinction
+ * qu'on n'avait pas nommée — c'était bien la même chose, écrite deux fois.
+ *
+ * ⚠ Et le coût s'est manifesté exactement comme « deux tableaux qui se
+ * ressemblent » le prédit : `category` a été ajouté à `/opac/search` et pas aux
+ * deux autres. Rien ne l'a signalé, parce que chaque copie était correcte
+ * ISOLÉMENT — la faute était dans l'écart entre elles.
+ *
+ * ⚠ Toute route de vitrine qui s'ajoutera emploie CECI.
+ */
+export const SELECT_VITRINE = {
+  id: true,
+  title: true,
+  author: true,
+  publishYear: true,
+  recordType: true,
+  coverUrl: true,
+  category: true,
+  // Lu, jamais servi tel quel : seuls les deux booléens sortent.
+  digitalCopy: { select: { encStatus: true } },
+} as const;
 
 /** Une page de parcours du catalogue, même forme que la recherche. */
 export interface PageDeNotices {
@@ -293,16 +331,7 @@ export class OpacService {
         ...(avecFichier ? { where: { digitalCopy: { isNot: null } } } : {}),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit,
-        select: {
-          id: true,
-          title: true,
-          author: true,
-          publishYear: true,
-          recordType: true,
-          coverUrl: true,
-          // Lu, jamais servi tel quel : seuls les deux booléens sortent.
-          digitalCopy: { select: { encStatus: true } },
-        },
+        select: SELECT_VITRINE,
       });
       // On rend ce qu'il y a : moins de `limit` notices n'est pas une erreur, et
       // rien ne complète la liste. Une liste vide est une liste vide.
@@ -352,16 +381,7 @@ export class OpacService {
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           skip: (page - 1) * limit,
           take: limit,
-          select: {
-            id: true,
-            title: true,
-            author: true,
-            publishYear: true,
-            recordType: true,
-            coverUrl: true,
-            // Lu, jamais servi tel quel : seuls les deux booléens sortent.
-            digitalCopy: { select: { encStatus: true } },
-          },
+          select: SELECT_VITRINE,
         }),
       ]);
       // Une page au-delà de la fin rend une liste vide avec le VRAI total :

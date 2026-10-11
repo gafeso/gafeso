@@ -547,13 +547,83 @@ reconstruit depuis la base.
 ### 4.2 Mettre à jour
 
 ```bash
+# ① LA VERSION — jamais `main`, toujours une étiquette.
 git fetch --tags
-git checkout v1.0.0-rc7          # la VERSION, jamais `main`
-$COMPOSE up -d --build
+git tag -l 'v*' | sort -V | tail -5     # les versions disponibles
+git checkout v1.0.0-rcN                 # celle que la ligne ci-dessus a montrée
+
+# ② POSER LA VERSION DANS L'ENVIRONNEMENT. Sans cette étape, la construction
+#    REFUSE — voyez l'encadré ci-dessous.
+V="$(scripts/version-du-depot.sh --exporter)" || exit 1
+eval "$V"
+echo "$GAFESO_VERSION / $GAFESO_COMMIT"  # ⚠ LISEZ-LE avant de continuer
+
+# ③ CONSTRUIRE, puis lancer.
+$COMPOSE build
+$COMPOSE up -d
 ```
 
 Les migrations de base de données s'appliquent automatiquement au démarrage de
-l'`api`. Il n'y a **aucune étape manuelle**.
+l'`api`. Il n'y a **aucune étape manuelle** pour la base.
+
+> ⚠ **SI L'ÉTAPE ② REFUSE EN DISANT « fichiers suivis modifiés ».** C'est normal
+> et c'est voulu : une étiquette dit « voici exactement ce code », et une
+> modification locale ferait porter à l'image un numéro de version qui désigne
+> autre chose qu'elle. Le message nomme les fichiers ET les trois issues.
+>
+> Dans la quasi-totalité des cas, ce que vous avez modifié a sa place dans
+> **`.env.prod`**, qui n'est pas suivi : les domaines, les secrets, le SMTP.
+> ⚠ **Y compris `docker/Caddyfile`** — il ne s'édite pas, il lit ses domaines
+> depuis l'environnement.
+
+> 🔴 **L'ÉTAPE ② N'EST PAS OPTIONNELLE, et le produit ne vous laissera pas
+> l'oublier.** La construction s'arrête en deux secondes si `GAFESO_VERSION`
+> est absente, et son message donne la commande à lancer.
+>
+> ⚠ **Ce refus existe parce que l'oubli ne se voyait pas.** Un
+> `up -d --build` sans l'étape ② construisait une image qui répond
+> `« non étiquetée / commit inconnu »` sur `/health` — **sans aucun
+> avertissement**. Elle fonctionne, elle sert vos lecteurs, et le jour où vous
+> cherchez quelle version tourne, elle ne sait pas le dire. Vécu sur notre
+> instance de démonstration le 9 octobre 2026.
+
+### 4.2 bis 🔴 APRÈS UNE MONTÉE DEPUIS UNE VERSION ANTÉRIEURE À rc8 — une commande
+
+Les migrations de base sont automatiques. **L'index de recherche ne l'est pas.**
+
+À partir de `v1.0.0-rc8`, le catalogue public sait filtrer sur « ce document
+a-t-il un fichier numérique ? ». Ce filtre vit dans l'index de recherche, et
+**les documents déjà indexés ne le portent pas** : ils ont été écrits avant que
+le réglage existe.
+
+**Une fois, après la montée, pour CHAQUE établissement :**
+
+```bash
+curl -s -X POST -H "x-admin-api-key: $ADMIN_API_KEY" \
+  https://api.<votre-domaine>/admin/tenants/<slug>/reindex
+# → {"indexed": 8000}
+```
+
+`ADMIN_API_KEY` est dans votre `.env.prod`. Le `<slug>` est le nom court de
+l'établissement — celui qu'`install.sh` vous a demandé.
+
+⚠ **Attendez quelques secondes avant de vérifier.** Le moteur de recherche
+indexe de façon ASYNCHRONE : une mesure prise juste après rend `0`, et ce n'est
+pas un échec — c'est une propagation en cours.
+
+**Ce qu'il en coûte**, mesuré : moins d'une seconde pour 8 000 notices. La
+recherche reste disponible pendant l'opération.
+
+**Si vous l'oubliez** : rien ne casse, rien ne s'affiche en rouge. Le filtre
+« documents numériques » du catalogue public rend simplement des résultats
+incomplets — c'est-à-dire le genre de panne que personne ne signale, parce
+qu'elle ressemble à un fonds qui n'a pas ces documents.
+
+> ⚠ **Pourquoi ce n'est pas fait automatiquement au démarrage.** Une
+> réindexation complète est une écriture de masse. Déclenchée par un
+> redémarrage, elle se rejouerait à chaque redémarrage — et un conteneur qui
+> redémarre en boucle réécrirait l'index en boucle. C'est un geste d'exploitant,
+> volontaire, une fois.
 
 ⚠ **ON SE PLACE SUR UNE ÉTIQUETTE, PAS SUR `main`.** Ce paragraphe disait
 `git pull`, et c'était faux de deux façons :
@@ -579,8 +649,13 @@ pas forcément.
 
 ```bash
 curl -s https://<votre-domaine>/api/health
-# → {"status":"ok","version":"v1.0.0-rc7","commit":"c792b1b",…}
+# → {"status":"ok","version":"v1.0.0-rcN","commit":"<les 7 premiers caractères>",…}
 ```
+
+⚠ **`"version": "non étiquetée"` veut dire que l'étape ② a été sautée**, ou que
+vous êtes sur `main`. L'application est honnête : elle préfère dire qu'elle ne
+sait pas plutôt que d'inventer un numéro plausible. Reprenez la montée depuis
+l'étape ①.
 
 > **Une exception à connaître : le fichier `docker/Caddyfile`.** Il est monté
 > dans le conteneur, pas copié dans l'image. `up -d --build` ne redémarre donc
@@ -672,6 +747,7 @@ comprendrait après coup.
 | L'`api` **redémarre en boucle** et son journal dit `REFUS DE DÉMARRER — <VARIABLE> est VIDE` (ou « porte une valeur d'EXEMPLE », ou « fait N caractères, M au minimum ») | Un secret de production est absent, trop court, ou encore à sa valeur d'exemple. Le produit REFUSE de démarrer plutôt que de servir avec un secret devinable | `$COMPOSE logs api \| grep "REFUS DE DÉMARRER"` — il liste **les six d'un coup**, pas le premier. Corrigez-les tous, puis `$COMPOSE up -d api` |
 | Le journal dit `POSTGRES_PASSWORD (lu dans DATABASE_URL, que le conteneur reçoit) est VIDE` — **et la valeur est bien dans votre `.env.prod`** | Ce que vous ÉDITEZ n'est pas ce que le processus LIT : le conteneur `api` ne reçoit pas `POSTGRES_PASSWORD`, il reçoit `DATABASE_URL`, qui la contient. La panne de rc4, le 6 octobre | `$COMPOSE exec api printenv \| cut -d= -f1 \| sort` — la liste de ce que le conteneur reçoit VRAIMENT. Si `DATABASE_URL` y est sans mot de passe, c'est elle qu'il faut corriger |
 | L'`api` boucle sur `P1000: Authentication failed for user` **sans aucun message de refus** | Le mot de passe est assez LONG pour passer le contrôle — donc ce n'est pas un refus de secret — mais il ne correspond pas à celui du volume PostgreSQL. ⚠ PostgreSQL fixe son mot de passe à l'**initialisation du volume** : le changer dans `.env.prod` après coup ne le change PAS dans la base | `$COMPOSE logs db \| grep "password authentication"`. Si le volume a été initialisé avec un autre mot de passe, c'est la base qu'il faut remettre d'accord (`ALTER USER … PASSWORD …`) — pas le fichier. ⚠ Et un mot de passe FAIBLE, lui, produirait le refus ci-dessus, pas ce `P1000` : le contrôle des secrets passe AVANT les migrations |
+| Le filtre « documents numériques » du catalogue public rend des résultats incomplets, et **rien ne s'affiche en rouge** | La réindexation de la §4.2 bis n'a pas été passée après une montée depuis une version antérieure à `v1.0.0-rc8` | Relancez-la pour chaque établissement, puis réessayez le filtre au bout de quelques secondes — l'indexation est asynchrone |
 
 ---
 

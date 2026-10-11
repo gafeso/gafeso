@@ -59,7 +59,7 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement DOUZE', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement TREIZE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
@@ -99,6 +99,11 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'roles/roles-systeme-en-base.spec.ts',
       'stats/usage-nominatif-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
+      // ⭐ TREIZIÈME, le 9 octobre 2026 : les INDEX des écoles contre le
+      // gabarit. Son frère ci-dessus compare les COLONNES et n'a jamais
+      // regardé un index — une contrainte unique absente d'une école était
+      // donc invisible, et c'est celle qui coûte.
+      'tenancy/index-des-ecoles-en-base.spec.ts',
       'tenancy/isolement-des-ecoles-en-base.spec.ts',
       // ⭐ DOUZIÈME, le 9 octobre 2026 : la course sur les pages légales.
       // Classé GLOBALE, et ce garde m'a mis en garde contre exactement ce geste
@@ -181,6 +186,8 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
     'isolement-des-ecoles-en-base.spec.ts':
       'il COMPARE deux écoles — la propriété n’existe qu’à plusieurs',
     'derive-des-schemas-en-base.spec.ts': 'il confronte chaque schéma d’école au gabarit',
+    'index-des-ecoles-en-base.spec.ts':
+      'il confronte les contraintes d’index de chaque école à celles du gabarit',
   };
 
   /**

@@ -1,11 +1,19 @@
 /**
  * « Documents numériques » : un PARCOURS, pas un filtre de recherche.
  *
- * Le groupe manquait à la page d'accueil parce que `avecFichier` se lit EN
- * BASE : /opac/search ne peut pas le porter sans que ses totaux deviennent
- * faux. L'API l'a donc sorti sur une route à part, /opac/parcourir. Le glisser
- * dans le menu déroulant de la recherche aurait promis une recherche
- * restreinte aux documents numériques — que rien ne sait servir.
+ * Le groupe manquait à la page d'accueil parce que `avecFichier` se lisait EN
+ * BASE : /opac/search ne pouvait pas le porter sans que ses totaux deviennent
+ * faux. L'API l'a donc sorti sur une route à part, /opac/parcourir.
+ *
+ * ⚠ CETTE PHRASE ÉTAIT EXACTE, ET rc8 L'A RENDUE FAUSSE : `hasDigital` est
+ * devenu un attribut FILTRABLE de l'index, et `/opac/search` accepte
+ * `avecFichier` avec des compteurs exacts. Le filtre de recherche existe donc
+ * — voir `opac-filtre-lecture-en-ligne.spec.tsx`.
+ *
+ * Ce mode-ci subsiste pour ce qu'il est : parcourir le fonds numérique SANS
+ * requête, par pages. Les deux ne se confondent pas, et la case du filtre
+ * n'est pas rendue ici — elle ne filtrerait rien sur une liste déjà
+ * entièrement numérique.
  *
  * ⚠ Ce que ce test défend, ce n'est pas l'affichage : c'est que le mode
  * parcours appelle la BONNE ROUTE, qu'il en sort, qu'il pagine, et qu'un

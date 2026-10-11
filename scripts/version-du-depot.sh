@@ -57,8 +57,38 @@ else
     #
     #     V="$(scripts/version-du-depot.sh --exporter)" || exit 1
     #     eval "$V"
+    # ⭐ LE MESSAGE DIT QUOI FAIRE, pas seulement ce qui ne va pas.
+    #
+    # ⚠ Il ne le disait pas, et c'est un refus qu'un exploitant RENCONTRERA :
+    # il tombe au milieu d'une montée de version, sur une machine de
+    # production, souvent le soir. Nommer les fichiers sans donner d'issue
+    # laisse le choix entre comprendre et contourner — et le contournement est
+    # toujours plus rapide.
     echo "⚠ REFUSÉ : fichiers suivis modifiés — l'image ne correspondrait pas à « $version » :" >&2
     echo "$suivis_modifies" | sed 's/^/    /' >&2
+    echo "" >&2
+    echo "  POURQUOI : une étiquette dit « voici exactement ce code ». Avec une" >&2
+    echo "  modification locale, l'image porterait un numéro de version qui" >&2
+    echo "  désigne autre chose qu'elle — et c'est ce numéro que le support" >&2
+    echo "  lira le jour d'une panne." >&2
+    echo "" >&2
+    echo "  TROIS ISSUES, et la première règle presque tous les cas :" >&2
+    echo "" >&2
+    echo "  (1) Votre réglage a sa place dans .env.prod, qui n'est PAS suivi." >&2
+    echo "      C'est le cas des domaines, des secrets, du SMTP — et du" >&2
+    echo "      Caddyfile, qui lit ses domaines depuis l'environnement plutôt" >&2
+    echo "      que d'être édité. Pour revenir en état :" >&2
+    echo "          git diff -- <fichier>       # ce que vous avez changé" >&2
+    echo "          git checkout -- <fichier>   # ATTENTION : ceci le PERD" >&2
+    echo "" >&2
+    echo "  (2) Le changement est à garder, mais plus tard :" >&2
+    echo "          git stash push -m 'mon réglage' -- <fichier>" >&2
+    echo "      puis reprenez la montée. (git stash list pour le retrouver.)" >&2
+    echo "" >&2
+    echo "  (3) Vous maintenez volontairement une variante. Alors ce code n'EST" >&2
+    echo "      plus « $version », et le dire est la seule chose honnête :" >&2
+    echo "      étiquetez votre propre version, ou acceptez « non étiquetée »" >&2
+    echo "      sur /health." >&2
     exit 1
   fi
   if [ -n "$non_suivis" ]; then

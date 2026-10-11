@@ -69,10 +69,34 @@ const CONSTRUIT = DEMANDE && existsSync(MANIFESTE);
  * latence — c'est le seuil au-delà duquel une page publique cesse d'être
  * utilisable sur le réseau des étudiants à distance.
  */
+/*
+ * ⚠ MESURES RÉÉCRITES LE 9 OCTOBRE 2026, APRÈS LE LOT rc9 — « réécrivez la
+ * MESURE, pas le budget », et c'est ce qui est fait : les trois budgets sont
+ * INCHANGÉS.
+ *
+ * | page | avant | après | écart | cause |
+ * |---|---|---|---|---|
+ * | accueil | 147 701 | 148 793 | +1 092 | le socle (libellés du lot) |
+ * | /opac | 138 232 | 139 414 | +1 182 | le filtre « Lecture en ligne » |
+ * | fiche | 139 408 | 142 069 | +2 661 | la COUVERTURE COMPOSÉE |
+ *
+ * ⭐ LE PRIX DE LA COUVERTURE, MESURÉ : 2 661 o gzip de JS sur la fiche, plus
+ * **326 o gzip de HTML** (pesé en retirant le SVG du document servi : 971 o
+ * brut). Soit ≈ 3 Ko pour **zéro requête**.
+ *
+ * ⚠ Et c'est la comparaison qui décide, pas le chiffre nu : une vignette
+ * d'image coûte une requête réseau — aller-retour compris, c'est ce qui coûte
+ * en 3G, pas les octets. Les 481 notices de zinda partagent SIX fichiers de
+ * couverture : l'image ne distinguait rien ET elle coûtait un aller-retour.
+ *
+ * Marge restante : 7 931 o sur la fiche, 10 586 sur /opac, 11 207 sur
+ * l'accueil. Le socle commun pèse 122 241 o pour un budget de 130 000 — c'est
+ * lui qui décide, et il n'a pas bougé du lot.
+ */
 const BUDGETS: Record<string, { cle: string; mesure: number; budget: number }> = {
-  'accueil /': { cle: '/page', mesure: 147_701, budget: 160_000 },
-  'résultats /opac': { cle: '/opac/page', mesure: 138_232, budget: 150_000 },
-  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 139_408, budget: 150_000 },
+  'accueil /': { cle: '/page', mesure: 148_793, budget: 160_000 },
+  'résultats /opac': { cle: '/opac/page', mesure: 139_414, budget: 150_000 },
+  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 142_069, budget: 150_000 },
 };
 
 /** ⚠ Le socle est COMMUN aux trois : il se garde une fois, et c'est là que tout se joue. */

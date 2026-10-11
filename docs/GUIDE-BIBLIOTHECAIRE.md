@@ -340,6 +340,29 @@ Pour tout ce qui relève du serveur — site inaccessible, aucun email ne part,
 lenteurs — voyez le [tableau de diagnostic](INSTALLATION.md#5-diagnostic--symptôme-cause-vérification)
 avec la personne qui administre l'installation.
 
+## 10. Glossaire
+
+Les mots que Gafeso emploie, et ce qu'ils désignent exactement. Plusieurs sont
+voisins sans être synonymes : c'est la source de confusion la plus fréquente
+quand on reprend une bibliothèque déjà informatisée.
+
+| Terme | Ce que c'est |
+|---|---|
+| **Notice** | La description d'une œuvre : titre, auteur, domaine, année, mots-clés. Elle existe même si la bibliothèque ne possède aucun volume. |
+| **Exemplaire** | Un volume physique, avec son code-barres et sa localisation. C'est lui qu'on prête, jamais la notice. Une notice peut en porter zéro, un ou vingt. |
+| **Document numérique** | Le fichier (PDF ou EPUB) attaché à une notice. Il se lit en ligne, et se télécharge sur l'application mobile si une règle d'accès l'autorise. |
+| **Collection** | Un regroupement de notices — « Thèses de droit », « Manuels de première année ». Une notice peut appartenir à plusieurs collections. |
+| **Règle d'accès** | Ce qui dit QUI peut lire les documents d'une collection : telles classes, tels abonnements. Sans règle, personne ne lit. |
+| **Classe** | Le niveau ou la filière d'un étudiant (L1 Droit, M2 Médecine). Elle se règle depuis *Classes*, jamais depuis la fiche du compte. |
+| **Lecteur** | Une personne inscrite, avec sa carte. Distinct du **compte**, qui est l'accès informatique : on peut avoir l'un sans l'autre. |
+| **Prêt** | La sortie d'un exemplaire, avec son échéance. Il se solde par un retour. |
+| **Réservation** | Une demande sur un document déjà sorti. Elle est promue au retour d'un exemplaire, et le lecteur est prévenu. |
+| **Récolement** | Le passage en rayon, code-barres à la main, pour confronter ce que la base dit à ce qui est là. |
+| **OPAC** | Le catalogue public — ce que voient les lecteurs et les moteurs de recherche, sans se connecter. |
+| **Licence hors-ligne** | Le droit de lire un document sans réseau, sur UN appareil, jusqu'à une date. Elle est émise par le serveur et ne se recopie pas. |
+| **Module** | Une partie du produit qu'un établissement peut éteindre — amendes, rappels, circulation. Éteint, il disparaît de l'interface. |
+| **Rôle** | Ce qu'une personne a le droit de faire. Cinq rôles existent d'origine ; un établissement peut en créer d'autres. |
+
 ---
 
 **Documents liés** — [installer et exploiter](INSTALLATION.md) ·

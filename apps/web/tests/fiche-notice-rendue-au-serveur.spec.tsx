@@ -79,11 +79,41 @@ describe('Fiche publique d’une notice', () => {
     expect(screen.getByRole('heading', { name: /Contes et transmission/ })).toBeTruthy();
   });
 
+  /**
+   * ⚠ LA VALEUR SE CHERCHE DANS SA LIGNE DE DESCRIPTION, pas « quelque part
+   * dans le document », et c'est la COUVERTURE COMPOSÉE qui l'a exigé.
+   *
+   * Elle porte le titre, l'auteur et l'année en `<tspan>` — délibérément, et
+   * sous `aria-hidden`. Un lecteur d'écran ne les voit donc pas deux fois.
+   * ⚠ Mais `getByText` n'honore PAS `aria-hidden` (seul `getByRole` le fait) :
+   * il a trouvé deux « Kaboré, Alain » et refusé de choisir.
+   *
+   * ⚠ ET LE RÉFLEXE JUSTE AURAIT ÉTÉ DE SOUPÇONNER LE PRODUIT — c'est ce que
+   * ce dépôt écrit, et c'est vrai la plupart du temps : ce qui est ambigu pour
+   * `getByRole` est ambigu pour qui n'a pas l'écran. Ici non, et la raison est
+   * mesurable : la duplication est SOUS `aria-hidden`, donc elle n'existe pas
+   * pour l'arbre d'accessibilité. Ce qu'on corrige est l'imprécision du test,
+   * et le gain est réel — « l'auteur est dans la ligne Auteur » dit plus que
+   * « l'auteur est dans la page ».
+   *
+   * ⚠ Ne « corrigez » donc pas ce test en retirant la couverture : le
+   * `*AllBy*` serait l'autre tentation, et il rendrait l'assertion muette sur
+   * l'endroit où la donnée se trouve.
+   */
+  function valeurDe(libelle: string): string {
+    const dts = Array.from(document.querySelectorAll('dt'));
+    const dt = dts.find((n) => n.textContent?.trim() === libelle);
+    expect(dt, `aucune ligne « ${libelle} » dans la fiche`).toBeTruthy();
+    const dd = dt!.nextElementSibling;
+    expect(dd?.tagName, `« ${libelle} » n’est pas suivi d’un <dd>`).toBe('DD');
+    return dd!.textContent?.trim() ?? '';
+  }
+
   it('et les données que cherche un moteur : auteur, année, domaine', () => {
     monterSansReseau(NOTICE);
-    expect(screen.getByText(/Kaboré, Alain/)).toBeTruthy();
-    expect(screen.getByText('2024')).toBeTruthy();
-    expect(screen.getByText('litterature')).toBeTruthy();
+    expect(valeurDe('Auteur')).toContain('Kaboré, Alain');
+    expect(valeurDe('Année')).toBe('2024');
+    expect(valeurDe('Domaine')).toBe('litterature');
   });
 
   /**

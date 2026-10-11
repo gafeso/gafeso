@@ -153,12 +153,22 @@ describe('⚠⚠ ON N’ÉCRIT JAMAIS SANS AVOIR LU', () => {
     expect(t).toMatch(/rechargez/i);
   });
 
-  it('⚠ et la BORNE du brouillon est dite, pas seulement commentée', () => {
-    // Aucune route ne rend un brouillon : seule la version PUBLIÉE est
-    // relisible. Taire cette borne ferait croire à une perte de données.
-    const t = LIBELLES.pagesLegales.brouillonNonRelisible;
-    expect(t).toMatch(/publiée?s?/i);
-    expect(t).toMatch(/ne réapparaîtra pas|pas rechargé/i);
+  it('⚠ et l’écran lit la route qui rend les BROUILLONS, pas la publique', () => {
+    /*
+     * ⚠ LA BORNE EST PARTIE AVEC SA CAUSE. Ce cas exigeait que l'écran DISE
+     * qu'un brouillon ne se relit pas — vrai jusqu'à rc8, où
+     * `GET /tenancy/settings` a commencé à les rendre. Le garder aurait exigé un
+     * texte devenu FAUX, c'est-à-dire exactement le défaut que ce dépôt traque.
+     *
+     * ⭐ Ce qu'il GARDE désormais est la propriété qui reste : l'éditeur lit la
+     * route RÉSERVÉE (brouillons compris), jamais la route PUBLIQUE qui les
+     * filtre. S'y fier ferait enregistrer un remplacement complet sans avoir vu
+     * ce qu'on écrase — et c'est écrit dans la description de la route elle-même.
+     */
+    const src = readFileSync(resolve(process.cwd(), 'app/admin/pages-legales/page.tsx'), 'utf-8');
+    const code = src.split('\n').filter((l) => !/^\s*(\*|\/\/)/.test(l)).join('\n');
+    expect(code).toMatch(/'\/tenancy\/settings'/);
+    expect(code).not.toMatch(/api<[^>]*>\(\s*'\/tenancy\/home'/);
   });
 
   it('⚠ l’écran LIT une route qui existe', () => {
@@ -168,18 +178,33 @@ describe('⚠⚠ ON N’ÉCRIT JAMAIS SANS AVOIR LU', () => {
     // que moi. » Ce cas lit la SOURCE de l'écran et refuse la route fantôme.
     const src = readFileSync(resolve(process.cwd(), 'app/admin/pages-legales/page.tsx'), 'utf-8');
     const code = src.split('\n').filter((l) => !/^\s*(\*|\/\/)/.test(l)).join('\n');
-    expect(code).not.toMatch(/api<[^>]*>\(\s*'\/tenancy\/settings'/);
-    expect(code).toMatch(/'\/tenancy\/home'/);
+    // ⚠ INVERSÉ en rc8 : la route existe, et c'est elle qu'il faut.
+    expect(code).toMatch(/'\/tenancy\/settings'/);
   });
 
-  it('⚠ et il REFUSE d’enregistrer tant qu’il n’a pas lu', () => {
-    // La garde est `if (!pages) { setErreur(…); return; }` — une sortie AVANT
-    // tout appel. On lit la source : un test de rendu ne peut pas prouver
-    // qu'aucune requête ne part.
-    const src = readFileSync(resolve(process.cwd(), 'app/admin/pages-legales/page.tsx'), 'utf-8');
-    expect(src).toMatch(/if \(!pages\)/);
-    expect(src).toMatch(/refusEnregistrerSansLecture/);
-  });
+  /**
+   * ⚠ CE CAS A ÉTÉ DÉPLACÉ, ET PROMU — voir `pages-legales-ecran.spec.tsx`.
+   *
+   * Il lisait la source et épinglait le littéral `if (!pages)`, avec cette
+   * borne écrite à côté :
+   *
+   * > « On lit la source : un test de rendu ne peut pas prouver qu'aucune
+   * >   requête ne part. »
+   *
+   * ⚠ IL PEUT — il suffit de COMPTER les requêtes de la doublure. La borne
+   * n'était pas infermable, elle n'avait pas été essayée : « une borne se
+   * DÉCLARE quand on ne peut pas la fermer, pas quand on n'a pas essayé ».
+   *
+   * Et le garde de source avait le défaut de sa famille : élargir la garde en
+   * `!pages || version === null` — la MÊME garantie, étendue à la version
+   * qu'exige rc9 — l'a fait crier sur un code plus juste que celui qu'il
+   * défendait. Un garde qui épingle un littéral punit celui qui améliore.
+   *
+   * Ce qui le remplace mesure l'EFFET, et sur les DEUX couches : l'éditeur
+   * n'est pas rendu sans lecture (donc aucun bouton), et la garde refuse quand
+   * le contenu est lu sans version. Aucun PATCH ne part dans les deux cas, et
+   * c'est COMPTÉ.
+   */
 });
 
 describe('la PROPRIÉTÉ des textes, pas leur emploi', () => {

@@ -251,17 +251,29 @@ describe('nouveautés — cas 1 : le tri par récence', () => {
     expect(hits.map((h: { id: string }) => h.id)).toEqual(['r3', 'r2', 'r1']);
   });
 
-  it('sert les six champs du contrat, plus la copie LUE sans être servie', async () => {
+  it('sert les champs du contrat, plus la copie LUE sans être servie', async () => {
     // ⚠ PASSÉ DE SIX À SEPT le 8 octobre 2026, et le septième n'est pas servi :
     // `digitalCopy.encStatus` est lu pour calculer `hasDigital` / `offlineReady`,
     // deux booléens. Ce test refuse qu'une colonne entre dans la projection sans
     // décision — il a refusé celle-ci, et c'est pourquoi cette ligne est écrite.
+    //
+    // ⭐ PUIS À HUIT le 11 octobre 2026 : `category`. Et ce test a REFUSÉ
+    // l'ajout, comme il doit. La décision est écrite : la couverture composée
+    // tire sa TEINTE du domaine, et `/opac/search` le servait déjà. Sans lui
+    // ici, la page d'accueil affichait une couverture d'une autre couleur que
+    // la fiche du MÊME document — mesuré par le front.
+    //
+    // ⚠ Et la projection est désormais ÉCRITE UNE SEULE FOIS
+    // (`SELECT_VITRINE`) : `nouveautes` et `parcourir` la partageaient à
+    // l'identique, et c'est pour ça que `category` n'était arrivé que sur une
+    // des trois routes du catalogue.
     const { prisma, findMany } = fauxCatalogue([notice(1)]);
     await serviceCatalogue(prisma).nouveautes('amani', 6);
     const appel = findMany.mock.calls[0][0];
     expect(appel.select, 'la route doit projeter explicitement').toBeDefined();
     expect(Object.keys(appel.select ?? {}).sort()).toEqual([
       'author',
+      'category',
       'coverUrl',
       'digitalCopy',
       'id',

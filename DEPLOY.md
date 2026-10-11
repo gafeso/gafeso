@@ -26,7 +26,7 @@ cd /chemin/vers/gafeso
 # ① LA VERSION — jamais `main`, toujours une étiquette.
 git fetch --tags
 git tag -l 'v*' | sort -V | tail -5        # les versions disponibles
-git checkout v1.0.0-rc8                     # celle que vous déployez
+git checkout v1.0.0-rcN                     # celle que la ligne ci-dessus a montrée
 
 # ② POSER LA VERSION DANS L'ENVIRONNEMENT. Deux lignes, et l'ordre compte :
 #    le `|| exit 1` doit être sur la SUBSTITUTION, pas sur l'eval.
@@ -40,7 +40,8 @@ docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
 
 # ④ VÉRIFIER CE QUI TOURNE — à la destination, jamais dans le compte rendu.
 curl -s https://<votre-domaine>/api/health
-# → {"status":"ok","version":"v1.0.0-rc8","commit":"…",…}
+# → {"status":"ok","version":"v1.0.0-rcN","commit":"…",…}
+#   ⚠ « non étiquetée » = l'étape ② a été sautée. Reprenez depuis ①.
 ```
 
 ### ⚠ Pourquoi l'étape ② n'est pas optionnelle, et ne l'est plus
@@ -351,7 +352,7 @@ les passe en `ARG` au `Dockerfile` de l'API, qui les fige dans l'image. `GET
 /health` les publie ensuite, et Swagger affiche la même valeur :
 
 ```json
-{ "status": "ok", "version": "v1.0.0-rc1", "commit": "ba3ccc2" }
+{ "status": "ok", "version": "v1.0.0-rcN", "commit": "<7 caractères>" }
 ```
 
 ⚠ **Sans ces variables, l'image répond `version: "non étiquetée"`.** C'est la

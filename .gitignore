@@ -117,3 +117,20 @@ var/
 # d'une autre session. Il est entré une fois par un `git add -A` ; il ne doit
 # pas être suivi.
 .claude/launch.json
+# ⚠ LES IMAGES DE RECETTE NE SONT PLUS SUIVIES — décision de Jean, 9 octobre 2026.
+#
+# Elles vivent dans ~/gafeso-captures/<AAAA-MM-JJ>/<sujet>/, HORS du dépôt. Seul
+# le RELEVÉ DE TEXTE de chaque capture reste suivi (`docs/captures/**/*.txt`).
+#
+# Deux motifs, et le second a décidé :
+#  · une image décrit un ÉTAT, donc elle périme au premier geste sur cet état —
+#    c'est l'exemple que ce dépôt a lui-même nommé pour cette famille ;
+#  · et le compte des exclus a CONVOQUÉ QUATRE FOIS en deux jours, à chaque passe
+#    de recette. La règle était juste ; quatre fois signifiait qu'une décision
+#    manquait, pas que la discipline manquait.
+#
+# ⚠ Le relevé de texte, lui, reste : c'est lui qui permet de comparer avant/après
+# par différence d'ensembles, et une capture ne se cherche pas au grep.
+docs/captures/**/*.png
+docs/captures/**/*.jpg
+docs/captures/**/*.webp

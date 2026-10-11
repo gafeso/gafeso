@@ -12,6 +12,7 @@ import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
+import { CouvertureComposee } from '@/components/couverture-composee';
 import { LockIcon, MemberLock } from '@/components/member-lock';
 import { ID_CONTENU } from '@/components/lien-evitement';
 import { formatTitle } from '@/lib/titles';
@@ -200,7 +201,40 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         ← Retour au catalogue
       </Link>
 
-      <div className="mt-4 flex items-start justify-between gap-4">
+      {/*
+        ⚠ LA COUVERTURE COMPOSÉE — et la règle qui autorise son `aria-hidden`.
+        Elle porte le titre, l'auteur, l'année et la couleur du domaine. Les
+        QUATRE sont déjà affichés en TEXTE sur cette page : le titre juste à
+        côté, les trois autres dans la liste de description en dessous. C'est
+        cette redondance qui en fait un ornement, et `aria-hidden` dit alors
+        la vérité.
+
+        ⚠ `recordType` en est ABSENT EXPRÈS, bien que la route le serve
+        (mesuré : `recordType: 'memoire'`). Il n'est affiché en texte NULLE
+        PART sur cette fiche : le poser sur une couverture décorative le
+        rendrait accessible à l'œil seul. Le jour où la fiche l'affiche, il
+        entre — et `couverture-branchee.spec.tsx` le vérifie dans les deux
+        sens.
+
+        ⚠ ET ON NE LA MET PAS À L'ÉCHELLE EN CSS. Tout est relatif à `H` SAUF
+        trois choses — le dos borné à [2, 6] px, le rayon des angles, et le
+        seuil des 80 px. Une couverture calculée pour 164 puis réduite à 60
+        afficherait son texte complet à 60 px, donc illisible, et contredirait
+        le seuil. On la rend à la taille où elle s'affiche.
+      */}
+      <div className="mt-4 flex items-start gap-5">
+        <CouvertureComposee
+          notice={{
+            titre: formatTitle(record.title, record.titleComplement),
+            auteur: record.author,
+            annee: record.publishYear,
+            domaine: record.category,
+          }}
+          largeur={120}
+          hauteur={164}
+          className="shrink-0"
+        />
+        <div className="flex flex-1 items-start justify-between gap-4">
         <h1 className="font-serif text-3xl font-bold">
           {formatTitle(record.title, record.titleComplement)}
         </h1>
@@ -235,6 +269,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         ) : (
           <Badge>{LIBELLES.ficheNotice.badgeIndisponible}</Badge>
         )}
+        </div>
       </div>
 
       {/*
