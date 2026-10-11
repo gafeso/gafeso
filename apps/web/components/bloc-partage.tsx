@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { QrCode } from '@/components/qr-code';
 import { LIBELLES } from '@/lib/libelles';
-import { lienApplication, urlPubliqueDeNotice } from '@/lib/url-publique';
+import { adresseDuQr, lienApplication } from '@/lib/url-publique';
 
 const T = LIBELLES.partage;
 
@@ -32,12 +32,23 @@ const T = LIBELLES.partage;
  * tant qu'il n'a pas d'adresse : un QR d'une chaîne vide serait un code
  * parfaitement valide menant nulle part, c'est-à-dire le pire des faux.
  */
-export function BlocPartage({ recordId }: { recordId: string }) {
+export function BlocPartage({
+  recordId,
+  publicUrl,
+}: {
+  recordId: string;
+  /**
+   * ⚠ L'ADRESSE CANONIQUE SERVIE PAR L'API, ou `null` quand l'instance n'a pas
+   * configuré `APP_URL`. On la PRÉFÈRE à l'origine : elle survit à une
+   * impression faite depuis une adresse interne.
+   */
+  publicUrl: string | null;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [android, setAndroid] = useState(false);
 
   useEffect(() => {
-    setUrl(urlPubliqueDeNotice(recordId));
+    setUrl(adresseDuQr(recordId, publicUrl));
     /*
      * ⚠ On ne peut PAS savoir si l'application est installée — aucune
      * interrogation n'existe depuis une page web. On sait seulement qu'on est
@@ -46,7 +57,7 @@ export function BlocPartage({ recordId }: { recordId: string }) {
      * est un bouton sans effet.
      */
     setAndroid(/Android/i.test(navigator.userAgent));
-  }, [recordId]);
+  }, [recordId, publicUrl]);
 
   return (
     <section className="mt-8 rounded-lg border border-line bg-paper/60 p-4">

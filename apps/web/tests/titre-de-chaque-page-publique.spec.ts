@@ -109,6 +109,17 @@ const TITRE_PROPRE = [
    */
   '/affiche/[id]',
   /*
+   * ⚠ `/opac/resoudre/[identifiant]`, 11 octobre 2026 — et son `generateMetadata`
+   * rend un objet VIDE, délibérément.
+   *
+   * ⭐ Cette page n'est pas une destination, c'est un AIGUILLAGE : au chemin
+   * heureux elle redirige avant tout rendu, et elle ne s'AFFICHE qu'en cas de
+   * refus. Lui donner un titre propre affirmerait qu'on y arrive. Elle retombe
+   * sur le gabarit racine — le nom de l'école —, qui est vrai quoi qu'il
+   * arrive.
+   */
+  '/opac/resoudre/[identifiant]',
+  /*
    * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — et il est ici pour un motif
    * qui lui est propre : son titre ne nomme AUCUNE école, parce que sur une
    * instance neuve il n'en existe pas encore. Hériter du gabarit racine ferait

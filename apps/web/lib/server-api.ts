@@ -264,6 +264,78 @@ export async function auteurPublic(
   }
 }
 
+/**
+ * RÉSOUT UN IDENTIFIANT PÉRENNE — et rend TROIS états, jamais deux.
+ *
+ * ## ⚠⚠ POURQUOI `indisponible` N'EST PAS UN 404, ET POURQUOI ÇA COMPTE ICI
+ * ## PLUS QU'AILLEURS
+ *
+ * Cette adresse est IMPRIMÉE SUR DES ÉTIQUETTES COLLÉES DANS DES LIVRES, et sur
+ * des affiches dans des couloirs. Elle ne se reprend pas.
+ *
+ * Un 404 rendu parce que l'API a cligné dirait à un moteur d'indexation, et à un
+ * vérificateur de liens, que cet identifiant **n'existe pas** — et ils
+ * l'archiveraient. Ce dépôt connaît déjà ce défaut sous son nom : « quand le
+ * faux silencieux SORT de l'application », et il est d'un autre ordre de
+ * grandeur que les autres parce qu'un tiers le garde.
+ *
+ * Trois états, donc : `trouve` (on redirige), `introuvable` (404 pour de bon),
+ * `indisponible` (on ne sait pas — et on le DIT, sans 404).
+ *
+ * ⚠ Les TROIS refus de l'API rendent 404 — forme illisible, autre école, notice
+ * absente — et c'est leur décision, délibérée : dire « elle existe ailleurs »
+ * révélerait à un inconnu ce que porte le catalogue d'un tiers. On ne les
+ * distingue donc pas ici non plus.
+ */
+export type ResolutionIdentifiant =
+  | { etat: 'trouve'; recordId: string }
+  | { etat: 'introuvable' }
+  | { etat: 'indisponible' };
+
+export async function resoudreIdentifiant(
+  identifiant: string,
+): Promise<ResolutionIdentifiant> {
+  const host = await currentHost();
+  /*
+   * ⚠ `encodeURIComponent` : l'identifiant porte des deux-points. L'API accepte
+   * les deux formes (mesuré : brute et encodée rendent 200), mais encoder est
+   * la seule écriture qui reste juste si un identifiant contenait un jour un
+   * caractère réservé.
+   */
+  const url = `${apiUrl()}/opac/resoudre/${encodeURIComponent(identifiant)}?__host=${encodeURIComponent(host)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'x-forwarded-host': host },
+      // Court : un identifiant qui cesse de résoudre doit le faire assez vite,
+      // et le coût d'une vérification est faible.
+      next: { revalidate: 60 },
+    });
+    if (res.status === 404) return { etat: 'introuvable' };
+    if (!res.ok) {
+      console.error(`[server-api] ${url} → HTTP ${res.status} (résolution d'identifiant)`);
+      return { etat: 'indisponible' };
+    }
+    const notice = (await res.json()) as { id?: unknown };
+    /*
+     * ⚠ ON NE REDIRIGE PAS SANS IDENTIFIANT DE NOTICE. Une réponse 200 sans
+     * `id` produirait `/opac/undefined` — une adresse qui existe, répond, et ne
+     * mène nulle part. C'est pire qu'un refus, parce qu'elle a l'air de
+     * marcher.
+     */
+    if (typeof notice.id !== 'string' || notice.id.length === 0) {
+      console.error(`[server-api] ${url} → 200 sans \`id\` : résolution refusée.`);
+      return { etat: 'indisponible' };
+    }
+    return { etat: 'trouve', recordId: notice.id };
+  } catch (err) {
+    console.error(
+      `[server-api] échec du fetch ${url} : ${(err as Error).message}. ` +
+        `L'identifiant n'est PAS déclaré introuvable pour autant.`,
+    );
+    return { etat: 'indisponible' };
+  }
+}
+
 export async function noticePublique(
   id: string,
 ): Promise<{ etat: ExistenceNotice; notice: unknown | null }> {

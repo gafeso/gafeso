@@ -102,7 +102,7 @@ export function LabelsPanel({ selectedRecordIds }: { selectedRecordIds: string[]
         */}
         {scope === 'selection' && !selectionEmpty && (
           <a
-            href={`/admin/etiquettes?recordIds=${selectedRecordIds.join(',')}`}
+            href={`/admin/etiquettes?recordIds=${selectedRecordIds.join(',')}&columns=${columns}`}
             target="_blank"
             rel="noopener"
             className="inline-flex min-h-11 items-center rounded-md border border-line bg-white px-3 py-2 text-sm font-medium hover:border-ocre/50"

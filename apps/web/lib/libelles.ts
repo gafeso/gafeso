@@ -690,6 +690,45 @@ export const LIBELLES = {
   /**
    * PARTAGER UNE NOTICE — QR code, affiche imprimable, ouverture dans l'app.
    */
+  /**
+   * LA RÉSOLUTION D'UN IDENTIFIANT PÉRENNE — `/opac/resoudre/<identifiant>`.
+   *
+   * ⚠⚠ CETTE ADRESSE EST IMPRIMÉE. Des QR collés dans des livres et des
+   * affiches dans des couloirs y pointent, et ils ne se reprennent pas. Les
+   * textes ci-dessous sont donc écrits pour quelqu'un qui tient un livre à la
+   * main et vient de scanner.
+   */
+  resolution: {
+    /**
+     * ⚠ LE 404 NE DIT PAS « cet identifiant n'existe pas » dans l'absolu : il
+     * dit qu'il n'est pas dans CE catalogue. L'API refuse délibérément de
+     * révéler qu'une notice existe ailleurs — ce serait dire à un inconnu ce
+     * que porte le fonds d'un autre établissement.
+     */
+    introuvableTitre: 'Ce code ne correspond à aucun document d’ici',
+    introuvableTexte:
+      'Le code scanné n’est pas reconnu par ce catalogue. Il peut appartenir à ' +
+      'une autre bibliothèque, ou désigner un document retiré depuis l’impression ' +
+      'de l’étiquette.',
+    /**
+     * ⚠ ET IL PORTE UNE SORTIE. Quelqu'un qui vient de scanner tient un livre :
+     * la recherche par titre est le geste qui lui reste.
+     */
+    introuvableSortie: 'Chercher ce document dans le catalogue',
+
+    /**
+     * ⚠⚠ L'INDISPONIBILITÉ N'EST PAS UNE ABSENCE, et c'est le texte le plus
+     * important de cet écran. Un 404 rendu parce que le catalogue a cligné
+     * serait archivé par les moteurs comme « cet identifiant n'existe pas » —
+     * et l'étiquette, elle, reste collée dans le livre. On dit donc qu'on ne
+     * SAIT pas, et on invite à réessayer.
+     */
+    indisponibleTitre: 'Le catalogue ne répond pas en ce moment',
+    indisponibleTexte:
+      'Votre code est peut-être parfaitement valide : nous n’avons pas pu le ' +
+      'vérifier. Réessayez dans un instant — l’étiquette, elle, reste bonne.',
+  },
+
   partage: {
     titre: 'Partager ce document',
     /**
@@ -799,6 +838,18 @@ export const LIBELLES = {
      */
     codeNonEncodable: (code: string) => `Code non encodable : ${code}`,
     chargement: 'Lecture des exemplaires…',
+    /**
+     * ⚠⚠ L'ABANDON DU QR SE DIT, et c'est l'invariant du backend : les
+     * douchettes en service lisent le CODE-BARRES, donc un QR qui le
+     * rétrécirait sous 0,25 mm par module est abandonné. Un QR qui disparaît
+     * sans un mot est une dégradation SILENCIEUSE — la bibliothécaire ne peut
+     * pas savoir si c'est un défaut ou une décision.
+     */
+    qrAbandonne: 'QR omis : le code-barres garde la largeur',
+    /** ⚠ Dit à quoi se règle le nombre de colonnes, puisqu'il DÉCIDE du QR. */
+    colonnesEtQr: (colonnes: number) =>
+      `Planche à ${colonnes} colonnes. Au-delà de trois, le QR peut être omis ` +
+      `pour que le code-barres reste lisible par les douchettes.`,
   },
 
   filtreNumerique: {

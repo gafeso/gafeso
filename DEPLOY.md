@@ -1102,6 +1102,137 @@ données intactes ; horodatage absent → 3, données intactes ; nominal → 0,
 
 ---
 
+## 🔴 Remplacer les documents d'une instance de DÉMONSTRATION
+
+*Pour `demo.gafeso.org` et elle seule. À ne jamais jouer sur une instance qui
+sert de vrais lecteurs.*
+
+`scripts/dev/remplacer-documents-demo.mjs` réécrit les fichiers numériques d'un
+fonds par des documents de démonstration réalistes. **L'ancien objet est
+supprimé après le succès du nouveau** : ce que ce script remplace ne se récupère
+pas.
+
+Son garde ordinaire exige que la base ET l'API soient sur `localhost`. Il est
+juste, il n'est pas relâché — et il interdit l'usage voulu, puisque dans le
+conteneur de production `DATABASE_URL` vise `db`. D'où une voie **étroite**, à
+**trois conditions cumulatives** :
+
+| | |
+|---|---|
+| ① | l'option `--instance-de-demonstration=<domaine>` est écrite à la main |
+| ② | ce domaine correspond **exactement** au domaine principal de l'école visée |
+| ③ | l'école porte le marqueur `est_instance_de_demonstration` en base |
+
+⚠ **La troisième est celle qui compte.** Les deux premières sont dans votre
+ligne de commande et se copient d'un courriel ; la troisième est dans la base,
+et il faut l'y avoir mise exprès.
+
+### ① Sauvegarde — AVANT tout, et on la vérifie
+
+```bash
+cd ~/gafeso && C="docker compose --env-file .env.prod -f docker/docker-compose.prod.yml"
+
+$C exec -T db pg_dumpall -U "$POSTGRES_USER" --clean --if-exists \
+  | gzip > ~/sauvegardes/avant-documents-demo-$(date +%Y%m%d-%H%M).sql.gz
+ls -lh ~/sauvegardes/avant-documents-demo-*.sql.gz | tail -1
+```
+
+⚠ **Une sauvegarde qui pèse 20 octets est un gzip VIDE.** Vérifiez la taille, et
+que l'archive contient du SQL :
+
+```bash
+zcat ~/sauvegardes/avant-documents-demo-*.sql.gz | head -1
+# → doit commencer par « -- PostgreSQL database dump »
+```
+
+⚠ **Les FICHIERS ne sont pas dans ce dump** : ils sont dans MinIO. Sauvegardez
+aussi le bucket si vous voulez pouvoir revenir en arrière — voir
+`docs/INSTALLATION.md` §4.1.
+
+### ② Marquer l'école comme instance de démonstration
+
+```bash
+$C exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+DECLARE touchees int;
+BEGIN
+  UPDATE public.tenant_settings s
+     SET est_instance_de_demonstration = true
+    FROM public.tenants t
+   WHERE t.id = s.tenant_id AND t.slug = 'gafeso-univ';
+  GET DIAGNOSTICS touchees = ROW_COUNT;
+  IF touchees <> 1 THEN
+    RAISE EXCEPTION 'MARQUAGE REFUSÉ : % ligne(s) au lieu d''une. Rien n''a été écrit.', touchees;
+  END IF;
+END $$;
+SQL
+```
+
+⚠ **Ce bloc LÈVE plutôt que de vous laisser lire un chiffre.** Zéro ligne
+voudrait dire que le slug est faux ; plus d'une, que la requête vise trop large.
+Dans les deux cas la transaction s'annule, et **un `DO` qui se termine sans
+message EST la confirmation** — vous n'avez rien à comparer.
+
+**Pour DÉMARQUER** (après l'opération, si vous le souhaitez) : le même bloc avec
+`false`.
+
+### ③ Lancer — dans le conteneur, avec un vrai terminal
+
+```bash
+read -s -p "Mot de passe du compte bibliothécaire : " GAFESO_BIB_PASSWORD; echo
+export GAFESO_BIB_PASSWORD
+
+$C exec \
+  -e GAFESO_BIB_EMAIL='bibliothecaire@votre-domaine' \
+  -e GAFESO_BIB_PASSWORD \
+  api node scripts/dev/remplacer-documents-demo.mjs gafeso-univ \
+      --instance-de-demonstration=demo.gafeso.org
+```
+
+⚠ **`read -s`** : le mot de passe ne s'affiche pas et **n'entre pas dans
+l'historique du shell** — ce qu'une ligne `GAFESO_BIB_PASSWORD=… commande` ferait.
+
+⚠ **`exec`, PAS `exec -T`.** Le script affiche un récapitulatif puis demande une
+confirmation **à taper** — le slug de l'école. Sans terminal il REFUSE, et c'est
+voulu : il ne doit pas pouvoir réécrire un fonds parce que personne n'était là
+pour dire non.
+
+⚠ Le compte doit porter **`document.televerser`** : c'est la fonction qu'exige
+la route de téléversement.
+
+**Ce que vous verrez avant toute écriture :**
+
+```
+  à remplacer ou vérifier : 88
+  ÉPARGNÉS (fichier déposé par quelqu'un) : 2
+    · Règlement intérieur de la bibliothèque — « reglement-2026.pdf »
+  Pour confirmer, tapez le slug de l'établissement (gafeso-univ) :
+```
+
+⚠ **Lisez la ligne ÉPARGNÉS.** Ce sont des fichiers que quelqu'un a déposés
+exprès : le script ne les touche pas. S'il en épargne un que vous attendiez de
+voir remplacé, c'est que son nom n'est pas celui d'un talon de seed — arrêtez et
+regardez avant de forcer quoi que ce soit.
+
+### ④ Vérifier — par l'effet, pas par le compte rendu
+
+```bash
+$C exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c \
+  "SET search_path TO tenant_gafeso_univ;
+   SELECT count(*), min(file_size_bytes), max(file_size_bytes),
+          count(*) FILTER (WHERE enc_status='ready') FROM digital_copies;"
+```
+
+Des tailles de l'ordre de **35 000 à 90 000 octets** (contre ~640 pour un talon
+vide) et autant de `ready` que de copies. Puis ouvrez une fiche dans le
+catalogue et lisez le document : c'est la seule vérification qui dise que la
+chaîne entière tient.
+
+⚠ **Si des `enc_status` ne sont pas `ready`** : le fichier est lisible EN LIGNE
+mais l'étagère mobile restera vide pour ceux-là. Le script le dit en fin de
+course ; `OFFLINE_CONTENT_KEK` et MinIO sont les deux premières choses à
+regarder.
+
 ## Migrations Prisma — ajouter un changement de schéma
 
 Le développement local utilise `prisma db push` (pas de fichiers de

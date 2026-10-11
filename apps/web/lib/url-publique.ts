@@ -34,6 +34,38 @@ export function urlPubliqueDeNotice(id: string, origine?: string): string {
 }
 
 /**
+ * ⭐⭐ L'ADRESSE À METTRE DANS UN QR — `publicUrl` d'ABORD, l'origine ENSUITE.
+ *
+ * Le backend sert `publicUrl` depuis le 11 octobre 2026, et sa conception
+ * RÉSOUT la borne que ce fichier déclarait :
+ *
+ * · elle vient de `APP_URL` (configuration) + le domaine principal de l'école,
+ *   donc de l'adresse CANONIQUE — pas de celle par laquelle on est arrivé ;
+ * · et sans `APP_URL` elle vaut **`null`**, parce que « on ne DEVINE pas : une
+ *   adresse fabriquée n'en est pas une. Un QR qui mène ailleurs ne se remarque
+ *   jamais ». Ce sont leurs mots, et ils ont raison.
+ *
+ * ⭐ C'est donc elle qu'il faut pour une AFFICHE : une impression faite depuis
+ * une adresse interne encodera désormais l'adresse canonique, et non celle du
+ * poste. Le repli sur l'origine ne sert plus que l'instance qui n'a pas
+ * configuré `APP_URL` — et là, l'origine est la seule adresse qu'on connaisse.
+ *
+ * ⚠ ET LE REPLI RESTE VISIBLE : l'adresse est affichée EN CLAIR sous le QR dans
+ * les deux cas. C'est ce qui permet de voir qu'on a imprimé une adresse de
+ * `localhost` avant de coller l'affiche dans un couloir.
+ */
+export function adresseDuQr(
+  id: string,
+  publicUrl: string | null | undefined,
+  origine?: string,
+): string {
+  // ⚠ `?.trim()` : une chaîne vide n'est pas une adresse, et elle ne doit pas
+  // gagner contre le repli sous prétexte qu'elle est « définie ».
+  const canonique = publicUrl?.trim();
+  return canonique ? canonique : urlPubliqueDeNotice(id, origine);
+}
+
+/**
  * Le lien d'ouverture dans l'application mobile.
  *
  * ⚠ L'URL publique est passée ENCODÉE : elle contient `://` et des `/`, qui
@@ -43,3 +75,52 @@ export function urlPubliqueDeNotice(id: string, origine?: string): string {
  */
 export const lienApplication = (urlPublique: string) =>
   `gafeso://notice?url=${encodeURIComponent(urlPublique)}`;
+
+/**
+ * ⭐⭐ RELIRE UN IDENTIFIANT ARRIVÉ PAR UNE ADRESSE IMPRIMÉE.
+ *
+ * ## ⚠ MON PREMIER COMMENTAIRE AFFIRMAIT L'INVERSE, ET IL N'ÉTAIT PAS MESURÉ
+ *
+ * La page de résolution portait, le 11 octobre 2026 :
+ *
+ * > « ⚠ Next décode déjà le segment : l'identifiant arrive avec ses
+ * >   deux-points, que le QR les ait portés bruts ou encodés. **Mesuré sur les
+ * >   deux formes.** »
+ *
+ * **C'était faux, et ça n'avait pas été mesuré.** Le segment arrive
+ * PERCENT-ENCODÉ. L'`encodeURIComponent` de l'appel à l'API le rencodait donc
+ * une seconde fois — `oai%253Azinda%253A…` —, l'API rendait 404, et la page
+ * concluait `introuvable` sur un identifiant PARFAITEMENT VALIDE.
+ *
+ * ⚠ Et ce qui l'a laissé passer est ma propre doublure de test : elle passait
+ * la valeur DÉJÀ DÉCODÉE, donc elle confirmait mon hypothèse au lieu de
+ * mesurer le produit. Douze cas verts sur un écran qui rendait 404 à tout le
+ * monde. C'est « une doublure est une hypothèse, et un test vert ne confirme
+ * que moi » — sur l'adresse la plus irréversible du produit, puisqu'elle est
+ * COLLÉE DANS DES LIVRES.
+ *
+ * ## ⭐ CE QUE LA MESURE DIT, et elle simplifie
+ *
+ * Les DEUX formes qu'un QR peut porter arrivent IDENTIQUES :
+ *
+ * | Ce que le navigateur demande | Ce que `params` rend |
+ * |---|---|
+ * | `/opac/resoudre/oai:zinda:<uuid>`     | `oai%3Azinda%3A<uuid>` |
+ * | `/opac/resoudre/oai%3Azinda%3A<uuid>` | `oai%3Azinda%3A<uuid>` |
+ *
+ * Next NORMALISE l'adresse. Il n'y a donc **qu'une seule forme à traiter**, et
+ * un seul décodage — pas deux chemins à tenir d'accord.
+ */
+export function identifiantDuSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    /*
+     * ⚠ Un `%` orphelin fait LEVER `decodeURIComponent`. On rend alors le
+     * segment BRUT : l'API le refusera proprement, et le visiteur verra le 404
+     * explicite. Laisser l'exception passer produirait un 500 — sur une
+     * adresse imprimée, c'est-à-dire sur celle qu'on ne peut pas corriger.
+     */
+    return segment;
+  }
+}

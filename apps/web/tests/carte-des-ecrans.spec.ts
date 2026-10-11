@@ -41,6 +41,16 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
   '/opac/[id]': { pour: 'tout le monde', quoi: 'la fiche d’une notice ; la lecture et la réservation exigent un compte' },
   '/opac/[id]/lire': { pour: 'membre AYANT DROIT', quoi: 'le lecteur en ligne (PDF ou EPUB), sans téléchargement' },
   /*
+   * ⚠ `/opac/resoudre/[identifiant]`, 11 octobre 2026 — hors barre parce qu'on
+   * n'y arrive PAS depuis l'application : on y arrive en SCANNANT un QR collé
+   * dans un livre, ou depuis un moissonneur OAI. Une entrée de menu n'aurait
+   * aucun sens — personne ne tape un identifiant pérenne à la main.
+   */
+  '/opac/resoudre/[identifiant]': {
+    pour: 'qui vient de scanner un QR, et les moissonneurs OAI',
+    quoi: 'résout l’identifiant pérenne `oai:<école>:<uuid>` et redirige en 308 vers la notice ; 404 explicite si le code n’est pas d’ici, et une page qui DIT « on n’a pas pu vérifier » quand le catalogue ne répond pas — un 404 servi sur une panne serait archivé par les moteurs, et l’étiquette reste collée dans le livre',
+  },
+  /*
    * ⚠ L'AFFICHE A4, 11 octobre 2026 — et elle n'est PAS sous `/opac/` malgré
    * les apparences : un layout imbriqué ne peut pas retirer son parent, et le
    * lot exige « sans menu ni pied ». D'où un écran à la racine, et d'où sa
@@ -239,7 +249,7 @@ describe('la carte des écrans', () => {
     // ⚠ 54 le 8 octobre 2026 : les deux pages légales publiques et leur écran
     // de rédaction. Le compte a convoqué trois fois de suite aujourd'hui, et
     // chaque fois la question était la bonne — cet écran a-t-il une porte ?
-    expect(ecransSurLeDisque().length).toBe(56);
+    expect(ecransSurLeDisque().length).toBe(57);
   });
 
   it('le document sur disque est à jour', () => {

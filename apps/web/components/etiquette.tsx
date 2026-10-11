@@ -1,5 +1,13 @@
 import { QrCode } from '@/components/qr-code';
-import { SILENCE_BARRES, barresCode128, traceDesBarres } from '@/lib/code128';
+import {
+  PLANCHE,
+  QR_COTE_MM,
+  SILENCE_BARRES,
+  barresCode128,
+  largeurEtiquetteMm,
+  qrTient,
+  traceDesBarres,
+} from '@/lib/code128';
 import { LIBELLES } from '@/lib/libelles';
 
 const T = LIBELLES.etiquettes;
@@ -18,6 +26,7 @@ export function Etiquette({
   titre,
   etablissement,
   urlNotice,
+  colonnes = PLANCHE.colonnes,
 }: {
   barcode: string;
   cote: string | null;
@@ -25,12 +34,44 @@ export function Etiquette({
   etablissement: string;
   /** L'adresse publique de la notice — ce que le QR encode. */
   urlNotice: string;
+  /** Les colonnes de la planche : elles décident de la largeur, donc du QR. */
+  colonnes?: number;
 }) {
   const barres = barresCode128(barcode);
+  /*
+   * ⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE — invariant du backend, repris
+   * ici parce que mon aperçu posait le QR quoi qu'il arrive et montrait donc
+   * une étiquette que le PDF n'imprime pas.
+   *
+   * Les douchettes en service lisent le CODE-BARRES : un QR qui le rétrécirait
+   * sous 0,25 mm par module casserait le circuit de prêt pour un gain
+   * d'affichage.
+   */
+  const p = { ...PLANCHE, colonnes };
+  /*
+   * ⚠ ET SANS CODE-BARRES, LE QR TIENT FORCÉMENT : rien ne lui dispute la
+   * largeur. Ma première écriture couplait les deux (`barres !== null && …`),
+   * et une valeur non encodable faisait disparaître le QR AUSSI — alors que le
+   * QR encode l'adresse de la notice, qui n'a rien à voir avec le code-barres.
+   * Un test l'a dit : zéro SVG là où il en fallait un.
+   */
+  const avecQr = barres === null || qrTient(barres.motif.length, p);
+  const largeurMm = largeurEtiquetteMm(p);
 
   return (
-    <div className="flex h-full w-full items-stretch gap-2 border border-black bg-white p-1.5 text-black">
-      <QrCode valeur={urlNotice} taille={46} className="shrink-0 self-start" />
+    <div
+      className="flex h-full items-stretch gap-2 border border-black bg-white p-[1.5mm] text-black"
+      style={{ width: `${largeurMm}mm` }}
+    >
+      {avecQr ? (
+        /* La cote du QR est en MILLIMÈTRES, comme dans le PDF : c'est la seule
+           façon que la décision d'abandon ait le même sens aux deux endroits. */
+        <QrCode
+          valeur={urlNotice}
+          taille={QR_COTE_MM * 3.78}
+          className="shrink-0 self-start"
+        />
+      ) : null}
       <div className="flex min-w-0 flex-1 flex-col justify-between">
         <div className="min-w-0">
           <p className="truncate text-[7px] font-semibold uppercase tracking-wide">
@@ -72,6 +113,15 @@ export function Etiquette({
                 l'adresse sous le QR : le SVG est `aria-hidden`, et un code
                 qu'un lecteur optique rate doit pouvoir être tapé à la main. */}
             <p className="text-center font-mono text-[7px] leading-none">{barres.texte}</p>
+            {/* ⚠ L'ABANDON SE DIT. Un QR qui disparaît sans un mot est une
+                dégradation silencieuse : la bibliothécaire ne peut pas savoir
+                si c'est un défaut ou une décision. Le backend pose un en-tête
+                `X-Gafeso-Qr-Abandonnes` pour la même raison. */}
+            {!avecQr && (
+              <p className="mt-0.5 text-center text-[6px] leading-none">
+                {T.qrAbandonne}
+              </p>
+            )}
           </div>
         )}
       </div>

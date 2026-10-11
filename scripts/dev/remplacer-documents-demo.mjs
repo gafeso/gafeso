@@ -64,6 +64,45 @@ const estRemplacable = (copie) =>
   /^demonstration-.*\.pdf$/.test(copie.originalName ?? '');
 
 /**
+ * ⭐⭐ LA VOIE ÉTROITE — pour une instance de DÉMONSTRATION, et elle seule.
+ *
+ * ## Pourquoi le garde local ne se relâche pas
+ *
+ * Il est JUSTE : ce script réécrit les fichiers d'un fonds entier, et l'ancien
+ * objet est supprimé après le succès du nouveau. Pointé par accident sur une
+ * instance en service, il remplacerait des documents réels par des textes de
+ * démonstration — et ça ne se défait pas.
+ *
+ * ⚠ Et il interdit par construction l'usage voulu : dans le conteneur de
+ * production, `DATABASE_URL` vise `db`. C'est le refus qui a motivé cette voie.
+ *
+ * ## 🔴 TROIS CONDITIONS CUMULATIVES, et aucune ne suffit seule
+ *
+ * | | Ce qu'elle empêche |
+ * |---|---|
+ * | l'option `--instance-de-demonstration=<domaine>` | un lancement distrait : il faut l'écrire |
+ * | le domaine donné DOIT être le domaine principal de l'école visée | se tromper d'école, ou copier une commande d'ailleurs |
+ * | l'école porte le marqueur `estInstanceDeDemonstration` | ⭐ **celle-ci ne se pose pas par inadvertance** — elle demande une commande d'exploitation, documentée dans DEPLOY.md |
+ *
+ * ⚠ **La troisième est celle qui compte.** Les deux premières sont dans la
+ * main de celui qui lance ; la troisième est dans la BASE, et il faut l'y avoir
+ * mise exprès. Une option et un domaine se copient d'un courriel ; un marqueur
+ * posé sur la mauvaise école est un geste qu'on a fait soi-même.
+ *
+ * ⚠ ET LE PÉRIMÈTRE NE CHANGE PAS : même avec la voie ouverte, le script ne
+ * touche QUE ce qu'il reconnaît — les talons du seed et ses propres documents.
+ * La voie autorise un HÔTE, jamais un périmètre plus large.
+ */
+function estLocal(u) {
+  try {
+    const h = new URL(u).hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === 'host.docker.internal';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * ⚠ LOCAL SEULEMENT, et la vérification porte sur les DEUX adresses.
  *
  * Ce script RÉÉCRIT les fichiers d'un fonds entier. Le laisser pointer une
@@ -71,14 +110,7 @@ const estRemplacable = (copie) =>
  * démonstration — et l'ancien objet est supprimé après le succès du nouveau.
  */
 function exigerLocal(apiUrl, databaseUrl) {
-  const local = (u) => {
-    try {
-      const h = new URL(u).hostname;
-      return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === 'host.docker.internal';
-    } catch {
-      return false;
-    }
-  };
+  const local = estLocal;
   if (!local(apiUrl)) {
     refuse(`l'API visée n'est pas locale (${apiUrl}).`, [
       'Ce script RÉÉCRIT les fichiers de tout un fonds. Il ne vise jamais une',
@@ -122,6 +154,67 @@ async function seConnecter(apiUrl, enTetes, email, motDePasse) {
   return cookie;
 }
 
+/**
+ * Lit `--instance-de-demonstration=<domaine>`. `null` si l'option est absente.
+ *
+ * ⚠ L'OPTION EXIGE SA VALEUR. Écrite sans domaine, elle est REFUSÉE plutôt que
+ * traitée comme absente : « j'ai passé l'option » et « l'option n'a pas été
+ * comprise » doivent se distinguer, sinon on croit avoir ouvert la voie et on
+ * lit un refus de localité qu'on n'explique pas.
+ */
+function domaineDeDemonstration(argv) {
+  const prefixe = '--instance-de-demonstration';
+  const brut = argv.find((a) => a === prefixe || a.startsWith(`${prefixe}=`));
+  if (!brut) return null;
+  const valeur = brut.includes('=') ? brut.slice(prefixe.length + 1).trim() : '';
+  if (!valeur) {
+    refuse(`${prefixe} exige le domaine de l'établissement.`, [
+      `  ${prefixe}=demo.gafeso.org`,
+      '',
+      'Le domaine se tape à la main, et il doit correspondre EXACTEMENT au',
+      'domaine principal de l’école visée. C’est la seconde des trois',
+      'conditions — voir DEPLOY.md.',
+    ]);
+  }
+  return valeur.toLowerCase();
+}
+
+/**
+ * ⭐ DEMANDE LA CONFIRMATION, et elle se TAPE — le slug de l'école.
+ *
+ * ⚠ PAS UN « o/N ». Une touche se frappe par réflexe, surtout après un
+ * récapitulatif qu'on vient de lire en diagonale. Taper le slug oblige à le
+ * LIRE — et c'est précisément l'erreur qu'on veut rendre impossible : lancer
+ * sur la mauvaise école.
+ *
+ * ⚠ Et sans terminal (`stdin` non interactif), on REFUSE plutôt que de
+ * supposer un accord. Un script lancé par un ordonnanceur ne doit pas pouvoir
+ * réécrire un fonds parce que personne n'était là pour dire non.
+ */
+async function confirmer(slug) {
+  if (!process.stdin.isTTY) {
+    refuse('aucun terminal : la confirmation ne peut pas être demandée.', [
+      'Ce script réécrit les fichiers d’un fonds. Il ne s’exécute pas sans',
+      'quelqu’un pour confirmer — ni par un ordonnanceur, ni dans un tuyau.',
+      '',
+      'Dans un conteneur : `docker compose exec` (pas `exec -T`).',
+    ]);
+  }
+  process.stdout.write(
+    `\n  Pour confirmer, tapez le slug de l’établissement (${slug}) : `,
+  );
+  const readline = await import('node:readline/promises');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const reponse = (await rl.question('')).trim();
+  rl.close();
+  if (reponse !== slug) {
+    // ⚠ RIEN N'A ÉTÉ ÉCRIT, et le message le dit : c'est la première chose
+    // qu'on veut savoir devant un refus.
+    process.stdout.write(`\n${J}⚠${Z} Confirmation différente du slug attendu. RIEN n’a été écrit.\n`);
+    process.exit(2);
+  }
+}
+
 async function principal() {
   const slug = process.argv[2];
   if (!slug) {
@@ -142,18 +235,71 @@ async function principal() {
     ]);
   }
   const apiUrl = (process.env.API_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
-  exigerLocal(apiUrl, process.env.DATABASE_URL ?? '');
+  const domaineDemande = domaineDeDemonstration(process.argv.slice(2));
+  // ⚠ Sans l'option, le garde local s'applique ICI et le script s'arrête avant
+  // d'ouvrir la moindre connexion. Avec l'option, la localité est jugée APRÈS
+  // les deux autres conditions — et seulement si elles tiennent.
+  if (!domaineDemande) exigerLocal(apiUrl, process.env.DATABASE_URL ?? '');
 
   const racine = new PrismaClient();
   let db;
   try {
     const tenant = await racine.tenant.findUnique({
       where: { slug },
-      select: { id: true, name: true, domains: { select: { domain: true, isPrimary: true } } },
+      select: {
+        id: true,
+        name: true,
+        domains: { select: { domain: true, isPrimary: true } },
+        settings: { select: { estInstanceDeDemonstration: true } },
+      },
     });
     if (!tenant) refuse(`l'établissement « ${slug} » n'existe pas.`);
     const domaine =
       tenant.domains.find((d) => d.isPrimary)?.domain ?? tenant.domains[0]?.domain ?? 'localhost';
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 🔴 LA VOIE ÉTROITE — les TROIS conditions, dans l'ordre où elles parlent.
+    // ─────────────────────────────────────────────────────────────────────
+    if (domaineDemande) {
+      // ② Le domaine donné à la main doit être CELUI de l'école visée.
+      //
+      // ⚠ Comparaison EXACTE, sur le domaine PRINCIPAL : un `includes` ou un
+      // `endsWith` accepterait `demo.gafeso.org.exemple.net`, qui est un autre
+      // hôte — et c'est la forme exacte d'un hameçonnage.
+      if (domaineDemande !== domaine.toLowerCase()) {
+        refuse(
+          `le domaine donné ne correspond pas à l'établissement « ${slug} ».`,
+          [
+            `  donné  : ${domaineDemande}`,
+            `  attendu: ${domaine.toLowerCase()}   (domaine principal de « ${slug} »)`,
+            '',
+            'Le domaine se tape à la main POUR CETTE RAISON : il est la preuve',
+            'que vous visez l’école que vous croyez viser. Rien n’a été écrit.',
+          ],
+        );
+      }
+      // ③ L'école porte le marqueur — et c'est la condition qu'on ne pose pas
+      //    par inadvertance.
+      if (tenant.settings?.estInstanceDeDemonstration !== true) {
+        refuse(
+          `« ${slug} » n'est pas marquée comme instance de DÉMONSTRATION.`,
+          [
+            'Ce script réécrit les fichiers d’un fonds entier, et l’ancien objet',
+            'est supprimé après le succès du nouveau. Il ne le fait que sur une',
+            'école explicitement désignée comme une démonstration.',
+            '',
+            'Le marquage est une commande d’exploitation, documentée dans',
+            'DEPLOY.md — « Remplacer les documents d’une instance de',
+            'démonstration ». Posez-le en connaissance de cause, pas pour',
+            'débloquer ce message. Rien n’a été écrit.',
+          ],
+        );
+      }
+      avert(
+        `VOIE DE DÉMONSTRATION ouverte pour « ${slug} » (${domaine}) — ` +
+          'le garde de localité ne s’applique pas.',
+      );
+    }
     // ⚠ `x-forwarded-host`, pas `Host` : `Host` est un en-tête INTERDIT pour
     // `fetch`, jeté en silence — le tenant ne serait pas résolu, et le défaut
     // ressemblerait à une erreur d'authentification.
@@ -180,10 +326,38 @@ async function principal() {
     info(`${copies.length} document(s) numérique(s) dans ce fonds`);
 
     const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // ⭐ LE RÉCAPITULATIF PRÉCÈDE LA PREMIÈRE ÉCRITURE — donc on COMPTE d'abord.
+    //
+    // ⚠ Un récapitulatif affiché pendant qu'on écrit n'est pas un
+    // récapitulatif : c'est un compte rendu. Celui-ci doit permettre de dire
+    // NON, donc il passe par deux parcours — un pour classer, un pour écrire.
+    //
+    // ⚠ Et le second parcours ne se fie PAS au premier : il reteste chaque
+    // copie. Classer d'un côté et écrire de l'autre sur la foi d'un index,
+    // c'est « un index est une chaîne recopiée qui ne se voit pas ».
+    // ─────────────────────────────────────────────────────────────────────
+    const aEpargner = copies.filter((c) => !estRemplacable(c));
+    const aTraiter = copies.filter((c) => estRemplacable(c));
+    process.stdout.write('\n');
+    info(`à remplacer ou vérifier : ${aTraiter.length}`);
+    info(`ÉPARGNÉS (fichier déposé par quelqu'un) : ${aEpargner.length}`);
+    for (const c of aEpargner.slice(0, 10)) {
+      info(`  · ${c.record.title?.slice(0, 48)} — « ${c.originalName} »`);
+    }
+    if (aEpargner.length > 10) info(`  … et ${aEpargner.length - 10} autres`);
+
+    // ⚠ LA CONFIRMATION N'EST DEMANDÉE QUE SUR LA VOIE DE DÉMONSTRATION.
+    // En local, le garde de localité a déjà borné le dégât possible à une base
+    // de développement ; y ajouter une saisie rendrait le script pénible à
+    // relancer, et ce qu'on use alors, c'est l'attention qu'on veut garder
+    // pour la fois où elle compte.
+    if (domaineDemande) await confirmer(slug);
+
     let remplaces = 0;
     let deja = 0;
     const echecs = [];
-
     const epargnes = [];
     for (const copie of copies) {
       const r = copie.record;

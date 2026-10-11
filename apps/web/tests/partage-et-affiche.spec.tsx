@@ -58,7 +58,7 @@ const svgDuQr = () => document.querySelector('svg[aria-hidden="true"]');
 
 describe('le bloc « Partager »', () => {
   it('rend un QR code et l’adresse EN CLAIR', async () => {
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     const url = await waitFor(() => screen.getByText(ATTENDUE));
     expect(url).toBeTruthy();
     expect(svgDuQr(), 'aucun QR rendu').toBeTruthy();
@@ -70,7 +70,7 @@ describe('le bloc « Partager »', () => {
    * inspectée — c'est ce qui subsiste qui est compté.
    */
   it('⚠ l’adresse SURVIT au retrait du QR — sinon elle n’existe que pour l’œil', async () => {
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(svgDuQr()).toBeTruthy());
     const attendue = ATTENDUE;
 
@@ -99,7 +99,7 @@ describe('le bloc « Partager »', () => {
    * d'une chaîne vide. Il se scanne, et il ne mène nulle part.
    */
   it('⚠ un QR n’existe QUE si son adresse est affichée', async () => {
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(svgDuQr()).toBeTruthy());
     expect(screen.getByText(ATTENDUE)).toBeTruthy();
     // Et l'adresse n'est pas vide : un QR d'une chaîne vide est un faux qui se
@@ -109,7 +109,7 @@ describe('le bloc « Partager »', () => {
   });
 
   it('le bouton d’affiche mène à /affiche/<id>, dans un nouvel onglet', async () => {
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     const lien = await waitFor(() => screen.getByRole('link', { name: T.imprimer }));
     expect(lien.getAttribute('href')).toBe(`/affiche/${ID}`);
     expect(lien.getAttribute('target')).toBe('_blank');
@@ -118,10 +118,50 @@ describe('le bloc « Partager »', () => {
   });
 });
 
+describe('⭐ l’adresse du QR : `publicUrl` d’ABORD, l’origine ENSUITE', () => {
+  const CANONIQUE =
+    'https://bibliotheque.univ-exemple.bf/opac/9de9b299-cde5-4acc-9e76-0e800ad94281';
+
+  /**
+   * ⭐ C'EST ELLE QUI RÉSOUT LA BORNE QUE CE LOT AVAIT DÉCLARÉE. Une affiche
+   * imprimée depuis une adresse interne encodait cette adresse-là ; avec
+   * `publicUrl` — `APP_URL` + le domaine principal de l'école — elle encode
+   * l'adresse CANONIQUE, celle que l'exploitant a configurée.
+   *
+   * ⚠ Et le backend a eu raison de la rendre `null` sans configuration : « on
+   * ne DEVINE pas ; un QR qui mène ailleurs ne se remarque jamais ».
+   */
+  it('quand l’API la sert, c’est ELLE que le QR encode — pas l’origine', async () => {
+    render(<BlocPartage recordId={ID} publicUrl={CANONIQUE} />);
+    await waitFor(() => expect(screen.getByText(CANONIQUE)).toBeTruthy());
+    // Témoin d'ABSENCE : l'origine du navigateur n'apparaît PAS.
+    expect(screen.queryByText(ATTENDUE)).toBeNull();
+  });
+
+  it('⚠ `null` retombe sur l’origine — seule adresse connue alors', async () => {
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
+    await waitFor(() => expect(screen.getByText(ATTENDUE)).toBeTruthy());
+  });
+
+  it('⚠ une chaîne VIDE n’est pas une adresse — elle ne gagne pas contre le repli', async () => {
+    // Un `publicUrl` vide est « défini » : sans le `trim()`, il passerait, et le
+    // QR encoderait « /opac/<id> » sans hôte — un code valide menant nulle part.
+    render(<BlocPartage recordId={ID} publicUrl="   " />);
+    await waitFor(() => expect(screen.getByText(ATTENDUE)).toBeTruthy());
+  });
+
+  it('⚠ et le lien d’application transporte l’adresse CANONIQUE', async () => {
+    agent(ANDROID);
+    render(<BlocPartage recordId={ID} publicUrl={CANONIQUE} />);
+    const lien = await waitFor(() => screen.getByRole('link', { name: T.ouvrirDansApp }));
+    expect(lien.getAttribute('href')).toBe(lienApplication(CANONIQUE));
+  });
+});
+
 describe('le bouton « Ouvrir dans l’app » — Android SEULEMENT', () => {
   it('sur Android : il est là, et il porte le lien gafeso://', async () => {
     agent(ANDROID);
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     const lien = await waitFor(() => screen.getByRole('link', { name: T.ouvrirDansApp }));
     expect(lien.getAttribute('href')).toBe(
       lienApplication(ATTENDUE),
@@ -138,7 +178,7 @@ describe('le bouton « Ouvrir dans l’app » — Android SEULEMENT', () => {
    */
   it('⚠ et il DIT qu’il suppose l’application installée', async () => {
     agent(ANDROID);
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(screen.getByText(T.ouvrirDansAppAide)).toBeTruthy());
     expect(T.ouvrirDansAppAide).toMatch(/install/i);
     // Et il dit que la page marche SANS : c'est la seconde moitié.
@@ -147,7 +187,7 @@ describe('le bouton « Ouvrir dans l’app » — Android SEULEMENT', () => {
 
   it('⚠ sur iPhone : PAS de bouton — un lien Android n’y aboutirait pas', async () => {
     agent(IPHONE);
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     // Ancre d'abord : on attend ce qui DOIT être là avant d'affirmer une absence.
     await waitFor(() => expect(screen.getByRole('link', { name: T.imprimer })).toBeTruthy());
     expect(screen.queryByRole('link', { name: T.ouvrirDansApp })).toBeNull();
@@ -161,7 +201,7 @@ describe('le bouton « Ouvrir dans l’app » — Android SEULEMENT', () => {
    */
   it('⚠ sur Android, TOUT ce qui existe ailleurs existe encore', async () => {
     agent(ANDROID);
-    render(<BlocPartage recordId={ID} />);
+    render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(screen.getByRole('link', { name: T.ouvrirDansApp })).toBeTruthy());
     // Le QR, l'adresse et l'affiche : rien n'a été remplacé par le lien d'app.
     expect(svgDuQr()).toBeTruthy();

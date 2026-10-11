@@ -9,7 +9,7 @@ import { ID_CONTENU } from '@/components/lien-evitement';
 import { api, ApiError } from '@/lib/api';
 import { LIBELLES } from '@/lib/libelles';
 import { useMyFunctions } from '@/lib/functions';
-import { urlPubliqueDeNotice } from '@/lib/url-publique';
+import { adresseDuQr } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -52,12 +52,21 @@ interface NoticeAvecExemplaires {
   id: string;
   title: string;
   items: Exemplaire[];
+  /** ⚠ L'adresse canonique, ou `null` sans `APP_URL` : on retombe sur l'origine. */
+  publicUrl?: string | null;
 }
 
 export default function AperçuEtiquettesPage() {
   const { functions } = useMyFunctions();
   const params = useSearchParams();
   const ids = (params.get('recordIds') ?? '').split(',').filter(Boolean);
+  /*
+   * ⚠ LES COLONNES VIENNENT DE L'URL, comme pour le PDF — et elles DÉCIDENT du
+   * QR : au-delà de trois, le module du code-barres passe sous 0,25 mm et le QR
+   * est abandonné. Mon premier aperçu les ignorait : on choisissait quatre
+   * colonnes, le PDF sortait sans QR, et l'aperçu en montrait trois AVEC.
+   */
+  const colonnes = Math.min(8, Math.max(1, Number(params.get('columns') ?? '3') || 3));
 
   const [notices, setNotices] = useState<NoticeAvecExemplaires[] | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -150,7 +159,17 @@ export default function AperçuEtiquettesPage() {
             </Button>
           </div>
           {/* La planche : trois colonnes, comme le défaut du PDF. */}
-          <div className="planche mt-5 grid grid-cols-3 gap-2">
+          <p className="mt-1 text-xs text-muted print:hidden">
+            {T.colonnesEtQr(colonnes)}
+          </p>
+          {/* ⚠ La planche est en MILLIMÈTRES, pas en colonnes CSS : une grille
+              dont la largeur dépend de la fenêtre ferait varier la largeur de
+              module, donc la décision d'abandon du QR, avec la taille du
+              navigateur. Les cotes sont celles du PDF. */}
+          <div
+            className="planche mt-5 flex flex-wrap"
+            style={{ width: '210mm', paddingLeft: '7mm', gap: '2.5mm' }}
+          >
             {etiquettes.map(({ notice, item }) => (
               <div key={item.id} className="etq h-[26mm]">
                 <Etiquette
@@ -158,7 +177,8 @@ export default function AperçuEtiquettesPage() {
                   cote={item.callNumber}
                   titre={notice.title}
                   etablissement={etablissement}
-                  urlNotice={urlPubliqueDeNotice(notice.id)}
+                  urlNotice={adresseDuQr(notice.id, notice.publicUrl ?? null)}
+                  colonnes={colonnes}
                 />
               </div>
             ))}

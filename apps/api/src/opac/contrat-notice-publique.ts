@@ -179,6 +179,39 @@ export const CLES_DU_CONTRAT: string[] = [
    */
   'publicUrl',
   'identifiantPerenne',
+  /**
+   * ⭐⭐ L'ADRESSE COURTE — `/opac/<id>`, celle des ÉTIQUETTES.
+   *
+   * ## ⚠ POURQUOI UN TROISIÈME CHAMP, alors que `publicUrl` existe
+   *
+   * Parce que la contrainte n'est pas la même selon la SURFACE qui imprime :
+   *
+   * | Ce qui imprime | Le champ | Pourquoi |
+   * |---|---|---|
+   * | l'étiquette d'exemplaire | **`shortUrl`** | QR dans un carré FIXE de 13 mm |
+   * | l'affiche A4, les PDF | **`publicUrl`** | 1,13 mm par module : quatre fois l'étiquette |
+   *
+   * Mesuré le 11 octobre 2026 : à 13 mm, la forme pérenne fait monter le QR de
+   * la version 4 à la version 5 — module de 0,317 à 0,289 mm, et jusqu'à
+   * 0,245 mm pour une école au nom long. **La lisibilité à ces tailles n'est
+   * mesurée par personne**, des deux côtés du dépôt : il faudrait une planche
+   * imprimée et un appareil. On ne paie donc pas ce rétrécissement pour un gain
+   * nul — les DEUX adresses résolvent la même notice.
+   *
+   * ⚠ ET CE N'EST PAS UNE DUPLICATION DE `publicUrl`. Les deux peuvent
+   * diverger : `publicUrl` basculera le jour où l'identifiant pérenne change de
+   * forme ou de chemin ; `shortUrl` ne bougera pas, parce que des étiquettes
+   * collées dans des livres pointent dessus. Les fondre reviendrait à décider
+   * pour la surface la plus contrainte au nom de la moins contrainte.
+   *
+   * ⚠ Comme `publicUrl`, elle peut être `null` sans `APP_URL` : un QR qui
+   * encode « null » est pire qu'un QR absent.
+   *
+   * ⚠ EN DERNIER, après `identifiantPerenne` — un filet qui compare des octets
+   * doit lire un AJOUT, jamais une permutation. Troisième fois que cette ligne
+   * est écrite ici, et c'est le signe qu'elle tient.
+   */
+  'shortUrl',
 ];
 
 /**

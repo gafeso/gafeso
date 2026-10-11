@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { adressePubliqueDeLaNotice } from '../opac/identifiant-perenne';
+import { adresseCourteDeLaNotice } from '../opac/identifiant-perenne';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
@@ -59,9 +59,10 @@ export class LabelsService {
       sigle,
       // `null` sans APP_URL : pas de QR, et le code-barres reprend toute la
       // largeur. On ne devine pas une adresse qu'on imprimerait sur un livre.
-      publicUrl: appUrl
-        ? adressePubliqueDeLaNotice(appUrl, domaine, it.record.id)
-        : null,
+      // ⭐ LA FORME COURTE, et c'est un CHOIX : à 13 mm, l'adresse pérenne
+      // ferait monter le QR d'une version et rétrécir ses modules de 8 %, pour
+      // un gain nul — les deux adresses résolvent la même notice.
+      shortUrl: appUrl ? adresseCourteDeLaNotice(appUrl, domaine, it.record.id) : null,
     }));
     return buildLabelsPdf(labels, layout);
   }

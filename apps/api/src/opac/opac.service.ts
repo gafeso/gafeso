@@ -13,6 +13,7 @@ import { ProvenanceService } from '../moissonnage/provenance.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
 import { normalizeAuthorName } from '../authors/author-name';
 import {
+  adresseCourteDeLaNotice,
   adressePubliqueDeLaNotice,
   construireIdentifiant,
 } from './identifiant-perenne';
@@ -833,15 +834,20 @@ export class OpacService {
       // apparaît par intermittence est pire qu'une clé absente.
       reponse.publicUrl = null;
       reponse.identifiantPerenne = null;
+      reponse.shortUrl = null;
       return;
     }
     reponse.identifiantPerenne = construireIdentifiant(slug, id);
     const appUrl = this.config.get<string>('APP_URL')?.trim() ?? '';
     // ⚠ Sans `APP_URL`, on ne DEVINE pas : `null` est une réponse, une adresse
     // fabriquée n'en est pas une. Un QR qui mène ailleurs ne se remarque jamais.
+    const domaine = appUrl ? await this.domainePrincipal(slug) : null;
     reponse.publicUrl = appUrl
-      ? adressePubliqueDeLaNotice(appUrl, await this.domainePrincipal(slug), id)
+      ? adressePubliqueDeLaNotice(appUrl, domaine, id, slug)
       : null;
+    // ⭐ L'ADRESSE COURTE, pour l'étiquette : voir son motif au contrat. Une
+    // seule lecture du domaine pour les deux — c'est la même école.
+    reponse.shortUrl = appUrl ? adresseCourteDeLaNotice(appUrl, domaine, id) : null;
   }
 
   /**

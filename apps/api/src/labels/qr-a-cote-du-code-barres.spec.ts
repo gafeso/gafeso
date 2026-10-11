@@ -53,8 +53,8 @@ function largeurCellule(): number {
   return (A4_W - 2 * marginLeftMm * MM - (columns - 1) * columnGapMm * MM) / columns;
 }
 
-function etiquette(barcode: string, publicUrl: string | null): LabelData {
-  return { barcode, callNumber: 'A 123', title: 'Un titre', sigle: 'BUC', publicUrl };
+function etiquette(barcode: string, shortUrl: string | null): LabelData {
+  return { barcode, callNumber: 'A 123', title: 'Un titre', sigle: 'BUC', shortUrl };
 }
 
 const URL_TYPE = 'https://bib.uo.bf/opac/9de9b299-cde5-4acc-9e76-0e800ad94281';
@@ -88,12 +88,57 @@ describe('🔴 Le QR à côté du code-barres', () => {
     ).toEqual([tresLong]);
   });
 
+  it('⭐⭐ DEUX GRANDEURS EN mm/MODULE, et ce ne sont PAS les mêmes', async () => {
+    // 🔴 LA CONFUSION QUE CE CAS EXISTE POUR EMPÊCHER, et elle a failli être
+    // la mienne le 11 octobre 2026.
+    //
+    // La session front a mesuré, AVANT la bascule de `shortUrl` sur
+    // l'identifiant pérenne, que le module du QR passait de 0,289 à 0,265 mm
+    // dans son carré FIXE de 13 mm. `LARGEUR_MODULE_MIN_MM` vaut 0,25. Les deux
+    // nombres s'expriment en millimètres par module, ils sont du même ordre, et
+    // j'ai failli conclure qu'une école au nom long ferait ABANDONNER le QR.
+    //
+    // ⭐ Elles ne mesurent pas la même chose :
+    //
+    // | La grandeur | Ce qu'elle borne | De quoi elle dépend |
+    // |---|---|---|
+    // | `LARGEUR_MODULE_MIN_MM` | le module du **CODE 128** | la longueur du CODE-BARRES |
+    // | le module du QR dans 13 mm | la densité du **QR** | la longueur de l'URL |
+    //
+    // Allonger l'URL ne touche donc PAS l'arbitrage : le QR devient plus dense,
+    // et le code-barres garde exactement la même place. C'est ce que ce cas
+    // mesure — par l'EFFET, sur deux URLs dont l'une est deux fois l'autre.
+    const COURTE = 'https://bib.uo.bf/opac/3f2a9c1e-7b40-4d8a-9e21-1c5b6d7e8f90';
+    const LONGUE =
+      'https://bibliotheque.universite-ouaga.bf/opac/resoudre/' +
+      encodeURIComponent('oai:universite-ouaga:3f2a9c1e-7b40-4d8a-9e21-1c5b6d7e8f90');
+    // ⚠ TÉMOIN : les deux jeux d'essai diffèrent VRAIMENT en longueur, sinon ce
+    // cas comparerait deux fois la même chose.
+    expect(LONGUE.length, 'la longue doit être nettement plus longue').toBeGreaterThan(
+      COURTE.length + 40,
+    );
+
+    const courte = await buildLabelsPdf([etiquette('BIB-000123', COURTE)]);
+    const longue = await buildLabelsPdf([etiquette('BIB-000123', LONGUE)]);
+
+    expect(
+      courte.qrAbandonnes,
+      'une URL courte n’abandonne pas : témoin de présence du cas nominal',
+    ).toEqual([]);
+    expect(
+      longue.qrAbandonnes,
+      'ALLONGER L’URL NE DOIT PAS FAIRE ABANDONNER LE QR : l’arbitrage porte ' +
+        'sur la longueur du CODE-BARRES, jamais sur celle de l’adresse. Si ce ' +
+        'cas tombe, quelqu’un a branché le seuil du Code 128 sur la densité du QR.',
+    ).toEqual([]);
+  });
+
   it('⭐ un code-barres ordinaire GARDE son QR', async () => {
     const { qrAbandonnes } = await buildLabelsPdf([etiquette('BIB-000123', URL_TYPE)]);
     expect(qrAbandonnes, 'aucun abandon sur un code-barres normal').toEqual([]);
   });
 
-  it('⚠ sans publicUrl, AUCUN QR et le code-barres reprend TOUTE la largeur', async () => {
+  it('⚠ sans shortUrl, AUCUN QR et le code-barres reprend TOUTE la largeur', async () => {
     const sans = await buildLabelsPdf([etiquette('BIB-000123', null)]);
     const avec = await buildLabelsPdf([etiquette('BIB-000123', URL_TYPE)]);
     expect(sans.qrAbandonnes).toEqual([]);

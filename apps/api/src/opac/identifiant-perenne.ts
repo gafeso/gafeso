@@ -96,19 +96,30 @@ export function localisationOai(
  *
  * · elle emploie l'origine par laquelle le moissonneur vient de parler — une
  *   adresse d'API, pas celle qu'un lecteur ouvre ;
- * · et **le WEB NE SERT AUCUNE PAGE `/opac/resoudre/…`** — mesuré le 11 octobre
- *   2026 : `apps/web/app/opac/` porte `page.tsx`, `[id]`, `auteurs`, `lire`, et
- *   rien d'autre. Un QR pointant là mènerait à un 404.
+ * · elle emploie l'origine par laquelle le moissonneur vient de parler — une
+ *   adresse d'API, pas celle qu'un lecteur ouvre.
  *
- * 🔴 ET C'EST CE QUI TRANCHE : ce QR est IMPRIMÉ SUR UNE ÉTIQUETTE COLLÉE DANS
- * UN LIVRE. Il ne se reprend pas. Publier une adresse qui ne répond pas
- * aujourd'hui dans l'espoir qu'une page existe demain, c'est coller des liens
- * morts sur un fonds entier.
+ * ## ⭐ LE 11 OCTOBRE 2026 : LA BASCULE A EU LIEU, et ce commentaire la racontait
  *
- * ⚠ Dette RAPPORTÉE au front plutôt que corrigée ici : si
- * `/opac/resoudre/[identifiant]` devient une page web (une simple redirection
- * vers `/opac/<id>` suffit), cette fonction bascule dessus en une ligne — et le
- * QR cesse alors de porter un identifiant de base dans son chemin.
+ * Ce bloc disait, le matin : « le WEB NE SERT AUCUNE PAGE `/opac/resoudre/…` —
+ * un QR pointant là mènerait à un 404 », et il annonçait la bascule « en une
+ * ligne » le jour où la page existerait. **Le front l'a livrée le soir même**,
+ * mesurée sans cookie (308 vers `/opac/<id>` sur les deux formes de
+ * l'identifiant, 404 sur un identifiant d'une autre école). La bascule est
+ * faite.
+ *
+ * ⚠ ET LE CHEMIN QUI L'A DÉCLENCHÉE N'EST PAS CELUI QU'ON ATTENDAIT : la dette
+ * avait été RAPPORTÉE au front plutôt que corrigée ici, et c'est eux qui l'ont
+ * soldée. Le mécanisme annoncé était le bon ; l'acteur ne l'était pas. Écrit
+ * ici pour que le prochain commentaire de ce genre continue d'être écrit —
+ * une prédiction juste sur le mécanisme et fausse sur l'occasion n'est pas une
+ * prédiction ratée.
+ *
+ * 🔴 CE QUI RESTE VRAI, ET QUI DÉCIDAIT : ce QR est IMPRIMÉ SUR UNE ÉTIQUETTE
+ * COLLÉE DANS UN LIVRE. Il ne se reprend pas. **Les DEUX adresses sont donc
+ * servies pour toujours** — `/opac/<id>` autant que la forme pérenne —, et des
+ * gardes l'exigent des deux côtés : `les-deux-formes-restent-servies.spec.ts`
+ * ici, `routes-perennes.spec.ts` chez le web.
  *
  * ## ⚠ L'HÔTE EST CELUI DE L'ÉCOLE, pas `APP_URL` tel quel
  *
@@ -125,6 +136,7 @@ export function adressePubliqueDeLaNotice(
   appUrl: string,
   domainePrincipal: string | null,
   recordId: string,
+  slug?: string,
 ): string | null {
   let base: URL;
   try {
@@ -143,7 +155,13 @@ export function adressePubliqueDeLaNotice(
       base.hostname = hote;
     }
   }
-  return new URL(`/opac/${encodeURIComponent(recordId)}`, base).toString();
+  // ⭐ LA FORME PÉRENNE QUAND ELLE EST RÉSOLVABLE, le repli sinon. Sans slug il
+  // n'y a pas d'identifiant à construire — `/opac/<id>` reste valide pour
+  // toujours, et le front le VERROUILLE (`routes-perennes.spec.ts`).
+  const chemin = slug
+    ? `/opac/resoudre/${encodeURIComponent(construireIdentifiant(slug, recordId))}`
+    : `/opac/${encodeURIComponent(recordId)}`;
+  return new URL(chemin, base).toString();
 }
 
 /** Ce qu'une adresse scannée peut être. */
@@ -179,6 +197,58 @@ export type AdresseScannee =
  * est sur 3000 et l'API sur 4000, et une étiquette imprimée depuis l'une se
  * scanne depuis l'autre. Le port ne distingue pas deux établissements.
  */
+/**
+ * ⭐⭐ L'ADRESSE COURTE — celle qu'on imprime sur une ÉTIQUETTE, et seulement là.
+ *
+ * C'est `/opac/<id>`, sans l'identifiant pérenne. Elle n'est pas un repli :
+ * c'est un CHOIX, et il est mesuré.
+ *
+ * ## 🔴 POURQUOI L'ÉTIQUETTE NE PREND PAS LA FORME PÉRENNE
+ *
+ * Le QR d'étiquette est un carré **FIXE de 13 mm**. Allonger l'adresse ne
+ * l'agrandit pas : elle monte en VERSION, donc ses modules rétrécissent dans le
+ * même carré. Mesuré le 11 octobre 2026 (`qrcode`, correction M, zone de silence
+ * de 4 modules comprise) :
+ *
+ * | L'adresse | Longueur | Version | Module |
+ * |---|---|---|---|
+ * | `/opac/<uuid>` | 59 car | v4 | **0,317 mm** |
+ * | `/opac/resoudre/oai:<école>:<uuid>` | 79 car | v5 | **0,289 mm** |
+ * | école au nom LONG, forme pérenne | 116 car | v7 | **0,245 mm** |
+ *
+ * ⚠ **ET LA LISIBILITÉ À CES TAILLES N'EST MESURÉE PAR PERSONNE** — ni ici, ni
+ * côté front : il faudrait une planche imprimée et un appareil photo. On ne
+ * paie donc pas un rétrécissement de 8 à 23 % pour un gain qui n'en est pas un :
+ * **les deux adresses résolvent la même notice**, et `/opac/<id>` est servie
+ * pour toujours, garde à l'appui des deux côtés.
+ *
+ * ## ⚠ CE QUI LA DISTINGUE DU SEUIL DU CODE-BARRES, et il faut le dire ici
+ *
+ * `LARGEUR_MODULE_MIN_MM` (0,25 mm, dans `label-pdf.ts`) borne le module du
+ * **CODE 128**, qui dépend de la longueur du CODE-BARRES. Les chiffres
+ * ci-dessus sont la densité du **QR**, qui dépend de la longueur de l'URL. Deux
+ * grandeurs en millimètres par module, du même ordre, et **ce ne sont pas les
+ * mêmes** : allonger l'adresse ne fait PAS abandonner le QR. Confondre les deux
+ * a failli produire une fausse alerte le jour de la bascule.
+ *
+ * ## ⭐ POURQUOI UNE FONCTION NOMMÉE, et pas simplement « omettre le slug »
+ *
+ * `adressePubliqueDeLaNotice(appUrl, domaine, id)` rend déjà la forme courte
+ * quand on ne lui passe pas de slug. **C'était donc juste par ACCIDENT** : le
+ * jour où quelqu'un ajoute le slug « pour être cohérent », les étiquettes
+ * basculent sur la forme longue sans que rien ne le dise. Une fonction qui PORTE
+ * son intention dans son nom rend ce geste visible — et `etiquette-adresse-courte.spec.ts`
+ * le refuse.
+ */
+export function adresseCourteDeLaNotice(
+  appUrl: string,
+  domainePrincipal: string | null,
+  recordId: string,
+): string | null {
+  // ⚠ Pas de slug : c'est TOUTE la différence, et elle est délibérée.
+  return adressePubliqueDeLaNotice(appUrl, domainePrincipal, recordId);
+}
+
 export function reconnaitreAdresse(
   url: string,
   hotesDeLEcole: readonly string[],

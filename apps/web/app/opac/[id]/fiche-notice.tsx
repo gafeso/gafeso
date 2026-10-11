@@ -56,6 +56,8 @@ interface RecordDetail {
   availability: { totalItems: number; available: number; borrowable: boolean } | null;
   digitalCopy: { fileFormat: 'PDF' | 'EPUB' } | null;
   membersOnly: boolean;
+  /** ⚠ Servi depuis le 11 octobre 2026 ; `null` sans `APP_URL` configuré. */
+  publicUrl?: string | null;
   /**
    * ⭐ L'EXISTENCE d'une version en ligne, PUBLIQUE — jamais le format ni l'URL.
    *
@@ -551,7 +553,7 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         l'abonnement gardent est la LECTURE du fichier, pas l'existence de la
         notice — tranché le 8 octobre 2026.
       */}
-      <BlocPartage recordId={record.id} />
+      <BlocPartage recordId={record.id} publicUrl={record.publicUrl ?? null} />
 
     </main>
   );

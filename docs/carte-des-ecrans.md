@@ -104,4 +104,5 @@ refuser la route par l’API.
 | `/opac/[id]/lire` | membre AYANT DROIT | le lecteur en ligne (PDF ou EPUB), sans téléchargement |
 | `/opac/auteurs` | tout le monde | l’index des auteurs |
 | `/opac/auteurs/[id]` | tout le monde | la fiche d’un auteur et ses documents |
+| `/opac/resoudre/[identifiant]` | qui vient de scanner un QR, et les moissonneurs OAI | résout l’identifiant pérenne `oai:<école>:<uuid>` et redirige en 308 vers la notice ; 404 explicite si le code n’est pas d’ici, et une page qui DIT « on n’a pas pu vérifier » quand le catalogue ne répond pas — un 404 servi sur une panne serait archivé par les moteurs, et l’étiquette reste collée dans le livre |
 | `/profil` | tout compte | mon compte : informations, mot de passe, double authentification |

@@ -25,7 +25,7 @@ export interface LabelData {
    * veut la fiche du document, pas le volume qu'il tient. Les exemplaires n'ont
    * pas de page publique.
    */
-  publicUrl?: string | null;
+  shortUrl?: string | null;
 }
 
 /**
@@ -253,7 +253,7 @@ export async function buildLabelsPdf(
     const modules = entry.image.width / ECHELLE_CODE_BARRES;
     const boxPlein = cellW - 2 * pad;
     const boxAvecQr = boxPlein - (QR_COTE_MM + QR_ECART_MM) * MM;
-    const qrDemande = Boolean(label.publicUrl);
+    const qrDemande = Boolean(label.shortUrl);
     const qrTient = boxAvecQr / modules >= LARGEUR_MODULE_MIN_MM * MM;
     const avecQr = qrDemande && qrTient;
     if (qrDemande && !qrTient) qrAbandonnes.push(label.barcode);
@@ -276,10 +276,10 @@ export async function buildLabelsPdf(
     });
 
     if (avecQr) {
-      let qr = qrCache.get(label.publicUrl as string);
+      let qr = qrCache.get(label.shortUrl as string);
       if (!qr) {
-        qr = await pdf.embedPng(await qrPngPourEtiquette(label.publicUrl as string));
-        qrCache.set(label.publicUrl as string, qr);
+        qr = await pdf.embedPng(await qrPngPourEtiquette(label.shortUrl as string));
+        qrCache.set(label.shortUrl as string, qr);
       }
       const cote = QR_COTE_MM * MM;
       page.drawImage(qr, {

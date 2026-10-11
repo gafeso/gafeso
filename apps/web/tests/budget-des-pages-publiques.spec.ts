@@ -118,7 +118,10 @@ const DEV_A_ECRASE = DEMANDE && existsSync(MANIFESTE) && !existsSync(BUILD_ID);
  * les quatre pages, par croissance du fragment PARTAGÉ. L'écran d'aperçu
  * lui-même (140 793 o) est du PERSONNEL et n'entre pas dans ce garde.
  *
- * ⚠ **IL NE RESTE QUE 2 202 o À LA FICHE.** C'est dit ici parce que la prochaine
+ * ⚠ RÉÉCRITES APRÈS LA RÉCONCILIATION AVEC LE BACKEND (adresse canonique,
+ * invariant du QR subordonné) : +84 à +137.
+ *
+ * ⚠ **IL NE RESTE QUE 2 065 o À LA FICHE.** C'est dit ici parce que la prochaine
  * addition à cet écran est un ARBITRAGE, plus une addition : il faudra choisir
  * entre alléger le socle, relever le budget en disant ce que ça coûte en 3G, ou
  * découper en morceaux chargés à la demande — ce qui échange des octets contre
@@ -170,9 +173,9 @@ const DEV_A_ECRASE = DEMANDE && existsSync(MANIFESTE) && !existsSync(BUILD_ID);
  * lui qui décide, et il n'a pas bougé du lot.
  */
 const BUDGETS: Record<string, { cle: string; mesure: number; budget: number }> = {
-  'accueil /': { cle: '/page', mesure: 149_554, budget: 160_000 },
-  'résultats /opac': { cle: '/opac/page', mesure: 140_175, budget: 150_000 },
-  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 147_798, budget: 150_000 },
+  'accueil /': { cle: '/page', mesure: 149_638, budget: 160_000 },
+  'résultats /opac': { cle: '/opac/page', mesure: 140_259, budget: 150_000 },
+  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 147_935, budget: 150_000 },
   /**
    * ⭐ L'AFFICHE A4, ENTRÉE DANS CE GARDE LE 11 OCTOBRE 2026 — et elle y entre
    * parce qu'elle est PUBLIQUE. Le trou était déjà rapporté deux jours plus
@@ -184,7 +187,7 @@ const BUDGETS: Record<string, { cle: string; mesure: number; budget: number }> =
    * SERVEUR, il n'embarque donc ni la fiche cliente ni ses dépendances. Son
    * budget suit la même marge que les autres, ≈ 11 Ko.
    */
-  'affiche /affiche/[id]': { cle: '/affiche/[id]/page', mesure: 114_050, budget: 125_000 },
+  'affiche /affiche/[id]': { cle: '/affiche/[id]/page', mesure: 114_055, budget: 125_000 },
 };
 
 /** ⚠ Le socle est COMMUN aux trois : il se garde une fois, et c'est là que tout se joue. */

@@ -35,6 +35,36 @@ export interface ResolvedTenant {
   name: string;
 }
 
+/**
+ * ⚠ RETIRE `estInstanceDeDemonstration` de ce qu'une route REND.
+ *
+ * `PATCH /tenancy/settings` renvoyait la ligne ENTIÈRE. La colonne posée le
+ * 11/10/2026 y serait donc partie sans que personne l'ait demandé — et ce
+ * n'est pas une question de confidentialité : un administrateur lisant un
+ * booléen sur sa propre école ne révèle rien.
+ *
+ * ⭐ LE RISQUE EST QU'ELLE SOIT SERVIE. Un champ qu'une route rend est un
+ * champ pour lequel on finit par bâtir une case à cocher — « pour rendre
+ * service », dans l'écran d'apparence, à côté des couleurs. Et cette case
+ * effondrerait en UN CLIC les trois conditions cumulatives qui gardent
+ * `remplacer-documents-demo.mjs` : le marqueur n'est pas un réglage, c'est
+ * l'une des trois clés d'une destruction.
+ *
+ * Le marquage se fait par une commande SQL documentée dans `DEPLOY.md`, par
+ * l'exploitant, sur l'instance de démonstration. Aucun écran ne doit pouvoir
+ * le poser.
+ *
+ * ⚠ Et le retrait porte sur CE que j'ai ajouté, rien d'autre : la réponse
+ * redevient exactement celle d'avant ce lot. Ce n'est pas un changement de
+ * contrat — c'est l'absence de celui que ma colonne aurait fait.
+ */
+function sansLeMarqueurDeDemonstration<T extends { estInstanceDeDemonstration?: boolean }>(
+  ligne: T,
+): Omit<T, 'estInstanceDeDemonstration'> {
+  const { estInstanceDeDemonstration: _marqueur, ...reglages } = ligne;
+  return reglages;
+}
+
 @Injectable()
 export class TenancyService {
   private readonly logger = new Logger(TenancyService.name);
@@ -152,11 +182,13 @@ export class TenancyService {
     };
 
     if (pagesLegales === undefined) {
-      return this.prisma.tenantSettings.upsert({
-        where: { tenantId },
-        update: data,
-        create: { tenantId, ...data },
-      });
+      return sansLeMarqueurDeDemonstration(
+        await this.prisma.tenantSettings.upsert({
+          where: { tenantId },
+          update: data,
+          create: { tenantId, ...data },
+        }),
+      );
     }
 
     return this.ecrirePagesLegales(tenantId, data, pagesLegales, dto.pagesLegalesVersion!);
@@ -241,7 +273,12 @@ export class TenancyService {
         );
       }
 
-      return tx.tenantSettings.findUniqueOrThrow({ where: { tenantId } });
+      // ⚠ Le retrait du marqueur se fait ICI, au site qui PRODUIT la ligne,
+      // et non chez l'appelant : un garde de source ne suit pas une protection
+      // posée cent lignes plus haut — et un troisième appelant ne l'aurait pas.
+      return sansLeMarqueurDeDemonstration(
+        await tx.tenantSettings.findUniqueOrThrow({ where: { tenantId } }),
+      );
     });
   }
 }

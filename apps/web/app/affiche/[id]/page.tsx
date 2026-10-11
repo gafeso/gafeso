@@ -6,7 +6,7 @@ import { CouvertureComposee } from '@/components/couverture-composee';
 import { QrCode } from '@/components/qr-code';
 import { LIBELLES } from '@/lib/libelles';
 import { fetchTenantHome, noticePublique } from '@/lib/server-api';
-import { urlPubliqueDeNotice } from '@/lib/url-publique';
+import { adresseDuQr } from '@/lib/url-publique';
 
 const T = LIBELLES.affiche;
 
@@ -64,6 +64,13 @@ interface Notice {
   recordType: string;
   category: string | null;
   publishYear: number | null;
+  /**
+   * ⚠ L'ADRESSE CANONIQUE, servie depuis le 11 octobre 2026 — et c'est pour
+   * une AFFICHE qu'elle compte le plus : imprimée depuis une adresse interne,
+   * l'affiche encodait cette adresse-là. `null` sans `APP_URL` configuré, et on
+   * retombe alors sur l'hôte de la requête, qui est tout ce qu'on connaît.
+   */
+  publicUrl: string | null;
 }
 
 export default async function AffichePage({ params }: { params: Promise<{ id: string }> }) {
@@ -90,7 +97,7 @@ export default async function AffichePage({ params }: { params: Promise<{ id: st
   const h = await headers();
   const hote = h.get('x-forwarded-host') ?? h.get('host') ?? '';
   const proto = h.get('x-forwarded-proto') ?? (hote.startsWith('localhost') ? 'http' : 'https');
-  const url = urlPubliqueDeNotice(n.id, `${proto}://${hote}`);
+  const url = adresseDuQr(n.id, n.publicUrl, `${proto}://${hote}`);
   const type = LIBELLES.typesDeNotice[n.recordType] ?? n.recordType;
 
   return (

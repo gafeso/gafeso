@@ -85,7 +85,12 @@ const ORDRE_ANONYME = [
   // pérenne. C'est le QR imprimé sur l'étiquette d'un exemplaire qui les
   // demande : il doit mener à une page, et il doit dire DE QUOI il parle même
   // quand le serveur a déménagé.
-  'publicUrl', 'identifiantPerenne',
+    'publicUrl', 'identifiantPerenne',
+    // \u2b50 11/10/2026 (soir) \u2014 30 \u2192 31. `shortUrl` = `/opac/<id>`, celle que
+    // les \u00c9TIQUETTES encodent : \u00e0 13 mm, la forme p\u00e9renne ferait monter le QR
+    // d'une version et r\u00e9tr\u00e9cir ses modules de 8 %, sans mesure de lisibilit\u00e9.
+    // Les affiches et les PDF, eux, gardent `publicUrl`.
+    'shortUrl',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
@@ -115,7 +120,7 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
   // brief P7 dit que ce qui arrive par moissonnage reste marqué comme tel, et
   // cela ne dépend pas de qui regarde. C'est même l'anonyme qu'on renvoie vers
   // l'école d'origine, puisque le fichier n'est pas ici.
-  it('⚠ visiteur ANONYME : 30 clés, dans CET ordre', async () => {
+  it('⚠ visiteur ANONYME : 31 clés, dans CET ordre', async () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);

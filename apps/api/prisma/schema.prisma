@@ -121,6 +121,34 @@ model TenantSettings {
   /// Forme : { mentions: { blocs: Record<string,string>, publieeLe: string|null },
   ///           confidentialite: { … } } — normalisée en lecture comme l'accueil.
   pagesLegales               Json?   @map("pages_legales")
+  /// 🔴 CETTE ÉCOLE EST UNE INSTANCE DE DÉMONSTRATION.
+  ///
+  /// ⚠ ELLE N'EXISTE QUE POUR AUTORISER UNE DESTRUCTION. Aucun écran ne la
+  /// lit, aucune règle métier n'en dépend : elle est la seule chose qui permet
+  /// à `remplacer-documents-demo.mjs` d'écrire ailleurs que sur `localhost`.
+  ///
+  /// Ce script REMPLACE les fichiers d'un fonds entier, et l'ancien objet est
+  /// supprimé après le succès du nouveau. Son garde local — « la base et l'API
+  /// doivent être sur localhost » — est juste, et il interdit par construction
+  /// l'usage voulu : dans le conteneur de production, `DATABASE_URL` vise `db`.
+  ///
+  /// ⭐ ON NE RELÂCHE DONC PAS LE GARDE : on ouvre une voie ÉTROITE, à trois
+  /// conditions CUMULATIVES — l'option nommée, le domaine donné à la main qui
+  /// doit correspondre exactement, et ce marqueur. Une seule des trois ne
+  /// suffit pas, et le marqueur est celle qu'on ne peut pas poser par
+  /// inadvertance : il se pose par une commande d'exploitation, documentée
+  /// dans DEPLOY.md.
+  ///
+  /// ⚠ POURQUOI UNE COLONNE ET PAS UNE CLÉ DANS UN JSON EXISTANT : le même
+  /// arbitrage que `pagesLegales` trois champs plus haut. « Deux choses dans
+  /// une colonne finit par faire décider à l'une pour l'autre » — et ici
+  /// l'autre chose déciderait d'un droit d'écriture destructeur.
+  ///
+  /// ⚠ DÉFAUT `false`, et c'est la bonne direction d'échec : une école neuve,
+  /// une école oubliée dans une migration, une colonne absente d'un schéma mal
+  /// rattrapé — toutes refusent. Le défaut inverse ouvrirait la destruction à
+  /// qui n'a rien demandé.
+  estInstanceDeDemonstration Boolean @default(false) @map("est_instance_de_demonstration")
   // 2FA OBLIGATOIRE pour les rôles disposant de comptes.gerer / etablissement.gerer.
   // Schéma public (pas de sync-schema) → défaut non-null sans risque.
   require2fa                 Boolean @default(false) @map("require_2fa")

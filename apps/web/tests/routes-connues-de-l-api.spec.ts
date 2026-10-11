@@ -352,6 +352,18 @@ const CHEMINS_DU_RENDU_SERVEUR = [
   'GET /opac/chiffres',
   'GET /opac/constellation',
   'GET /opac/nouveautes',
+  /*
+   * ⚠ `GET /opac/resoudre/*` — ajouté le 11 octobre 2026 avec la page
+   * `/opac/resoudre/[identifiant]`, qui résout l'identifiant pérenne et
+   * redirige vers `/opac/<id>`.
+   *
+   * ⭐ Elle est appelée au SERVEUR, et il le faut : un appareil photo ouvre
+   * l'adresse dans un navigateur quelconque, parfois sans JavaScript. La
+   * redirection part dans l'en-tête HTTP, avant le premier octet de contenu.
+   *
+   * ⚠ Et c'est une adresse IMPRIMÉE — `routes-perennes.spec.ts` la verrouille.
+   */
+  'GET /opac/resoudre/*',
   'GET /opac/records/*',
   'GET /tenancy/home',
 ] as const;
@@ -479,7 +491,12 @@ describe('les appels du front', () => {
     // est juste, il oblige à revenir le regarder. La question posée était la
     // bonne : cette route est-elle légitimement appelée sans session ? Oui, et
     // c'est écrit côté API.
-    expect(chemins).toHaveLength(7);
+    // ⚠ ET IL A CONVOQUÉ DE NOUVEAU, le 11 octobre 2026 : `GET /opac/resoudre/*`
+      // est le huitième, appelé par la page qui résout un identifiant pérenne.
+      // Même question, même réponse : légitimement appelée sans session ? Oui —
+      // elle sert une adresse IMPRIMÉE sur des étiquettes, donc publique par
+      // destination, et `routes-perennes.spec.ts` la verrouille.
+      expect(chemins).toHaveLength(8);
   });
 
 

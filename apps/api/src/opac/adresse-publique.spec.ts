@@ -67,6 +67,39 @@ describe('🔴 L’adresse publique de la notice', () => {
     );
   });
 
+  it('⭐⭐ AVEC le slug : l’adresse porte la forme PÉRENNE (bascule du 11/10/2026)', () => {
+    // Le web sert `/opac/resoudre/<identifiant>` depuis le 11 octobre 2026 —
+    // 308 vers `/opac/<id>`, mesuré sans cookie par la session front. Jusque-là
+    // cette fonction rendait le repli pour TOUT LE MONDE, et les six cas
+    // ci-dessus ne l'exerçaient que lui.
+    expect(adressePubliqueDeLaNotice('https://gafeso.org', 'bib.uo.bf', 'r1', 'uo')).toBe(
+      `https://bib.uo.bf/opac/resoudre/${encodeURIComponent('oai:uo:r1')}`,
+    );
+    // ⚠ Et l'identifiant est bien celui de la SOURCE UNIQUE, pas une chaîne
+    // recomposée ici : une seconde écriture divergerait au premier changement
+    // de forme.
+    expect(adressePubliqueDeLaNotice('https://gafeso.org', 'bib.uo.bf', 'r1', 'uo')).toContain(
+      encodeURIComponent(construireIdentifiant('uo', 'r1')),
+    );
+  });
+
+  it('⭐ l’hôte de l’ÉCOLE s’applique AUSSI à la forme pérenne', () => {
+    // Sinon la bascule aurait rouvert le défaut que le cas ci-dessus ferme :
+    // publier à chaque école l'adresse d'une autre.
+    expect(
+      adressePubliqueDeLaNotice('http://localhost:3000', 'zinda.localhost', 'r1', 'zinda'),
+    ).toBe(`http://zinda.localhost:3000/opac/resoudre/${encodeURIComponent('oai:zinda:r1')}`);
+  });
+
+  it('⚠ sans slug, le REPLI reste `/opac/<id>` — et il est servi pour toujours', () => {
+    // Ce n'est pas une transition : les DEUX adresses restent valides, parce
+    // qu'un QR imprimé ne se reprend pas. Le web le verrouille de son côté
+    // (`routes-perennes.spec.ts`).
+    expect(adressePubliqueDeLaNotice('https://gafeso.org', 'bib.uo.bf', 'r1')).toBe(
+      'https://bib.uo.bf/opac/r1',
+    );
+  });
+
   it('⚠ sans domaine déclaré, l’instance mono-établissement est EXACTE', () => {
     expect(adressePubliqueDeLaNotice('https://gafeso.org', null, 'r1')).toBe(
       'https://gafeso.org/opac/r1',
@@ -100,5 +133,31 @@ describe('🔴 L’adresse publique de la notice', () => {
     const idp = construireIdentifiant('zinda', 'r1');
     expect(idp).toBe('oai:zinda:r1');
     expect(idp).not.toMatch(/https?:|localhost|\./);
+  });
+
+  it('⭐ LE SITE D’APPEL passe le slug — sinon la bascule est muette', () => {
+    // ⚠ POURQUOI UN CAS DE FORME, alors que les cas ci-dessus mesurent la
+    // fonction : le quatrième argument est OPTIONNEL. Quelqu'un qui le retire
+    // de l'appel obtient le repli — pour tout le monde, en silence, et les
+    // 141 cas de l'OPAC restent verts. C'est exactement « une mutation qui ne
+    // casse rien parce qu'il n'y a PAS de test », et la propriété ne vit pas
+    // dans la fonction : elle vit dans ce qu'on lui PASSE.
+    const SERVICE = readFileSync(join(__dirname, 'opac.service.ts'), 'utf-8');
+    expect(SERVICE.length, 'témoin : le fichier a bien été LU').toBeGreaterThan(2000);
+
+    const appels = SERVICE.split('\n').filter((l) => /adressePubliqueDeLaNotice\(/.test(l));
+    // ⚠ TÉMOIN DE COMPTE : un motif qui ne trouve rien rendrait ce cas vert sur
+    // l'ensemble vide. Un appel de plus demain convoque quelqu'un ici.
+    expect(appels.length, 'le relevé doit voir l’appel').toBe(1);
+
+    for (const appel of appels) {
+      expect(
+        appel,
+        'l’appel doit passer le slug en quatrième argument, sinon `publicUrl` ' +
+          'retombe sur `/opac/<id>` pour toutes les écoles',
+        // ⚠ `[^)]*` ne pouvait pas traverser le `)` de
+        // `this.domainePrincipal(slug)` — un motif qui accuse du code correct.
+      ).toMatch(/adressePubliqueDeLaNotice\(.*,\s*slug\s*\)\s*$/);
+    }
   });
 });
