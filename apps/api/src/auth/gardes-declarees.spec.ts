@@ -77,6 +77,15 @@ const PUBLIC_PAR_CONSTRUCTION: Record<string, string> = {
   // produise pas une requête que personne n'a voulue.
   'opac/opac.controller.ts :: Get provenances': 'provenance publique des notices moissonnées — aussi publique que les notices',
   'opac/opac.controller.ts :: Get resoudre/:identifiant': 'résolution publique d’un identifiant pérenne — même contrat que records/:id',
+  // ⚠ PUBLIQUE, ET ELLE DOIT L'ÊTRE : c'est l'adresse d'une étiquette collée
+  // dans un livre. Quelqu'un qui scanne au rayon n'est pas connecté, et lui
+  // demander de l'être ferait d'un QR public un QR réservé — ce qui est
+  // l'inverse de ce qu'on imprime.
+  //
+  // ⚠ Elle ne donne rien de plus que `records/:id` : c'est `recordDetail` qui
+  // répond, avec son `membersOnly` et son contrôle d'accès. La seule chose
+  // qu'elle AJOUTE est un refus — « ce livre est d'une autre bibliothèque ».
+  'opac/opac.controller.ts :: Get scan': 'reconnaissance publique d’une adresse scannée — rend records/:id, et refuse l’adresse d’une autre école',
 
   // Connexion et inscription : on ne peut pas exiger d'être connecté pour se
   // connecter.
@@ -405,7 +414,7 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
     expect(perimees, 'exceptions périmées').toEqual([]);
   });
 
-  it('⚠ l’inventaire COMPTE juste — 70 routes sans fonction, pas « au moins une »', () => {
+  it('⚠ l’inventaire COMPTE juste — 71 routes sans fonction, pas « au moins une »', () => {
     // Un témoin qui COMPTE, et non qui constate : c'est la forme qui signale ce
     // à quoi on n'a pas pensé. Si ce nombre bouge, quelqu'un a ajouté ou retiré
     // une route joignable sans fonction — et doit le dire.
@@ -432,8 +441,12 @@ describe('gardes déclarées — une route publique est un choix écrit', () => 
       //
     // ⚠ Les DEUX comptes bougent ensemble : l'un mesure ce qui EST, l'autre ce
     // qui est DÉCLARÉ. N'en changer qu'un rendrait le second silencieux.
-    expect(sansFonction.length).toBe(70);
-    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(70);
+    // ⚠ 70 → 71 le 11 octobre 2026 : `GET /opac/scan`, qui reconnaît une
+    // adresse scannée. Le compte a convoqué, et sa question était juste —
+    // cette route doit-elle être publique ? Oui : c'est l'adresse d'une
+    // étiquette collée dans un livre, et qui scanne au rayon n'est pas connecté.
+    expect(sansFonction.length).toBe(71);
+    expect(Object.keys(ROUTES_SANS_FONCTION).length).toBe(71);
   });
 });
 

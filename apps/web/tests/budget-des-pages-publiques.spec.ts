@@ -56,7 +56,32 @@ const MANIFESTE = resolve(RACINE, '.next/app-build-manifest.json');
  * fait, et c'est une dette nommée et non un oubli.
  */
 const DEMANDE = process.env.BUDGET === '1';
-const CONSTRUIT = DEMANDE && existsSync(MANIFESTE);
+/**
+ * ⚠⚠ LE MANIFESTE SEUL NE DIT PAS SI LE BUILD EST DE PRODUCTION — et c'est un
+ * défaut de ce garde, trouvé le 11 octobre 2026 sur lui-même.
+ *
+ * `next dev` écrit AUSSI `.next/app-build-manifest.json`. J'avais donc bâti en
+ * production, mesuré, puis relancé le serveur de développement — qui a ÉCRASÉ
+ * `.next/`. Relancé avec `BUDGET=1`, ce garde a annoncé que l'accueil pesait
+ * **2 112 470 o** et réclamé 42 secondes de 3G : il mesurait les fragments NON
+ * MINIFIÉS du mode développement.
+ *
+ * ⭐ Mon témoin du CSS l'a attrapé — « le CSS pèse 0 » — mais son message
+ * envoyait au MAUVAIS endroit : « le relevé ne regarde pas au bon endroit ».
+ * Le relevé regardait très bien ; c'est la MATIÈRE qui n'était pas la bonne.
+ * Un message d'échec doit dire quoi faire, et celui-là faisait chercher un
+ * défaut dans l'instrument.
+ *
+ * ⚠ C'est « l'instrument qui se trompe sur ce qu'il MESURE », dans sa forme la
+ * plus bête : il lisait le bon fichier, dans le mauvais build.
+ *
+ * `BUILD_ID` discrimine, mesuré dans les deux états : absent en développement,
+ * présent après `next build`.
+ */
+const BUILD_ID = resolve(RACINE, '.next/BUILD_ID');
+const CONSTRUIT = DEMANDE && existsSync(MANIFESTE) && existsSync(BUILD_ID);
+/** Un manifeste SANS `BUILD_ID` : c'est `next dev` qui a écrasé le build. */
+const DEV_A_ECRASE = DEMANDE && existsSync(MANIFESTE) && !existsSync(BUILD_ID);
 
 /**
  * LES BUDGETS, EN OCTETS GZIP (JS + CSS).
@@ -80,6 +105,57 @@ const CONSTRUIT = DEMANDE && existsSync(MANIFESTE);
  * | /opac | 138 232 | 139 414 | +1 182 | le filtre « Lecture en ligne » |
  * | fiche | 139 408 | 142 069 | +2 661 | la COUVERTURE COMPOSÉE |
  *
+ * ## ⚠ LOT QR, 11 OCTOBRE 2026 — et la marge de la fiche devient ÉTROITE
+ *
+ * | page | avant | après | écart | cause |
+ * |---|---|---|---|---|
+ * | accueil | 148 793 | 149 177 | +384 | fragment partagé |
+ * | /opac | 139 414 | 139 798 | +384 | fragment partagé |
+ * | **fiche** | 142 437 | **147 367** | **+4 930** | `uqr` (4 482 mesurés) + le bloc |
+ * | affiche | — | 113 959 | neuve | composant SERVEUR |
+ *
+ * ⚠ RÉÉCRITES LE 11 OCTOBRE, APRÈS L'APERÇU DES ÉTIQUETTES : +377 à +431 sur
+ * les quatre pages, par croissance du fragment PARTAGÉ. L'écran d'aperçu
+ * lui-même (140 793 o) est du PERSONNEL et n'entre pas dans ce garde.
+ *
+ * ⚠ **IL NE RESTE QUE 2 202 o À LA FICHE.** C'est dit ici parce que la prochaine
+ * addition à cet écran est un ARBITRAGE, plus une addition : il faudra choisir
+ * entre alléger le socle, relever le budget en disant ce que ça coûte en 3G, ou
+ * découper en morceaux chargés à la demande — ce qui échange des octets contre
+ * une requête.
+ *
+ * ⚠ RÉÉCRITE UNE FOIS DE PLUS LE 11 OCTOBRE : la fiche passe à **142 437**
+ * (+368). Le composant de couverture est désormais importé par DEUX routes — la
+ * fiche et l'étagère hors ligne — et Next l'a déplacé dans un fragment
+ * PARTAGÉ. L'accueil et `/opac` n'ont pas bougé d'un octet.
+ *
+ * ## ⭐⭐ ET LE POIDS QUE PAIE VRAIMENT UN VISITEUR N'A JAMAIS EU DE BUDGET
+ *
+ * Mesuré le 11 octobre 2026 sur un `next build` + `next start`, en lisant
+ * l'en-tête `Content-Encoding` du serveur plutôt qu'en le supposant :
+ *
+ * | page | HTML gzip | fragments | TOTAL gzip | budget des FRAGMENTS | 3G |
+ * |---|---|---|---|---|---|
+ * | accueil | 15 874 | 148 793 | **164 667** | 160 000 | 3,3 s |
+ * | /opac | 4 457 | 139 414 | **143 871** | 150 000 | 2,9 s |
+ * | fiche | 7 428 | 142 437 | **149 865** | 150 000 | 3,0 s |
+ *
+ * ⚠ **CE N'EST PAS « LE BUDGET DE L'ACCUEIL EST DÉPASSÉ », et confondre les
+ * deux serait exactement l'erreur que ce dépôt nomme** — comparer un total à un
+ * budget qui, par construction, ne couvre que les fragments. L'en-tête de ce
+ * fichier le dit depuis le premier jour : « Le document HTML n'y est PAS ».
+ * Les trois budgets de fragments tiennent, et ils tiennent au chiffre près.
+ *
+ * ⭐ Ce que la mesure établit est autre chose : **le nombre qu'un visiteur paie
+ * réellement n'est gardé par rien.** 164 667 o sur l'accueil, et le document
+ * HTML y pèse 15 874 o gzip — presque quatre fois celui de `/opac`, parce que
+ * l'accueil porte le contenu éditorial de l'école.
+ *
+ * ⚠ NON CORRIGÉ, et c'est une décision : aucun seuil n'a été dépassé, donc il
+ * n'y a pas de défaut avéré. Donner un budget au TOTAL est un arbitrage de
+ * produit — il faut choisir le chiffre, et le choisir engage ce qu'on refusera
+ * demain. Rapporté à Jean le 11 octobre 2026.
+ *
  * ⭐ LE PRIX DE LA COUVERTURE, MESURÉ : 2 661 o gzip de JS sur la fiche, plus
  * **326 o gzip de HTML** (pesé en retirant le SVG du document servi : 971 o
  * brut). Soit ≈ 3 Ko pour **zéro requête**.
@@ -94,9 +170,21 @@ const CONSTRUIT = DEMANDE && existsSync(MANIFESTE);
  * lui qui décide, et il n'a pas bougé du lot.
  */
 const BUDGETS: Record<string, { cle: string; mesure: number; budget: number }> = {
-  'accueil /': { cle: '/page', mesure: 148_793, budget: 160_000 },
-  'résultats /opac': { cle: '/opac/page', mesure: 139_414, budget: 150_000 },
-  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 142_069, budget: 150_000 },
+  'accueil /': { cle: '/page', mesure: 149_554, budget: 160_000 },
+  'résultats /opac': { cle: '/opac/page', mesure: 140_175, budget: 150_000 },
+  'fiche /opac/[id]': { cle: '/opac/[id]/page', mesure: 147_798, budget: 150_000 },
+  /**
+   * ⭐ L'AFFICHE A4, ENTRÉE DANS CE GARDE LE 11 OCTOBRE 2026 — et elle y entre
+   * parce qu'elle est PUBLIQUE. Le trou était déjà rapporté deux jours plus
+   * tôt sous une autre forme : « le nombre qu'un visiteur paie n'est gardé par
+   * rien ». Une page publique neuve sans budget en est le cas le plus simple,
+   * et il ne coûtait qu'une ligne.
+   *
+   * Elle est plus LÉGÈRE que les trois autres (113 959 o) : c'est un composant
+   * SERVEUR, il n'embarque donc ni la fiche cliente ni ses dépendances. Son
+   * budget suit la même marge que les autres, ≈ 11 Ko.
+   */
+  'affiche /affiche/[id]': { cle: '/affiche/[id]/page', mesure: 114_050, budget: 125_000 },
 };
 
 /** ⚠ Le socle est COMMUN aux trois : il se garde une fois, et c'est là que tout se joue. */
@@ -152,6 +240,20 @@ describe('le budget de poids des pages publiques', () => {
     // ⚠ PORTE OUVERTE ET PAS DE BUILD = ROUGE. Quelqu'un a demandé la mesure et
     // ne l'a pas obtenue : la taire serait exactement « un test qui ne peut pas
     // mesurer et qui passe quand même ».
+    /*
+     * ⚠ DEUX REFUS DISTINCTS, parce que les deux gestes ne sont pas les mêmes :
+     * « il n'y a pas de build » se répare en construisant ; « le serveur de
+     * développement a écrasé le build » se répare en l'ARRÊTANT d'abord, sans
+     * quoi il réécrira `.next/` pendant la mesure suivante.
+     */
+    expect(
+      DEV_A_ECRASE,
+      '⚠ `.next/` porte un manifeste SANS `BUILD_ID` : c’est un build de ' +
+        'DÉVELOPPEMENT. `next dev` possède ce dossier et l’a écrasé — mesurer ' +
+        'ici pèserait les fragments NON MINIFIÉS, et le chiffre serait faux ' +
+        'de plus d’un ORDRE DE GRANDEUR (2,1 Mo mesurés une fois, contre 149 Ko). ' +
+        'ARRÊTEZ le serveur de développement, puis `npm run budget`.',
+    ).toBe(false);
     expect(
       CONSTRUIT,
       'BUDGET=1 demandé mais aucun manifeste de build : lancez `npm run budget`, ' +

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { OpacService } from './opac.service';
 
 /**
@@ -68,8 +69,7 @@ function service(
       {} as never,
       {} as never,
       { provenance: async () => provenance } as never,
-      { enregistrer: async () => true } as never
-    ),
+      { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService),
   };
 }
 
@@ -81,6 +81,11 @@ const ORDRE_ANONYME = [
   'category', 'createdAt', 'updatedAt', 'contributors', 'keywords',
   'items', 'availability', 'digitalCopy', 'membersOnly', 'provenance',
   'hasDigital', 'offlineReady',
+  // ⭐ 11/10/2026 — 28 → 30. L'adresse publique de la notice et son identifiant
+  // pérenne. C'est le QR imprimé sur l'étiquette d'un exemplaire qui les
+  // demande : il doit mener à une page, et il doit dire DE QUOI il parle même
+  // quand le serveur a déménagé.
+  'publicUrl', 'identifiantPerenne',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
@@ -110,7 +115,7 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
   // brief P7 dit que ce qui arrive par moissonnage reste marqué comme tel, et
   // cela ne dépend pas de qui regarde. C'est même l'anonyme qu'on renvoie vers
   // l'école d'origine, puisque le fichier n'est pas ici.
-  it('⚠ visiteur ANONYME : 28 clés, dans CET ordre', async () => {
+  it('⚠ visiteur ANONYME : 30 clés, dans CET ordre', async () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);

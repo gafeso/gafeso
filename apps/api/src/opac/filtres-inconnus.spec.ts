@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { OpacService } from './opac.service';
 import { NouveautesDto } from './dto/nouveautes.dto';
@@ -34,7 +35,8 @@ function fauxMoteur(parAppel: { totalHits: number; facettes?: Record<string, Rec
       {} as never,
       { forTenant: () => ({ biblioRecord: { count: async () => 0 } }) } as never,
       { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never
+      { enregistrer: async () => true } as never,
+      { get: () => 'http://localhost:3000' } as unknown as ConfigService,
     ),
   };
 }

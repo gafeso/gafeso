@@ -1,0 +1,344 @@
+PROVENANCE — ce texte n'est pas de nous, et ce fichier doit le dire.
+Œuvre     : De l’esprit des lois, livre XXII
+Auteur    : Montesquieu (mort en 1755)
+Statut    : DOMAINE PUBLIC — l'auteur est mort il y a plus de 70 ans.
+Source    : https://fr.wikisource.org/wiki/De_l’esprit_des_lois_(éd._Nourse)/Livre_22
+Moissonné : 2026-10-11, action=parse, blocs `ws-noexport` retirés.
+Licence   : l'ŒUVRE est dans le domaine public. Wikisource diffuse sa
+            transcription sous CC BY-SA ; la page de crédits du PDF
+            engendré cite donc la source et l'édition.
+---
+LES peuples qui ont peu de marchandises pour le commerce, comme les sauvages, & les peuples policés qui n’en ont que deux ou trois especes, négocient par échange. Ainsi les caravanes des Maures qui vont à Tombouctou, dans le fond de l’Afrique, troquer du sel contre de l’or, n’ont pas besoin de monnoie. Le Maure met son sel dans un monceau ; le Negre, sa poudre dans un autre ; s’il n’y a pas assez d’or, le Maure retranche de son sel, ou le Negre ajoute de son or, jusqu’à ce que les deux parties conviennent.
+
+Mais, lorsqu’un peuple trafique sur un très-grand nombre de marchandises, il faut nécessairement une monnoie ; parce qu’un métal facile à transporter épargne bien des fraix, que l’on seroit obligé de faire, si l’on procédoit toujours par échange.
+
+Toutes les nations ayant des besoins réciproques, il arrive souvent que l’une veut avoir un très-grand nombre de marchandises de l’autre, & celle-ci très-peu des siennes ; tandis qu’à l’égard d’une autre nation, elle est dans un cas contraire. Mais, lorsque les nations ont une monnoie, & qu’elles procedent par vente & par achat, celles qui prennent plus de marchandises se soldent, ou paient l’excédent avec de l’argent : & il y a cette différence, que, dans le cas de l'achat, le commerce se fait à proportion des besoins de la nation qui demande le plus : & que, dans l’échange, le commerce se fait seulement dans l’étendue des besoins de la nation qui demande le moins ; sans quoi, cette derniere seroit dans l’impossibilité de solder son compte.
+
+CHAPITRE II. 
+
+De la nature de la monnoie.
+
+LA monnoie est un signe qui représente la valeur de toutes les marchandises. On prend quelque métal, pour que le signe soit durable; qu’il se consomme peu à l’usage ; & que, sans se détruire, il soit capable de beaucoup de divisions. On choisit un métal précieux, pour que le signe puisse aisément se transporter. Un métal est très-propre à être une mesure commune, parce qu’on peut aisément le réduire au même titre. Chaque état y met son empreinte, afin que la forme réponde du titre & du poids, & que l’on connoisse l’un & l’autre par la seul inspection.
+
+Les Athéniens, n’ayant point l’usage des métaux, se servirent de bœufs, & les Romains de brebis : mais un bœuf n’est pas la même chose qu’un autre bœuf, comme une pièce de métal peut être la même qu’une autre.
+
+Comme l’argent est le signe des valeurs des marchandises, le papier est un signe de la valeur de l’argent ; &, lorsqu’il est bon, il le représente tellement, que, quand à l’effet, il n’y a point de différence.
+
+De même que l’argent est un signe d’une chose, & la représente ; chaque chose est un signe de l’argent, & le représente : & l’état est dans la prospérité, selon que, d’un côté, l’argent représente bien toutes choses ; & que, d’un autre, toutes choses représente bien l’argent, & qu’ils sont signes les uns des autres ; c’est-à-dire, que, dans leur valeur relative, on peut avoir l’un sitôt que l’on a l’autre. Cela n’arrive jamais que dans un gouvernement modéré, mais n’arrive pas toujours dans un gouvernement modéré : par exemple, si les loix favorisent un débiteur injuste, les choses qui lui appartiennent ne représentent point l’argent, & n’en sont point un signe. A l’égard du gouvernement despotique, ce seroit un prodige si les choses y représenteroient leur signe : la tyrannie & la méfiance font que tout le monde y enterre son argent : les choses n’y représentent donc point l’argent. 
+
+Quelquefois les législateurs ont employé un tel art, que non-seulement les choses représentoient l’argent par leur nature, mais qu’elles devenoient monnoie comme l’argent même. César, dictateur, permit aux débiteurs de donner paiement, à leurs créanciers, des fonds de terre au prix qu’ils valoient avant la guerre civile. Tibere ordonna que ceux qui voudroient de l’argent, en auroient du trésor public, en obligeant des fonds pour le double. Sous César, les fonds de terre furent la monnoie qui paya toutes les dettes ; sous Tibere, dix mille sesterces en fonds devinrent une monnoie commune, comme cinq mille sesterces en argent.
+
+La grande charte d’Angleterre défend de saisir les terres ou le revenus d’un débiteur, lorsque ses biens mobiliers ou personnels suffisent pour le paiement, & qu’il offre de les donner : pour lors, tous les biens d’un Anglois représentoient de l’argent.
+
+Les loix des Germains apprécierent en argent les satisfactions pour les torts que l’on avoit faits, & pour les peines des crimes. Mais, comme il y avoit très-peu d’argent dans le pays, elles réapprécierent l’argent en denrées ou en bétail. Ceci se trouve fixé dans la loi des Saxons, avec de certaines différences, suivant l’aisance & la commodité des divers peuples. D’abord la loi déclare la valeur du sou en bétail : le sou de deux trémisses se rapportoit à un bœuf de douze mois, ou à une brebis avec son agneau ; celui de trois trémisses valoit un bœuf de seize mois. Chez ces peuples, la monnoie devenoit bétail, marchandise ou denrée ; & ces choses devenoient monnoie.
+
+Non-seulement l’argent est un signes des choses ; il est encore un signe de l’argent, & représente l’argent, comme nous le verrons au chapitre du change. 
+
+CHAPITRE III. 
+
+Des monnoies idéales.
+
+IL y a des monnoies réelles & des monnoies idéales. Les peuples policés, qui se servent presque tous de monnoies idéales, ne le font que parce qu’ils ont converti leurs monnoies réelles en idéales. D’abord, leurs monnoies réelles font un certains poids & un certain titre de quelque métal. Mais bientôt la mauvaise foi ou le besoin font qu’on retranche une partie du métal de chaque pièce de monnoie, à laquelle on laisse le même nom : par exemple, d’une piece du poids d’une livre d’argent, on retranche la moitié de l’argent, & on continuer de l’appeller livre ; la piece, qui étoit une vingtieme partie de la livre d’argent, on continue de l’appeller sou, quoiqu’elle ne soit plus la vingtieme partie de cette livre. Pour lors, la livre est une livre idéale, & le sou un sou idéal ; ainsi des autres subdivisions : & cela peut aller au point que ce qu’on appellera livre, ne sera plus qu’une très-petite portion de la livre ; ce qui la rendra encore plus idéale. Il peut même arriver que l’on ne fera plus de piece de monnoie qui vaille précisément une livre, & qu’on ne fera pas non plus de piece qui vaille un sou : pour lors, la livre & le sou seront des monnoies purement idéales. On donnera, à chaque piece de monnoie, la dénomination d’autant de livres & d’autant de sous que l’on voudra ; la variation pourra être continuelle, parce qu’il est difficile de changer la chose même.
+
+Pour ôter la source des abus, ce sera une très-bonne loi, dans tous les pays où l’on voudra faire fleurir le commerce, que celle qui ordonnera qu’on emploiera des monnoies réelles, & que l’on ne fera point d’opération qui puisse les rendre idéales. 
+
+Rien ne doit être si exempt de variation, que ce qui est la mesure commune de tout.
+
+Le négoce, par lui-même, est très-incertain ; & c’est un grand mal d’ajouter une nouvelle incertitude à celle qui est fondée sur la nature de la chose.
+
+CHAPITRE IV. 
+
+De la quantité de l’or & de l’argent.
+
+LORSQUE les nations policées sont les maîtresses du monde, l’or & l’argent augmentent tous les jours, soit qu’elles le tirent de chez elles, soit qu’elles l’aillent chercher là où il est. Il diminue, au contraire, lorsque les nations barbares prennent le dessus. On sçait quelle fut la rareté de ces métaux, lorsque les Goths & les Vandales d’un côté, les Sarrasins & les Tartares de l’autre, eurent tout envahi.
+
+CHAPITRE V. 
+
+Continuation du même sujet.
+
+L’ARGENT tiré des mines de l’Amérique, transporté en Europe, de-là encore envoyé en Orient, a favorisé la navigation de l’Europe ; c’est une marchandise de plus que l’Europe reçoit en troc de l’Amérique, & qu’elle envoie en troc aux Indes. Une plus grande quantité d’or & d’argent est donc favorable, lorsqu’on regarde ces métaux comme marchandise : elle ne l’est point, lorsqu’on les regarde comme signe ; parce que leur abondance choque leur qualité de signe, qui est beaucoup fondée sur la rareté.
+
+Avant la premiere guerre punique, le cuivre étoit à l’argent, comme 960 est à 1 ; il est aujourd’hui, à peu près, comme 73½ est à 1. Quand la proportion seroit comme elle étoit autrefois, l’argent n’en feroit que mieux sa fonction de signe.
+
+CHAPITRE VI. 
+
+Par quelle raison le prix de l’usure diminua de la moitié, lors de la découverte des Indes.
+
+L’YNCA Garcilasso dit qu’en Espagne, après la conquête des Indes, les rentes, qui étoient au denier dix, tomberent au denier vingt. Cela devoit être ainsi. Une grande quantité d’argent fut tout-à-coup portée en Europe : bientôt moins de personnes eurent besoin d’argent ; le prix de toute chose augmenta, & celui de l’argent diminua : la proportion fut donc rompue, toutes les anciennes dettes furent éteintes. On peut se rappeller le temps du systême, où toutes les choses avoient une grande valeur, excepté l’argent. Après la conquête des Indes, ceux qui avoient de l’argent furent obligés de diminuer le prix ou le louage de leur marchandise, c’est-à-dire, l’intérêt.
+
+Depuis ce temps, le prêt n’a pu revenir à l’ancien taux, parce que la quantité de l’argent a augmenté, toutes les années, en Europe. D’ailleurs, les fonds publics de quelques états, fondés sur les richesses que le commerce leur a procurées, donnant un intérêt très-modique, il a fallu que les contrats des particuliers se réglassent là-dessus. Enfin, le change ayant donné aux hommes une facilité singuliere de transporter l’argent d’un pays à l’autre, l’argent n’a pu être rare dans un lieu, qu’il n’en vînt de tous côtés de ceux où il étoit commun.
+
+CHAPITRE VII. 
+
+Comment le prix des choses se fixe dans la variation des richesses de signe.
+
+L’ARGENT est le prix des marchandises ou denrées. Mais, comment se fixera ce prix ? c’est-à-dire, par quelle portion d’argent chaque chose sera-t-elle représentée ?
+
+Si l’on compare la masse de l’or & de l’argent qui est dans le monde, avec la somme des marchandises qui y sont, il est certain que chaque denrée ou marchandise, en particulier, pourra être comparée à une certaine portion de la masse entiere de l’or & de l’argent. Comme le total de l’une est au total de l’autre, la partie de l’une sera à la partie de l’autre. Supposons qu’il n’y ait qu’une seule denrée ou marchandise dans le monde, ou qu’il n’y en ai qu’une seule qui s’achete, & qu’elle se divise comme l’argent ; cette partie de cette marchandise répondra à une partie de la masse de l’argent ; la moitié du total de l’une, à la moitié du total de l’autre ; la dixieme, la centieme, la millieme de l’une, à la dixieme, à la centieme, à la millieme de l’autre. Mais, comme ce qui forme la propriété parmi les hommes, n’est pas tout à la fois dans le commerce ; & que les métaux ou les monnoies, qui en sont les signes, n’y sont pas aussi dans le même temps ; les prix se fixeront en raison composée du total des choses avec le total des signes ; & celle du total des choses qui sont dans le commerce, avec le total des signes qui y sont aussi : &, comme les choses qui ne sont pas dans le commerce aujourd’hui peuvent y être demain, & que les signes qui n’y sont point aujourd’hui peuvent y rentrer tout de même, l’établissement du prix des choses dépend toujours fondamentalement de la raison du total des choses au total des signes.
+
+Ainsi le prince ou le magistrat ne peuvent pas plus taxer la valeur des marchandises, qu’établir, par une ordonnance, que le rapport d’un à dix est égal à celui d’un à vingt. Julien, ayant baissé les denrées à Antioche, y causa une affreuse famine.
+
+CHAPITRE VIII. 
+
+Continuation du même sujet.
+
+LES noirs de la côte d’Afrique ont un signe des valeurs, sans monnoie ; c’est un signe purement idéal, fondé sur le degré d’estime qu’ils mettent dans leur esprit à chaque marchandise, à proportion du besoin qu’ils en ont. Une certaine denrée ou marchandise vaut trois macutes ; une autre, six macutes ; une autre, dix macutes : c’est comme s’ils disoient simplement trois, six, dix. Le prix se forme par la comparaison qu’ils ont de toutes les marchandises entre elles : pour lors, il n’y a point de monnoie particuliere, mais chaque portion de marchandise est monnoie de l’autre.
+
+Transportons, pour un moment, parmi nous, cette maniere d’évaluer les choses ; et joignons-la avec la nôtre : toutes les marchandises & denrées du monde, ou bien toutes les marchandises ou denrées d’un état en particulier considéré comme séparé de tous les autres, vaudront un certain nombre de macutes ; &, divisant l’argent de cet état en autant de parties qu’il y a de macutes, une partie divisée de cet argent sera le signe d’une macute. 
+
+Si l’on suppose que la quantité de l’argent d’un état double, il faudra, pour une macute, le double de l’argent : mais si, en doublant l’argent, vous doublez aussi les macutes, la proportion restera telle qu’elle étoit avant l’un & l’autre doublement.
+
+Si, depuis la découverte des Indes, l’or & l’argent ont augmenté en Europe à raison d’un à vingt, le prix des denrées & marchandises auroit dû monter en raison d’un à vingt : mais si, d’un autre côté, le nombre des marchandises a augmenté comme un à deux, il faudra que le prix de ces marchandises & denrées ait haussé, d’un côté, à raison d’un à vingt, & qu’il ait baissé en raison d’un à deux ; & qu’il ne soit, par conséquent, qu’en raison d’un à dix.
+
+La quantité des marchandises & denrées croît par une augmentation de commerce ; l’augmentation de commerce, par une augmentation d’argent qui arrive successivement ; & par de nouvelles communications avec de nouvelles terres & de nouvelles mers, qui nous donnent de nouvelles denrées & de nouvelles marchandises.
+
+CHAPITRE IX. 
+
+De la rareté relative de l’or & de l’argent.
+
+OUTRE l’abondance & la rareté positive de l’or & de l’argent, il y a encore une abondance & une rareté relative d’un de ces métaux l’autre.
+
+L’avarice garde l’or & l’argent ; parce que, comme elle ne veut point consommer, elle aime des signes qui ne se détruisent point. Elle aime mieux garder l’or que l’argent ; parce qu’elle craint toujours de perdre, & qu’elle peut mieux cacher ce qui est en plus petit volume. L’or disparoît donc quand l’argent est commun, parce que chacun en a pour le cacher ; il reparoît quand l’argent est rare, parce qu’on est obligé de le retirer de ses retraites. 
+
+C’est donc une regle : l’or est commun quand l’argent est rare, & l’or est rare quand l’argent est commun. Cela fait sentir la différence de l’abondance & de la rareté relative, d’avec l’abondance & la rareté réelle ; chose dont je vais beaucoup parler.
+
+CHAPITRE X. 
+
+Du change.
+
+C’EST l’abondance & la rareté relative des monnoies des divers pays, qui forment ce qu’on appelle le change.
+
+Le change est une fixation de la valeur actuelle & momentanée des monnoies.
+
+L’argent, comme métal, a une valeur, comme toutes les autres marchandises ; & il a encore une valeur qui vient de ce qu’il est capable de devenir le signe des autres marchandises : &, s’il n’étoit qu’une simple marchandise, il ne faut pas douter qu’il ne perdît pas beaucoup de son prix.
+
+L’argent, comme monnoie, a une valeur que le prince peut fixer dans quelques rapports, & qu’il ne sçauroit fixer dans d’autres.
+
+Le prince établit une proportion entre une quantité d’argent comme métal, & la même quantité comme monnoie : 2°. Il fixe celle qui est entre divers métaux employés à la monnoie : 3°. Il établit le poids & le titre de chaque piece de monnoie : enfin, il donne à chaque piece cette valeur idéal dont j’ai parlé. J’appellerai la valeur de la monnoie, dans ces quatre rapports, valeur positive, parce qu’elle peut être fixée par une loi.
+
+Les monnoies de chaque état ont, de plus, une valeur relative, dans le sens qu’on les compare avec les autres monnoies des autres pays : c’est cette valeur relative que le change établit : elle dépend beaucoup de la valeur positive : elle est fixée par l’estime la plus générale des négocians, & ne peut l’être par l’ordonnance du prince ; parce qu’elle varie sans cesse, & dépend de mille circonstances.
+
+Pour fixer la valeur relative, les diverses nations se régleront beaucoup sur celle qui a le plus d’argent. Si elle a autant d’argent que toutes les autres ensemble, il faudra bien que chacune aille se mesurer avec elle ; ce qui fera qu’elles se régleront, à peu près, entre elles comme elles se sont mesurées avec la nation principale.
+
+Dans l’état actuel de l’univers, c’est la Hollande qui est cette nation dont nous parlons. Examinons le change par rapport à elle.
+
+Il y a, en Hollande, une monnoie qu’on appelle un florin : le florin vaut vingt sous, ou quarante demi sous, ou gros. Pour simplifier les idées, imaginons qu’il n'y ait point de florins en Hollande, & qu’il n’y ait que des gros : un homme qui aura mille florins aura quarante mille gros ; ainsi du reste. Or, le change avec la Hollande consiste à sçavoir combien vaudra de gros chaque piece de monnoie des autres pays ; &, comme l’on compte ordinairement en France par écus de trois livres, le change demandera combien un écu de trois livres vaudra de gros. Si le change est à cinquante-quatre, l’écu de trois livres vaudra cinquante-quatre gros ; s’il est à soixante, il vaudra soixante gros ; si l’argent est rare en France, l’écu de trois livres vaudra plus de gros ; s’il est en abondance, il vaudra moins de gros.
+
+Cette rareté ou cette abondance, d’où résulte la mutation du change, n’est pas la rareté ou l’abondance réelle ; c’est une rareté ou une abondance relative : par exemple, quand la France a plus besoin d’avoir des fonds en Hollande, que les Hollandois n’ont besoin d’en avoir en France, l’argent est appellé commun en France, & rare en Hollande ; & vice versâ. 
+
+Supposons que le change avec la Hollande soit à cinquante-quatre. Si la France & la Hollande ne composoient qu’une ville, on seroit comme l’on fait quand on donne la monnoie d’un écu : le François tireroit de sa poche trois livre, & le Hollandois tireroit de la sienne cinquante-quatre gros. Mais, comme il y a de la distance entre Paris & Amsterdam, il faut que celui qui me donne, pour mon écu de trois livres, cinquante-quatre gros qu’il a en Hollande, me donne une lettre de change de cinquante-quatre gros sur la Hollande. Il n’est plus ici question de cinquante-quatre gros, mais d’une lettre de cinquante-quatre gros. Ainsi, pour juger de la rareté ou de l’abondance de l’argent, il faut sçavoir s’il y a en France plus de lettres de cinquante-quatre gros destinées pour la France, qu’il n’y a d’écus destinés pour la Hollande. S’il y a beaucoup de lettres offertes par les Hollandois, & peu d’écus offerts par les François, l’argent est rare en France, & commun en Hollande ; & il faut que le change hausse, & que, pour mon écu, on me donne plus de cinquante-quatre gros ; autrement je ne le donnerois pas ; & vice versâ.
+
+On voit que les diverses opérations du change forment un compte de recette & de dépense qu’il faut toujours solder ; & qu’un état qui doit, ne s’acquitte pas plus avec les autres par le change, qu’un particulier ne paie une dette en changeant de l’argent.
+
+Je suppose qu’il n’y ait que trois états dans le monde, la France, l’Espagne & la Hollande ; que divers particuliers d’Espagne dussent en France la valeur de cent mille marcs d’argent, & que divers particuliers de France dussent en Espagne cent dix mille marcs ; & que quelque circonstance fît que chacun, en Espagne & en France, voulût tout-à-coup retirer son argent : que seroient les opérations du change ? Elles acquitteroient réciproquement ces deux nations de la somme de cent mille marcs : mais la France devroit toujours dix mille marcs en Espagne, & les Espagnols auroient toujours des lettres sur la France pour dix mille marcs ; & la France n’en auroit point du tout sur l’Espagne.
+
+Que si la Hollande étoit dans un cas contraire avec la France, & que, pour solde, elle lui dût 10000 marcs, la France pourroit payer l’Espagne de deux manieres, ou en donnant à ses créanciers en Espagne des lettres sur ses débiteurs de Hollande pour 10000 marcs, ou bien en envoyant 10000 marcs d’argent en espece en Espagne.
+
+Il suit de-là que, quand un état a besoin de remettre une somme d’argent dans un autre pays, il est indifférent, par la nature de la chose, que l’on y voiture de l’argent, ou que l’on prenne des lettres de change. L’avantage de ces deux manieres de payer dépend uniquement des circonstances actuelles : il faudra voir ce qui, dans ce moment, donnera plus de gros en Hollande, ou l’argent porté en especes, ou une lettre sur la Hollande de pareille somme.
+
+Lorsque même titre & même poids d’argent en France me rendent même poids & même titre d’argent en Hollande, on dit que le change est au pair. Dans l’état actuel des monnoies, le pair est, à peu près, à cinquante-quatre gros par écu : lorsque le change sera au-dessus de cinquante-quatre gros, on dira qu’il est haut ; lorsqu’il sera au-dessous, on dira qu’il est bas.
+
+Pour sçavoir si, dans une certaine situation du change, l’état gagne ou perd, il faut le considérer comme débiteur, comme créancier, comme vendeur, comme acheteur. Lorsque le change est plus bas que le pair, il perd comme débiteur, il gagne comme créancier ; il perd comme acheteur, il gagne comme vendeur. On sent bien qu’il perd comme débiteur : par exemple, la France devant à la Hollande un certain nombre de gros, moins son écu vaudra de gros, plus il lui faudra d’écus pour payer : au contraire, si la France est créanciere d’un certain nombre de gros, moins chaque écu vaudra de gros, plus elle recevra d’écus. L’état perd encore comme acheteur ; car il faut toujours le même nombre de gros pour acheter la même quantité de marchandises ; &, lorsque le change baisse, chaque écu de France donne moins de gros. Par la même raison, l’état gagne comme vendeur : je vends ma marchandise en Hollande le même nombre de gros que je la vendois ; j’aurai donc plus d’écus en France, lorsque avec cinquante gros je me procurerai un écu, que lorsqu’il m’en faudra cinquante-quatre pour avoir ce même écu : le contraire de tout ceci arrivera à l’autre état. Si la Hollande doit un certain nombre d’écus, elle gagnera ; &, si on lui doit, elle perdra ; si elle vend, elle perdra ; si elle achete, elle gagnera.
+
+Il faudra pourtant suivre ceci : lorsque le change est au-dessous du pair ; par exemple, s’il est à cinquante au lieu d’être à cinquante-quatre, il devroit arriver que la France, envoyant par le change cinquante-quatre mille écus en Hollande, n’acheteroit de marchandises que pour cinquante mille ; & que, d’un autre côté, la Hollande envoyant la valeur de cinquante mille écus en France, en acheteroit pour cinquante-quatre mille : ce qui seroit une différence de huit cinquante-quatriemes, c’est-à-dire, de plus d’un septieme de perte pour la France ; de sorte qu’il faudroit envoyer en Hollande un septieme de plus en argent ou en marchandises, qu’on ne faisoit lorsque le change étoit au pair : & le mal augmentant toujours, parce qu’une pareille dette feroit encore diminuer le change, la France seroit, à la fin, ruinée. Il semble, dis-je, que cela devroit être ; & cela n’est pas, à cause du principe que j’ai déjà établi ailleurs; qui est que les états tendent toujours à se mettre dans la balance, & à se procurer leur libération ; ainsi, ils n’empruntent qu’à proportion de ce qu’ils peuvent payer, & n’achetent qu’à mesure qu’ils vendent. Et, en prenant l’exemple ci-dessus, si le change tombe en France de cinquante-quatre à cinquante ; le Hollandois, qui achetoit des marchandises de France pour mille écus, & qui les payoit cinquante-quatre mille gros, ne les paieroit plus que cinquante mille, si le François y vouloit consentir : mais la marchandise de France haussera insensiblement, le profit se partagera entre le François & le Hollandois ; car, lorsqu’un négociant peut gagner, il partage aisément son profit : il se fera donc une communication de profit entre le François & le Hollandois. De la même maniere, le François, qui achetoit des marchandises de Hollande pour cinquante-quatre mille gros, & qui les payoit avec mille écus, lorsque le change étoit à cinquante-quatre, seroit obligé d’ajouter quatre cinquante-quatriemes de plus en écus de France, pour acheter les mêmes marchandises : mais le marchand François, qui sentira la perte qu’il seroit, voudra donner moins de la marchandise de Hollande ; il se sera donc une communication de perte entre le marchand François & le marchand Hollandois ; l’état se mettra insensiblement dans la balance ; & l’abaissement du change n’aura pas tous les inconvéniens qu’on devoit craindre.
+
+Lorsque le change est plus bas que le pair, un négociant peut, sans diminuer sa fortune, remettre ses fonds dans les pays étrangers ; parce qu’en les faisant revenir, il regagne ce qu’il a perdu : mais un prince, qui n’envoie, dans les pays étrangers, qu’un argent qui ne doit jamais revenir, perd toujours.
+
+Lorsque les négocians font beaucoup d’affaires dans un pays, le change y hausse infailliblement. Cela vient de ce qu’on y prend beaucoup de marchandises ; & l’on tire sur le pays étranger pour les payer.
+
+Si un prince fait un grand amas d’argent dans son état, l’argent y pourra être rare réellement, & commun relativement : par exemple, si, dans le même temps, cet état avoit à payer beaucoup de marchandises dans le pays étranger, le change baisseroit, quoique l’argent fût rare.
+
+Le change de toutes les places tend toujours à se mettre à une certaine proportion ; & cela est dans la nature de la chose même. Si le change de l’Irlande à l’Angleterre est plus bas que le pair, & celui de l’Angleterre à la Hollande soit aussi plus bas que le pair, celui de l’Irlande à la Hollande sera encore plus bas ; c’est-à-dire, en raison composée de celui de l’Irlande à l’Angleterre, & de celui de l’Angleterre, & de celui de l’Angleterre à la Hollande : car un Hollandois, qui peut faire venir ses fonds indirectement d’Irlande par l’Angleterre, ne voudra pas payer plus cher pour les faire venir directement. Je dis que cela devroit être ainsi : mais cela n’est pourtant pas exactement ainsi ; il y a toujours des circonstances qui font varier ces choses ; & la différence du profit qu’il y a à tirer par une place, ou à tirer par une autre, fait l’art ou l’habileté particuliere des banquiers, dont il n’est point question ici.
+
+Lorsqu’un état hausse sa monnoie ; par exemple, lorsqu’il appelle six livres ou deux écus ce qu’ils n’appelloit que trois livres ou un écu, cette dénomination nouvelle, qui n’ajoute rien de réel à l’écu, ne doit pas procurer un seul gros de plus par le change. On ne devroit avoir, pour les deux écus nouveaux, que la même quantité de gros que l’on recevoit pour l’ancien ; &, si cela n’est pas, ce n’est point l’effet de la fixation en elle-même, mais de celui qu’elle produit comme nouvelle, & de celui qu’elle a comme subite. Le change tient à des affaires commencées, & ne se met en regle qu’après un certain temps.
+
+Lorsqu’un état, au lieu de hausser simplement sa monnoie par une loi, fait une nouvelle refonte, afin de faire, d’une monnoie forte, une monnoie plus foible ; il arrive que, pendant le temps de l’opération, il y a deux sortes de monnoies ; la forte, qui est la vieille, & la foible, qui est la nouvelle : & comme la forte est décriée, & ne se reçoit qu’à la monnoie, & que, par conséquent, les lettres de change doivent se payer en especes nouvelles, il semble que le change devroit se régler sur l’espece nouvelle. Si, par exemple, l’affoiblissement, en France, étoit de moitié, & que l’ancien écu de trois livres donnât soixante gros en Hollande, le nouvel écu ne devroit donner que trente gros. D’un autre côté, il semble que le change devroit se régler sur la valeur de l’espece vieille ; parce que le banquier, qui a de l’argent, & qui prend des lettres, est obligé d’aller porter, à la monnoie, des especes vieilles, pour en avoir de nouvelles sur lesquelle il perd. Le change se mettra donc entre la valeur de l’espece nouvelle & celle de l’espece vieille. La valeur de l’espece vieille tombe, pour ainsi dire ; & parce qu’il y a déja, dans le commerce, de l’espece nouvelle ; & parce que le banquier ne peut pas tenir rigueur, ayant intérêt de faire sortir promptement l’argent vieux de sa caisse pour le faire travailler, & y étant même forcé pour faire ses paiemens. D’un autre côté, la valeur de l’espece nouvelle s’éleve, pour ainsi dire ; parce que le banquier, avec de l’espece nouvelle, se trouve dans une circonstance où nous allons faire voir qu’il peut, avec un grand avantage, s’en procurer de la vieille. Le change se mettra donc, comme j’ai dit, entre l’espece nouvelle & l’espece vieille. Pour lors, les banquiers ont du profit à faire sortir l’espece vieille de l’état ; parce qu’ils se procurent, par-là, le même avantage que donneroit un change réglé sur l’espece vieille, c’est-à-dire, beaucoup de gros en Hollande ; & qu’ils ont un retour en change, réglé entre l’espece nouvelle & l’espece vieille, c’est-à-dire, plus bas : ce qui procure beaucoup d’écus en France.
+
+Je suppose que trois livres d’espece vieille rendent, par le change actuel, quarante-cinq gros ; & qu’en transportant ce même écu en Hollande, on en ait soixante : mais, avec une lettre de quarante-cinq gros, on se procurera un écu de trois livres en France, lequel, transporté en especes vieilles en Hollande, donnera encore soixante gros : toute l’espece vieille sortira donc de l’état qui fait la refonte, & le profit en sera pour les banquiers. 
+Pour remédier à cela, on sera forcé de faire une opération nouvelle. L’état, qui fait la refonte, enverra lui-même une grande quantité d’espece vieille chez la nation qui regle le change ; &, s’y procurant un crédit, il fera monter le change au point, qu’on aura, à peu de chose près, autant de gros, par le change, d’un écu de trois livres, qu’on en auroit en faisant sortir un écu de trois livres en espece vieille hors du pays. Je dis à peu de chose près, parce que, lorsque le profit sera modique, on ne sera point tenté de faire sortir l’espece, à cause des fraix de la voiture, & des risques de la confiscation.
+
+Il est bon de donner une idée bien claire de ceci. Le sieur Bernard, ou tout autre banquier que l’état voudra employer, propose ses lettres sur la Hollande, & les donne à un, deux, trois gros plus haut que le change actuel ; il a fait une provision, dans les pays étrangers, par le moyen des especes vieilles qu’il a fait continuellement voiturer ; il a donc fait hausser le change au point que nous venons de dire : cependant, à force de donner ses lettres, il se saisit de toutes les especes nouvelles, & force les autres banquiers, qui ont des paiemens à faire, à porter leurs especes vieilles à la monnoie : & de plus, comme il a eu, insensiblement, tout l’argent, il contraint, à leur tour, les autres banquiers à lui donner des lettres à un change très-haut : le profit de la fin l’indemnise, en grande partie, de la perte du commencement.
+
+On sent que, pendant toute cette opération, l’état doit souffrir une violente crise. L’argent y deviendra très-rare ; 1°. parce qu’il faut en décrier la plus grande partie ; 2°. parce qu’il en faudra transporter une partie dans les pays étrangers ; 3°. parce que tout le monde le resserrera, personne ne voulant laisser au prince un profit qu’on espere avoir soi-même. Il est dangereux de la faire avec lenteur : il est dangereux de la faire avec promptitude. Si le gain qu’on suppose est immodéré, les inconvéniens augmentent à mesure.
+
+On a vu, ci-dessus, que, quand le change étoit plus bas que l’espece, il y avoit du profit à faire sortir l’argent : par la même raison, lorsqu’il est plus haut que l’espece, il y a du profit à le faire revenir.
+
+Mais il y a un cas où on trouve du profit à faire sortir l’espece, quoique le change soit au pair : c’est lorsqu’on l’emploie dans les pays étrangers, pour la faire remarquer ou refondre. Quand elle est revenue, on fait, soit qu’on l’emploie dans le pays, soit qu’on prenne des lettres pour l’étranger, le profit de la monnoie.
+
+S’il arrivoit que, dans un état, on fit une compagnie qui eût un nombre très-considérable d’actions ; & qu’on eût fait, dans quelques mois de temps, hausser ces actions vingt ou vingt-cinq fois au-delà de la valeur du premier achat ; & que ce même état eût établi une banque dont les billets dussent faire la fonction de monnoie ; & que la valeur numéraire de ces billets fût prodigieuse, pour répondre à la prodigieuse valeur numéraire des actions (c’est le systême de M. Law) : il suivroit de la nature de la chose, que ces actions & billets s’anéantiroient de la même maniere qu’ils seroient établis. On n’auroit pu faire monter tout-à-coup les actions vingt ou vingt-cinq fois plus haut que leur premiere valeur, sans donner à beaucoup de gens le moyen de se procurer d’immenses richesses en papier : chacun chercheroit à assurer sa fortune ; &, comme le change donne la voie la plus facile pour la dénaturer, ou pour la transporter où l’on veut, on remettroit, sans cesse, une partie de ses effets chez la nation qui regle le change. Un projet continuel de remettre dans les pays étrangers, feroit baisser le change. Supposons que, du temps du systême, dans le rapport du titre & du poids de la monnoie d’argent, le taux du change fût de quarante gros par écu ; lorsqu’un papier innombrable fut devenu monnoie, on n’aura plus voulu donner que trente-neuf gros par écu ; ensuite que trente-huit, trente-sept, &c. Cela alla si loin, que l’on ne donna plus que huit gros ; & qu’enfin il n’y eut plus de change.
+
+C’étoit le change qui devoit, en ce cas, régler, en France, la proportion de l’argent avec le papier. Je suppose que, par le poids & le titre de l’argent, l’écu de trois livres d’argent valût quarante gros ; & que, le change se faisant en papier, l’écu de trois livres, en papier, ne valût que huit gros ; la différence étoit de quatre cinquiemes. L’écu de trois livres, en papier, valoit donc quatre cinquiemes de moins que l’écu de trois livres en argent.
+
+CHAPITRE XI. 
+
+Des opérations que les Romains firent sur les monnoies.
+
+QUELQUES coups d’autorité que l’on ait faits, de nos jours, en France, sur les monnoies, dans deux ministeres consécutifs, les Romains en firent de plus grands ; non pas dans le temps de cette république corrompue, ni dans celui de cette république qui n’étoit qu’une anarchie ; mais lorsque, dans la force de son institution, par sa sagesse, comme par son courage, après avoir vaincu les villes d’Italie, elle disputoit l’empire aux Carthaginois.
+
+Et je suis bien aise d’approfondir un peu cette matiere, afin qu’on ne fasse pas un exemple de ce qui n’en est point un.
+
+Dans la premiere guerre punique, l’as, qui devoit être de douze onces de cuivre, n’en pesa plus que deux ; &, dans la seconde, il ne fut plus que d’une. Ce retranchement répond à ce que nous appellons aujourd’hui augmentation des monnoies : ôter d’un écu de six livres la moitié de l’argent, pour en faire deux, ou le faire valoir douze livres, c’est précisément la même chose.
+
+Il ne nous reste point de monument de la maniere dont les Romains firent leur opération dans la premiere guerre punique : mais ce qu’il firent dans la seconde nous marque une sagesse admirable. La république ne se trouvoit point en état d’acquitter ses dettes : l’as pesoit deux onces de cuivres ; & le denier, valant dix as, valoit vingt onces de cuivre. La république fit des as d’une once de cuivre; elle gagna la moitié sur ses créanciers ; elle paya un denier avec ses dix onces de cuivre. Cette opération donna une grande secousse à l’état, il falloit la donner la moindre qu’il étoit possible ; elle contenoit une injustice, il falloit qu’elle fût la moindre qu’il étoit possible ; elle avoit pour objet la libération de la république envers ses citoyens, il ne falloit donc pas qu’elle eût celui de la libération des citoyens entre eux : cela fit faire une seconde opération ; & l’on ordonna que le denier, qui n’avoit été jusques-là que de dix as, en contiendroit seize. Il résulta, de cette double opération, que, pendant que les créanciers de la république perdoient la moitié, ceux des particuliers ne perdoient que le cinquieme : les marchandises n’augmentoient que d’un cinquieme ; le changement réel dans la monnoie n’étoit que d’un cinquieme : on voit les autres conséquences.
+
+Les Romains se conduisirent donc mieux que nous, qui, dans nos opérations, avons enveloppé & les fortunes publiques & les fortunes particulieres. Ce n’est pas tout : on va voir qu’ils les firent dans des circonstances plus favorables que nous. 
+
+CHAPITRE XII. 
+
+Circonstances dans lesquelles les Romains firent leurs opérations sur la monnoie.
+
+IL y avoit anciennement très-peu d’or & d’argent en Italie ; ce pays a peu ou point de mines d’or & d’argent : lorsque Rome fut prise par les Gaulois, il ne s’y trouva que mille livre d’or. Cependant les Romains avoient saccagé plusieurs villes puissantes, & ils avoient transporté les richesses chez eux. Ils ne se servirent long-temps que de monnoie de cuivre : ce ne fut qu’après la paix de Pyrrhus, qu’ils eurent assez d’argent pour en faire de la monnoie : ils firent des deniers de ce métal, qui valoient dix as, ou dix livres de cuivre. Pour lors, la proportion de l’argent au cuivre étoit comme 1 à 960 : car le denier romain valant dix as ou dix livres de cuivre, il valoit cent vingt onces de cuivre ; & le même denier valant un huitieme d’once d’argent, cela faisoit la proportion que nous venons de dire.
+
+Rome devenue maîtresse de cette partie de l’Italie la plus voisine de la Grece & de la Sicile, se trouva, peu à peu, entre deux peuples riches ; les Grecs & les Carthaginois : l’argent augmenta chez elle ; & la proportion de 1 à 960 entre l’argent & le cuivre ne pouvant plus se soutenir, elle fit diverses opérations sur les monnoies que nous ne connoissons pas. Nous sçavons seulement qu’au commencement de la seconde guerre punique, le denier romain ne valoit plus que vingt once de cuivre; & qu’ainsi, la proportion entre l’argent & le cuivre n’étoit plus que comme 1 est à 160. La réduction étoit bien considérable, puisque la république gagna cinq sixiemes sur toute la monnoie de cuivre : mais on ne fit que ce que demandoit la nature des choses, & rétablir la proportion entre les métaux qui servoient de monnoie.
+
+La paix, qui termina la premiere guerre punique, avoit laissé les Romains maîtres de la Sicile. Bientôt ils entrerent en Sardaigne, ils commencerent à connoître l’Espagne : la masse de l’argent augmenta encore à Rome ; on y fit l’opération qui réduisit le denier d’argent de vingt once à seize; & elle eut cet effet, qu’elle remit en proportion l’argent & le cuivre : cette proportion étoit comme 1 est à 160 ; elle fut comme 1 est à 128.
+
+Examinez les Romains ; vous ne trouverez jamais si supérieurs, que dans le choix des circonstances dans lesquelles ils firent les biens et les maux.
+
+CHAPITRE XIII. 
+
+Opérations sur les monnoies, du temps des empereurs.
+
+DANS les opérations que l’on fit sur les monnoies du temps de la république, on procéda par voie de retranchement ; l’état confioit au peuple ses besoins, & ne prétendoit pas le séduire. Sous les empereurs, on procéda par voie d’alliage : ces princes, réduits au désespoir par leurs libéralités mêmes, se virent obligés d’altérer les monnoies ; voie indirecte, qui diminuoit le mal, & sembloit ne le pas toucher : on retiroit une partie du don, & on cachoit la main ; &, sans parler de diminution de la paie ou des largesses, elles se trouvoient diminuées.
+
+On voit encore, dans les cabinets, des médailles qu’on appelle fourrées, qui n’ont qu’une lame d’argent qui couvre le cuivre. Il est parlé de cette monnoie dans un fragment du livre LXXVII de Dion.
+
+Didius Julien commença l’affoiblissement. On trouve que la monnoie de Caracalla avoit plus de la moitié d’alliage ; celle d’Alexandre Sévere les deux tiers : l’affoiblissement continua ; &, sous Galien, on ne voyoit plus que du cuivre argenté.
+
+On sent que ces opérations violentes ne sçauroient avoir lieu dans ces temps-ci ; un prince se tromperoit lui-même, & ne tromperoit personne. Le change a appris au banquier à comparer toutes les monnoies du monde, & à les mettre à leur juste valeur ; le titre des monnoies ne peut plus être un secret. Si un prince commence le billon, tout le monde continue, & le fait pour lui ; les especes fortes sortent d’abord, & on les lui renvoie foibles. Si, comme les empereurs Romains, il affoiblissoit l’argent, sans affoiblir l’or, il verroit tout-à-coup disparoître l’or, & il seroit réduit à son mauvais argent. Le change, comme j’ai dit au livre précédent, a ôté les grands coups d’autorité ; du moins le succès des grands coups d’autorité. 
+
+CHAPITRE XIV. 
+
+Comment le change gêne les états despotiques.
+
+LA Moscovie voudroit descendre de son despotisme, & ne le peut. L’établissement du commerce demande celui du change ; & les opérations du change contredisent toutes ses loix.
+
+En 1745, la czarine fit une ordonnance pour chasser les juifs, parce qu’ils avoient remis, dans les pays étrangers, l’argent de ceux qui étoient relégués en Sibérie, & celui des étrangers qui étoient au service : tous les sujets de l’empire, comme des esclaves, n’en peuvent sortir, ni faire sortir leurs biens, sans permission. Le change, qui donne le moyen de transporter l’argent d’un pays à un autre, est donc contradictoire aux loix de la Moscovie.
+
+Le commerce même contredit ses loix. Le peuple n’est composé que d’esclaves attachés aux terres, & d’esclaves qu’on appelle ecclésiastiques ou gentilshommes, parce qu’ils sont les seigneurs de ces esclaves : il ne reste donc gueres personnes pour le tiers état, qui doit former les ouvriers & les marchands.
+
+CHAPITRE XV. 
+
+Usage de quelques pays d’Italie.
+
+DANS quelques pays d’Italie, on a fait des loix pour empêcher les sujets de vendre des fonds de terre, pour transporter leur argent dans les pays étrangers. Ces loix pouvoient être bonnes, lorsque les richesses de chaque état étoient tellement à lui, qu’il y avoit beaucoup de difficulté à les faire passer à un autre. Mais depuis que, par l’usage du change, les richesses ne sont, en quelque façon, à aucun état en particulier, & qu’il y a tant de facilité à les transporter d’un pays à un autre, c’est une mauvaise loi que celle qui ne permet pas de disposer, pour ses affaires, de ses fonds de terre, lorsqu’on peut disposer de son argent. Cette loi est mauvaise, parce qu’elle donne de l’avantage aux effets mobiliers sur les fonds de terre ; parce qu’elle dégoûte les étrangers de venir s’établir dans le pays ; & enfin parce qu’on peut l’éluder.
+
+CHAPITRE XVI. 
+
+Du secours que l’état peut tirer des banquiers.
+
+LES banquiers sont faits pour changer de l’argent, & non pas pour en prêter. Si le prince ne s’en sert que pour changer son argent ; comme il ne fait que de grosses affaires, le moindre profit qu’il leur donne pour leurs remises devient un objet considérables ; &, si on lui demande de gros profits, il peut être sûr que c’est un défaut de l’administration. Quand, au contraire, ils sont employés à faire des avances, leur art consiste à se procurer de gros profits de leur argent, sans qu’on puisse les accuser d’usure.
+
+CHAPITRE XVII. 
+
+Des dettes publiques.
+
+QUELQUES gens ont cru qu’il étoit bon qu’un état dût à lui-même : ils ont pensé que cela multiplioit les richesses, en augmentant la circulation.
+
+Je crois qu’on a confondu un papier circulant qui représente la monnoie, ou un papier circulant qui est le signe des profits qu’une compagnie a faits ou fera sur le commerce, avec un papier qui représente une dette. Les deux premiers sont très avantageux à l’état : le dernier ne peut l’être, & tout ce qu’on peut en attendre, c’est qu’il soit un bon gage, pour les particuliers, de la dette de la nation, c’est-à-dire, qu’il en procure le paiement. Mais voici les inconvéniens qui en résultent.
+
+Si les étrangers possedent beaucoup de papiers qui représentent une dette, ils tirent, tous les ans, de la nation, une somme considérable pour les intérêts.
+
+2°. Dans une nation ainsi perpétuellement débitrice, le change doit être très-bas.
+
+3°. L’impôt levé pour le paiement des intérêts de la dette, fait tort aux manufactures, en rendant la main de l’ouvrier plus chere.
+
+4°. On ôte les revenus véritables de l’état à ceux qui ont de l’activité & de l’industrie, pour les transporter aux gens oisifs ; c’est-à-dire, qu’on donne des commodités pour travailler à ceux qui ne travaillent point, & des difficultés pour travailler à ceux qui travaillent.
+
+Voilà les inconvéniens ; je n’en connois point les avantages. Dix personnes ont chacune mille écus de revenu en fonds de terre ou en industrie ; cela fait, pour la nation, à cinq pour cent, un capital de deux cens mille écus. Si ces dix personnes emploient la moitié de leur revenu, c’est-à-dire, cinq mille écus, pour payer les intérêts de cent mille écus qu’elles ont empruntés à d’autres, cela ne fait encore, pour l’état, que deux cens mille écus : c’est, dans le langage des algébristes, 200000 écus ― 100000 écus + 100000 écus = 200000 écus.
+
+Ce qui peut jetter dans l’erreur, c’est qu’un papier qui représente la dette d’une nation est un signe de richesse ; car il n’y a qu’un état riche qui puisse soutenir un tel papier, sans tomber dans la décadence : que s’il n’y tombe pas, il faut que l’état ait de grandes richesses d’ailleurs. On dit qu’il n’y a point de mal, parce qu’il y a des ressources contre ce mal ; & on dit que le mal est un bien, parce que les ressources surpassent le mal.
+
+CHAPITRE XVIII. 
+
+Du paiement des dettes publiques.
+
+IL faut qu’il y ait une proportion entre l’état créancier & l’état débiteur. L’état peut être créancier à l’infini, mais il ne peut être débiteur qu’à un certain degré ; &, quand on est parvenu à passer ce degré, le titre de créancier s’évanouit.
+
+Si cet état a encore un crédit qui n’ait point reçu d’atteinte, il pourra faire ce qu’on a pratiqué si heureusement dans un état d’Europe; c’est de se procurer une grande quantité d’especes, & d’offrir à tous les particuliers leur remboursement, à moins qu’ils ne veuillent réduire l’intérêt. En effet, comme, lorsque l’état emprunte, ce sont les particuliers qui fixent le taux de l’intérêt ; lorsque l’état veut payer, c’est à lui à le fixer.
+
+Il ne suffit pas de réduire l’intérêt : il faut que le bénéfice de la réduction forme un fonds d’amortissement, pour payer, chaque année, une partie des capitaux ; opération d’autant plus heureuse, que le succès en augmente tous les jours.
+
+Lorsque le crédit de l’état n’est pas entier, c’est une nouvelle raison pour chercher à former un fonds d’amortissement ; parce que ce fonds, une fois établi, rend bientôt la confiance.
+
+Si l’état est une république, dont le gouvernement comporte, par sa nature, que l’on y fasse des projets pour long-temps, le capital du fonds d’amortissement peut être considérable : il faut, dans une monarchie, que ce capital soit plus grand.
+
+2°. Les réglemens doivent être tels, que tous les citoyens de l’état portent le poids de l’établissement de ce fonds, parce qu’ils ont tous le poids de l’établissement de la dette ; le créancier de l’état, par les sommes qu’il contribue, payant lui-même à lui-même.
+
+3°. Il y a quatre classes de gens qui paient les dettes de l’état : les propriétaires des fonds de terre, ceux qui exercent leur industrie par le négoce, les laboureurs & artisans, enfin les rentiers de l’état ou des particuliers. De ces quatre classes, la derniere, dans un cas de nécessité, sembleroient devoir être la moins ménagée ; parce que c’est une classe entiérement passive dans l’état, tandis que ce même état est soutenu par la force active des trois autres. Mais, comme on ne peut la charger plus, sans détruire la confiance publique, dont l’état en général, & ces trois classes en particulier, ont un souverain besoin ; comme la foi publique ne peut manquer à un certain nombre de citoyens, sans paroître manquer à tous ; comme la classe des créanciers est toujours la plus exposée aux projets des ministres, & qu’elle est toujours sous les yeux & sous la main, il faut que l’état lui accorde une singuliere protection, & que la partie débitrice n’ait jamais le moindre avantage sur celle qui est créanciere.
+
+CHAPITRE XIX. 
+
+Des prêts à intérêt.
+
+L’ARGENT est le signe des valeurs. Il est clair que celui qui a besoin de ce signe doit le louer, comme il fait toutes les choses dont il peut avoir besoin. Toute la différence est que les autres choses peuvent, ou se louer, ou s’acheter ; au lieu que l’argent, qui est le prix des choses, se loue & ne s’achete pas.
+
+C’est bien une action très-bonne de prêter à une autre son argent sans intérêt : mais on sent que ce ne peut être qu’un conseil de religion, & non une loi civile.
+
+Pour que le commerce puisse bien se faire, il faut que l’argent ait un prix, mais que ce prix soit peu considérable. S’il est trop haut, le négociant, qui voit qu’il lui en coûteroit plus en intérêts qu’il ne pourroit gagner dans son commerce, n’entreprend rien ; si l’argent n’a point de prix, personne n’en prête, & le négociant n’entreprend rien non plus.
+
+Je me trompe, quand je dis que personne n’en prête. Il faut toujours que les affaires de la société aillent ; l’usure s’établit, mais avec les désordres que l’on a éprouvés dans tous les temps.
+
+La loi de Mahomet confond l’usure avec le prêt à intérêt. L’usure augmente, dans les pays mahométans, à proportion de la sévérité de la défense : le prêteur s’indemnise du péril de la contravention.
+
+Dans ces pays d’orient, la plupart des hommes n’ont rien d’assuré ; il n’y a presque point de rapport entre la possession actuelle d’une somme, & l’espérance de la r’avoir après l’avoir prêtée : l’usure y augmente donc à proportion du péril de l’insolvabilité.
+
+CHAPITRE XX. 
+
+Des usures maritimes.
+
+LA grandeur de l’usure maritime est fondée sur deux choses : le péril de la mer, qui fait qu’on ne s’expose à prêter son argent que pour en avoir beaucoup davantage ; & la facilité que le commerce donne à l’emprunteur de faire promptement de grandes affaires, & en grand nombre : au lieu que les usures de terre n’étant fondées sur aucune de ces deux raisons, sont, ou proscrites par les législateurs, ou, ce qui est plus sensé, réduites à de justes bornes.
+
+CHAPITRE XXI. 
+
+Du prêt par contrat, & de l’usure, chez les Romains.
+
+OUTRE le prêt fait pour le commerce, il y a encore une espece de prêt fait par un contrat civil, d’où résulte un intérêt ou usure.
+
+Le peuple, chez les Romains, augmentant tous les jours sa puissance, les magistrats chercherent à le flatter, & à lui faire faire les loix qui lui étoient les plus agréables. Il retranchera les capitaux ; il diminua les intérêts ; il défendit d’en prendre ; il ôta les contraintes par corps ; enfin, l’abolition des dettes fut mise en question toutes les fois qu’un tribun voulut se rendre populaire.
+
+Ces continuels changemens, soit par des loix, soit par des plébiscites, naturaliserent à Rome l’usure ; car les créanciers, voyant le peuple leur débiteur, leur législateur & leur juge, n’eurent plus de confiance dans les contrats. Le peuple, comme un débiteur décrédité, ne tentoit à lui prêter que par de gros profits : d’autant plus que, si les loix ne venoient que de temps en temps, les plaintes du peuple étoient continuelles, & intimidoient toujours les créanciers. Cela fit que tous les moyens honnêtes de prêter & d’emprunter furent abolis à Rome ; & qu’une usure affreuse, toujours foudroyée & toujours renaissante, s’y établit. Le mal venoit de ce que les choses n’avoient pas été ménagées. Les loix extrêmes dans le bien font naître le mal extrême. Il fallut payer pour le prêt de l’argent, & pour le danger des peines de la loi.
+
+CHAPITRE XXII. 
+
+Continuation du même sujet.
+
+Les premiers Romains n’eurent point de loix pour régler le taux de l’usure. Dans les démêlés qui se formerent là-dessus entre les plébéiens & les patriciens, dans la séditions même du Mont-sacré, on n’allégua, d’un côté, que la foi ; &, de l’autre, que la dureté des contrats.
+
+On suivoit donc les conventions particulieres ; & je crois que les plus ordinaires étoient de douze pour cent par an. Ma raison est que, dans le langage ancien chez les Romains, l’intérêt à six pour cent étoit appelé la moitié de l’usure ; l’intérêt à trois pour cent le quart de l’usure : l’usure totale étoit donc l’intérêt à douze pour cent.
+
+Que si l’on demande comment de si grosses usures avoient pu s’établir chez un peuple qui étoit presque sans commerce ; je dirai que ce peuple, très-souvent obligé d’aller sans solde à la guerre, avoit très-souvent besoin d’emprunter ; & que, faisant sans cesse des expéditions heureuses, il avoit très-souvent la facilité de payer. Et cela se sent bien dans le récit des démêlés qui s’éleverent à cet égard : on y disconvient point de l’avarice de ceux qui prêtoient ; mais on dit que ceux qui se plaignoient auroient pu payer, s’ils avoient eu une conduite réglée.
+
+On faisoit donc des loix qui n’influoient que sur la situation actuelle : on ordonnoit, par exemple, que ceux qui s’enrôleroient pour la guerre que l’on avoit à soutenir ne seroient point poursuivis par leurs créanciers ; que ceux qui étoient dans les fers seroient délivrés ; que les plus indigens seroient menés dans les colonies : quelquefois on ouvroit le trésor public. Le peuple s’appaisoit par le soulagement des maux présens ; &, comme il ne demandoit rien pour la suite, le sénat n’avoit garde de le prévenir.
+
+Dans le temps que le sénat défendoit avec tant de constance la cause des usures, l’amour de la pauvreté, de la frugalité, de la médiocrité, étoit extrême chez les Romains : mais telle étoit la constitution, que les principaux citoyens portoient toutes les charges de l’état, & que le bas peuple ne payoit rien. Quel moyen de priver ceux-là du droit de poursuivre leurs débiteurs, & de leur demander d’acquitter leurs charges, & de subvenir aux besoins pressans de la république ?
+
+Tacite dit que la loi des douze-tables fixa l’intérêt à un pour cent par an. Il est visible qu’il s’est trompé ; & qu’il a pris, pour la loi des douze-tables, une autre loi dont je vais parler. Si la loi des douze-tables avoit réglé cela, comment, dans les disputes qui s’éleverent depuis entre les créanciers et les débiteurs, ne se seroit-on pas servi de son autorité ? On ne trouve aucun vestige de cette loi sur le prêt à intérêt : &, pour peu qu’on soit versé dans l’histoire de Rome, on verra qu’une loi pareille ne devoit point être l’ouvrage des décemvirs.
+
+La loi Licinienne, faite quatre-vingt-cinq ans après la loi des douze-tables, fut une de ces loix passageres dont nous avopns parlé. Elle ordonna qu’on retrancheroit, du capital, ce qui avoit été payé pour les intérêts, & que le reste seroit acquitté en trois paiemens égaux.
+
+L’an 398 de Rome, les tribuns Duellius & Ménénius firent passer une loi qui réduisoit les intérêts à un pour cent par an. C’est cette loi que Tacite confond avec la loi des douze-tables ; & c’est la premiere qui a été faite, chez les Romains, pour fixer le taux de l’intérêt. Dix ans après, cette usure fut réduite à la moitié; dans la suite, on l’ôta tout-à-fait: &, si nous en croyons quelques auteurs qu’avoit vus Tite Live, ce fut sous le consulat de C. Martius Rutilius & de Quintius Servilius, l’an 413 de Rome.
+
+Il en fut, de cette loi, comme de toutes celles où le législateur a porté les choses à l’excès : on trouva un moyen de l’éluder. Il en fallut faire beaucoup d’autre pour la confirmer, corriger, tempérer. Tantôt on quitta les lois pour suivre les usages; tantôt on quitta les usages pour suivre les loix : mais, dans ce cas, l’usage devoit aisément prévaloir. Quand un homme emprunte, il trouve un obstacle dans la loi même qui est faite en sa faveur : cette loi a contre elle, & celui qu’elle secourt, & celui qu’elle condamne. Le préteur Sempronius Asellus ayant permis aux débiteurs d’agir en conséquence des loix, fut tué par les créanciers, pour avoir voulu rappeller la mémoire d’une rigidité qu’on ne pouvoit plus soutenir. 
+
+Je quitte la ville, pour jetter un peu les yeux sur les provinces.
+
+J’ai dit ailleurs que les provinces Romaines étoient désolées par un gouvernement despotique & dur. Ce n’est pas tout : elles l’étoient encore par des usures affreuses.
+
+Cicérons dit que ceux de Salamine vouloient emprunter de l’argent à Rome, & qu’ils ne le pouvoient pas à cause de la loi Gabinienne. Il faut que je cherche ce que c’étoit que cette loi.
+
+Lorsque les prêts à intérêt eurent été défendus à Rome, on imagine toutes sortes de moyens pour éluder la loi: &, comme les alliés & ceux de la nation Latine n’étoient point assujettis aux loix civiles des Romains, on se servit d’un Latin, ou d’un allié, qui prêtoit son nom, & paroissoit être le créancier. La loi n’avoit donc fait que soumettre les créanciers à une formalité, & le peuple n’étoit pas soulagé.
+
+Le peuple se plaignit de cette fraude ; & Marcus Sempronius, tribun du peuple, par l’autorité du sénat, fit faire un plébiscite qui portoit, qu’en fait de prêts, les loix, qui défendoient les prêts à usure entre un citoyen Romain & un autre citoyen Romain, auroient également lieu entre un citoyen & un allié, ou un Latin.
+
+Dans ces temps-là, on appelloit alliés les peuples de l’Italie proprement dite, qui s’étendoient jusqu’à l’Arno & le Rubicon, & qui n’étoit point gouvernée en provinces Romaines.
+
+Tacite dit qu’on faisoit toujours de nouvelles fraudes aux lois faites pour arrêter les usures. Quand on ne put plus prêter, ni emprunter, sous le nom d’un allié, il fut aisé de faire paroître un homme des provinces, qui prêtoit son nom. 
+
+Il falloit une nouvelle loi contre cet abus : & Gabinius faisant la loi fameuse qui avoit pour objet d’arrêter la corruption dans les suffrages, dut naturellement penser que le meilleur moyen, pour y parvenir, étoit de décourager les emprunts : ces deux choses étoient naturellement liées ; car les usures augmentoient toujours au temps des élections, parce qu’on avoit besoin d’argent pour gagner des voix. On voit bien que la loi Gabinienne avoit étendu le sénatus-consulte Sempronien aux provinciaux ; puisque les Salaminiens ne pouvoient emprunter de l’argent à Rome, à cause de cette loi. Brutus, sous des noms empruntés, leur en prêta à quatre pour cent par mois ; & obtint, pour cela, deux sénatus-consultes ; dans le premier desquels il étoit dit que ce prêt ne seroit pas regardé comme une fraude faite à la loi, & que le gouverneur de Silicie jugeroit en conformité des conventions portées par le billet des Salaminiens.
+
+Le prêt à intérêt étant interdit, par la loi Gabinienne, entre les gens des provinces & les citoyens Romains ; & ceux-ci ayant, pour lors, tout l’argent de l’univers entre leurs mains ; il fallut les tenter par de grosses usures, qui fissent disparoître, aux yeux de l’avarice, le danger de perdre la dette. Et, comme il y avoit à Rome des gens puissans, qui intimidoient les magistrats, & faisoient taire les loix, ils furent plus hardis à prêter, & plus hardis à exiger de grosses usures. Cela fit que les provinces furent, tour-à-tour, ravagées par tous ceux qui avoient du crédit à Rome : &, comme chaque gouverneur faisoit son édit, en entrant dans sa province, dans lequel il mettoit à usure le taux qui lui plaisoit, l’avarice prêtoit la main à la législation, & la législation à l’avarice.
+
+Il faut que les affaires aillent ; & un état est perdu, si tout y est dans l’inaction. Il y avoit des occasions où il falloit que les villes, les corps, les sociétés des villes, les particuliers, empruntassent : & on n’avoit que trop besoin d’emprunter, ne fût-ce que pour subvenir aux ravages des armées, aux rapines des magistrats, aux concussions des gens d’affaires, & aux mauvais usages qui s’établissoient tous les jours ; car on ne fut jamais si riche, ni si pauvre. Le sénat qui avoit la puissance exécutrice, donnoit, par nécessité, souvent par faveur, la permission d’emprunter des citoyens Romains, & faisoit là-dessus des sénatus-consultes. Mais ces sénatus-consultes même étoient décrédités par la loi : ces sénatus-consultes pouvoient donner occasion au peuple de demander de nouvelles tables ; ce qui, augmentant le danger de la perte du capital, augmentoit encore l’usure. Je le dirai toujours ; c’est la modération qui gouverne les hommes, & non pas les excès.
+
+Celui-là paie moins, dit Ulpien qui paie plus tard. C’est ce principe qui conduisit les législateurs, après la destruction de la république Romaine.

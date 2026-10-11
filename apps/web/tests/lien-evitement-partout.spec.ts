@@ -156,6 +156,15 @@ const SANS_BARRE = [
   'app/inscription/page.tsx',
   'app/definir-mot-de-passe/page.tsx',
   'app/e/[slug]/page.tsx',
+  /*
+   * ⚠ L'AFFICHE A4, 11 octobre 2026 — et son absence de barre est la RAISON de
+   * son existence, pas un oubli : le lot exige « une seule page, sans menu ni
+   * pied ». Elle vit à la racine, et non sous `/opac/`, précisément parce qu'un
+   * layout imbriqué ne peut pas retirer son parent.
+   *
+   * Un lien d'évitement y serait absurde : il n'y a rien à éviter.
+   */
+  'app/affiche/[id]/page.tsx',
 ];
 
 const PORTEURS_DE_CIBLE = fichiersRendantUnMain().filter((f) => !SANS_BARRE.includes(f));

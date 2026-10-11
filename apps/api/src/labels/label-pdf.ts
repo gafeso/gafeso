@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, StandardFonts, rgb } from 'pdf-lib';
 import bwipjs from 'bwip-js';
+import * as QRCode from 'qrcode';
 
 /**
  * Génération d'une planche A4 d'étiquettes code-barres, prête à imprimer sur
@@ -16,7 +17,40 @@ export interface LabelData {
   title: string;
   /** Sigle de l'établissement (ex. « BUC »). */
   sigle: string;
+  /**
+   * L'adresse publique de la NOTICE — ce que le QR fait ouvrir. `null` : pas de
+   * QR sur cette étiquette, et le code-barres reprend toute la largeur.
+   *
+   * ⚠ C'est l'adresse de la notice, pas de l'exemplaire : un lecteur qui scanne
+   * veut la fiche du document, pas le volume qu'il tient. Les exemplaires n'ont
+   * pas de page publique.
+   */
+  publicUrl?: string | null;
 }
+
+/**
+ * 🔴 LA LARGEUR DE MODULE MINIMALE DU CODE-BARRES, EN MILLIMÈTRES.
+ *
+ * ⚠ C'EST L'INVARIANT DE CETTE PLANCHE, et le QR lui est SUBORDONNÉ. Les
+ * douchettes en service chez un établissement CLIENT lisent le code-barres ;
+ * un QR qui le
+ * rétrécirait sous le seuil rendrait le fonds illisible par le matériel
+ * existant, pour un gain d'affichage.
+ *
+ * 0,25 mm est le minimum couramment admis pour du Code 128 lu par un scanneur
+ * de comptoir (GS1 recommande 0,25 mm pour la lecture générale). En dessous, la
+ * lecture dépend de l'imprimante et de l'état de l'étiquette — c'est-à-dire
+ * qu'elle cesse d'être garantie.
+ *
+ * ⭐ CONSÉQUENCE : si réserver la place du QR ferait passer le module sous ce
+ * seuil, **le QR n'est pas dessiné**. Ce n'est pas une dégradation silencieuse :
+ * c'est la bonne priorité, et `buildLabelsPdf` le RAPPORTE à son appelant.
+ */
+export const LARGEUR_MODULE_MIN_MM = 0.25;
+
+/** Côté du QR, et l'écart qui le sépare du code-barres. */
+const QR_COTE_MM = 13;
+const QR_ECART_MM = 2;
 
 export interface LabelLayout {
   /** Colonnes × lignes de la grille. */
@@ -56,12 +90,22 @@ function fitText(text: string, font: PDFFont, size: number, maxWidth: number): s
   return t + ellipsis;
 }
 
+/**
+ * L'échelle de rendu du code-barres, NOMMÉE.
+ *
+ * ⚠ Elle sert deux fois : au rendu, et au calcul du nombre de MODULES
+ * (`largeur en pixels / échelle`). Recopier `3` au second endroit serait une
+ * chaîne recopiée qui ne se voit pas : le jour où on monte la densité, le
+ * seuil de lisibilité deviendrait faux sans que rien ne le dise.
+ */
+const ECHELLE_CODE_BARRES = 3;
+
 /** Génère le PNG d'un code-barres Code 128 (buffer), sans texte intégré. */
 async function code128Png(text: string): Promise<Buffer> {
   return bwipjs.toBuffer({
     bcid: 'code128',
     text,
-    scale: 3, // densité suffisante pour rester net à l'impression
+    scale: ECHELLE_CODE_BARRES, // densité suffisante pour rester net à l'impression
     height: 8, // hauteur du motif (unités bwip) — barres bien lisibles
     includetext: false, // on écrit le code en clair nous-mêmes, sous le motif
     paddingwidth: 0,
@@ -70,14 +114,47 @@ async function code128Png(text: string): Promise<Buffer> {
 }
 
 /**
+ * Le QR d'une étiquette — correction HAUTE, parce qu'une étiquette se salit.
+ *
+ * ⚠ `margin: 0` : la marge blanche du QR est dessinée par la mise en page, pas
+ * par l'image. Laisser bwip/qrcode la poser rétrécirait le motif utile à
+ * l'intérieur du carré réservé, donc sa lisibilité, sans que le carré change.
+ */
+async function qrPngPourEtiquette(url: string): Promise<Buffer> {
+  return QRCode.toBuffer(url, {
+    type: 'png',
+    errorCorrectionLevel: 'H',
+    margin: 0,
+    width: 512,
+  });
+}
+
+/**
  * Construit le PDF. Les étiquettes remplissent la grille de gauche à droite puis
  * de haut en bas, en sautant les `start-1` premières cases (planche entamée), et
  * en paginant automatiquement au-delà de columns×rows par page.
  */
+/**
+ * Ce que la planche rapporte EN PLUS du PDF.
+ *
+ * ⚠ Le type est enrichi plutôt que le défaut tu. « Une fonction qui ne peut pas
+ * accomplir son office ne doit pas sortir comme si elle l'avait accompli » :
+ * abandonner un QR est une décision, et une décision se rapporte.
+ */
+export interface PlancheEtiquettes {
+  pdf: Uint8Array;
+  /**
+   * Les code-barres pour lesquels le QR a été ABANDONNÉ : y réserver sa place
+   * aurait fait passer le module sous `LARGEUR_MODULE_MIN_MM`. Le code-barres
+   * a été préféré, parce que c'est lui que les douchettes lisent.
+   */
+  qrAbandonnes: string[];
+}
+
 export async function buildLabelsPdf(
   labels: LabelData[],
   layoutInput: Partial<LabelLayout> = {},
-): Promise<Uint8Array> {
+): Promise<PlancheEtiquettes> {
   const layout: LabelLayout = { ...DEFAULT_LAYOUT, ...layoutInput };
   const { columns, rows } = layout;
 
@@ -103,6 +180,15 @@ export async function buildLabelsPdf(
   // Cache des PNG code-barres (une notice peut réapparaître ; évite de
   // régénérer le même motif).
   const pngCache = new Map<string, { image: Awaited<ReturnType<typeof pdf.embedPng>> }>();
+  const qrCache = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>();
+  /**
+   * ⚠ LES ÉTIQUETTES OÙ LE QR A ÉTÉ ABANDONNÉ — rapportées, jamais tues.
+   *
+   * Un QR qui disparaît sans un mot est une dégradation silencieuse : la
+   * bibliothécaire imprime sa planche, trouve une étiquette sans QR, et ne peut
+   * pas savoir si c'est un défaut ou une décision. On le DIT.
+   */
+  const qrAbandonnes: string[] = [];
 
   // La case globale `slot` inclut le décalage de départ ; le modulo donne la
   // position sur la page courante.
@@ -152,24 +238,68 @@ export async function buildLabelsPdf(
       entry = { image: await pdf.embedPng(png) };
       pngCache.set(label.barcode, entry);
     }
-    const boxW = cellW - 2 * pad;
+
+    // ⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE.
+    //
+    // On calcule d'abord ce que le code-barres mesurerait AVEC le QR. S'il
+    // passe sous `LARGEUR_MODULE_MIN_MM`, le QR est abandonné pour cette
+    // étiquette et le code-barres reprend toute la largeur — l'inverse
+    // rendrait le fonds illisible par les douchettes en service.
+    //
+    // ⚠ `entry.image.width` est en PIXELS à l'échelle de rendu (`scale: 3`
+    // dans `code128Png`) : le nombre de MODULES est donc cette largeur divisée
+    // par l'échelle. Confondre les deux donnerait un seuil trois fois trop
+    // permissif, et le défaut ne se verrait qu'à la douchette.
+    const modules = entry.image.width / ECHELLE_CODE_BARRES;
+    const boxPlein = cellW - 2 * pad;
+    const boxAvecQr = boxPlein - (QR_COTE_MM + QR_ECART_MM) * MM;
+    const qrDemande = Boolean(label.publicUrl);
+    const qrTient = boxAvecQr / modules >= LARGEUR_MODULE_MIN_MM * MM;
+    const avecQr = qrDemande && qrTient;
+    if (qrDemande && !qrTient) qrAbandonnes.push(label.barcode);
+
+    const boxW = avecQr ? boxAvecQr : boxPlein;
     const boxH = cellH * 0.42;
     const scale = Math.min(boxW / entry.image.width, boxH / entry.image.height);
     const drawW = entry.image.width * scale;
     const drawH = entry.image.height * scale;
     const barcodeY = cellTop - cellH * 0.5 - drawH / 2 + 4;
+    // Centré dans SA boîte : à gauche quand le QR occupe la droite.
+    const barcodeX = avecQr
+      ? cellLeft + pad + (boxAvecQr - drawW) / 2
+      : cellLeft + (cellW - drawW) / 2;
     page.drawImage(entry.image, {
-      x: cellLeft + (cellW - drawW) / 2,
+      x: barcodeX,
       y: barcodeY,
       width: drawW,
       height: drawH,
     });
 
-    // Code en clair, centré sous le motif.
-    const codeText = fitText(label.barcode, mono, 8, cellW - 2 * pad);
+    if (avecQr) {
+      let qr = qrCache.get(label.publicUrl as string);
+      if (!qr) {
+        qr = await pdf.embedPng(await qrPngPourEtiquette(label.publicUrl as string));
+        qrCache.set(label.publicUrl as string, qr);
+      }
+      const cote = QR_COTE_MM * MM;
+      page.drawImage(qr, {
+        x: cellLeft + cellW - pad - cote,
+        // Aligné sur le MILIEU du code-barres, pas sur son bas : les deux
+        // motifs se lisent alors comme une paire.
+        y: barcodeY + drawH / 2 - cote / 2,
+        width: cote,
+        height: cote,
+      });
+    }
+
+    // Code en clair, centré sous le motif — et sous SA boîte, pas sous la
+    // cellule : décalé, il ne se lirait plus comme la légende du code-barres.
+    const codeText = fitText(label.barcode, mono, 8, boxW);
     const codeW = mono.widthOfTextAtSize(codeText, 8);
     page.drawText(codeText, {
-      x: cellLeft + (cellW - codeW) / 2,
+      x: avecQr
+        ? cellLeft + pad + (boxAvecQr - codeW) / 2
+        : cellLeft + (cellW - codeW) / 2,
       y: barcodeY - 9,
       size: 8,
       font: mono,
@@ -188,5 +318,5 @@ export async function buildLabelsPdf(
     });
   }
 
-  return pdf.save();
+  return { pdf: await pdf.save(), qrAbandonnes };
 }

@@ -5,12 +5,17 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AccountStatus, ItemStatus, PrismaClient, UserRole } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { SearchService } from '../search/search.service';
 import { DigitalCopyService } from '../cataloging/digital-copy.service';
 import { AccessControlService } from '../access-control/access-control.service';
 import { ProvenanceService } from '../moissonnage/provenance.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
 import { normalizeAuthorName } from '../authors/author-name';
+import {
+  adressePubliqueDeLaNotice,
+  construireIdentifiant,
+} from './identifiant-perenne';
 import { OpacSearchDto } from './dto/opac-search.dto';
 import { NOUVEAUTES_PAR_DEFAUT } from './dto/nouveautes.dto';
 import { PARCOURIR_PAR_DEFAUT } from './dto/parcourir.dto';
@@ -210,7 +215,49 @@ export class OpacService {
     private readonly prisma: PrismaService,
     private readonly provenances: ProvenanceService,
     private readonly usage: UsageService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Le domaine principal d'une école, mis en cache.
+   *
+   * ⚠ UNE REQUÊTE PAR MINUTE ET PAR ÉCOLE, pas une par fiche consultée.
+   * `/opac/records/:id` est la page la plus chaude du produit ; y ajouter une
+   * lecture de `public.domains` à chaque appel coûterait une requête pour une
+   * valeur qui ne change jamais en pratique.
+   */
+  private readonly cacheDomaine = new CacheMemoireTTL<string | null>(
+    CHIFFRES_TTL_SECONDS * 1000,
+  );
+
+  /**
+   * TOUS les hôtes d'une école — c'est eux qui distinguent deux établissements.
+   *
+   * ⚠ TOUS, pas seulement le principal : une école peut servir `localhost` ET
+   * `zinda.localhost`, et une étiquette imprimée depuis l'un se scanne depuis
+   * l'autre. Ne comparer qu'au principal refuserait les siennes propres.
+   */
+  async hotesDeLEcole(slug: string): Promise<string[]> {
+    return this.cacheHotes.valeur(slug, async () => {
+      const t = await this.prisma.tenant.findUnique({
+        where: { slug },
+        select: { domains: { select: { domain: true } } },
+      });
+      return (t?.domains ?? []).map((d) => d.domain);
+    });
+  }
+
+  private readonly cacheHotes = new CacheMemoireTTL<string[]>(CHIFFRES_TTL_SECONDS * 1000);
+
+  private async domainePrincipal(slug: string): Promise<string | null> {
+    return this.cacheDomaine.valeur(slug, async () => {
+      const t = await this.prisma.tenant.findUnique({
+        where: { slug },
+        select: { domains: { where: { isPrimary: true }, select: { domain: true }, take: 1 } },
+      });
+      return t?.domains[0]?.domain ?? null;
+    });
+  }
 
   /**
    * Cache des chiffres publics, CLÉ = slug de l'établissement.
@@ -646,7 +693,20 @@ export class OpacService {
    * l'ordre fait partie de ce qu'on a promis de ne pas changer, et le filet le
    * compare à l'octet.
    */
-  async recordDetail(db: TenantDb, id: string, member = true) {
+  /**
+   * ⚠ `slug` EST OPTIONNEL, ET C'EST UNE DETTE ASSUMÉE, pas un confort.
+   *
+   * Le rendre obligatoire aurait touché dix-huit sites d'appel, presque tous
+   * des tests. Sans lui, `publicUrl` et `identifiantPerenne` sortent à `null` —
+   * les deux clés EXISTENT quand même, parce que le contrat de cette réponse
+   * est gelé et qu'une clé qui apparaît par intermittence est pire qu'absente.
+   *
+   * ⚠ Et « servi à null pour toujours » est exactement « une colonne SERVIE que
+   * personne ne remplit ». Un garde (`adresse-publique.spec.ts`) exige donc que
+   * les DEUX sites d'appel de production passent le slug : le risque n'est pas
+   * laissé à la discipline.
+   */
+  async recordDetail(db: TenantDb, id: string, member = true, slug?: string) {
     const found = await db.biblioRecord.findUnique({
       where: { id },
       select: selectNoticePublique(),
@@ -717,6 +777,7 @@ export class OpacService {
       // ne dépend pas de qui regarde, seule la finesse du reste en dépend.
       reponse.hasDigital = hasDigital;
       reponse.offlineReady = offlineReady;
+      await this.poserLAdresse(reponse, id, slug);
       return reponse;
     }
 
@@ -739,7 +800,48 @@ export class OpacService {
     reponse.provenance = provenance;
     reponse.hasDigital = hasDigital;
     reponse.offlineReady = offlineReady;
+    await this.poserLAdresse(reponse, id, slug);
     return reponse;
+  }
+
+  /**
+   * ⭐ L'ADRESSE PUBLIQUE ET L'IDENTIFIANT PÉRENNE — posés EN DERNIER, dans les
+   * deux branches.
+   *
+   * En dernier pour la raison déjà écrite ici : une clé neuve s'ajoute à la
+   * FIN, pour qu'un filet qui compare des octets lise un ajout et non une
+   * permutation.
+   *
+   * Dans les deux branches parce que **ni l'une ni l'autre ne dépend de qui
+   * regarde** : l'adresse d'une notice publique est publique, et l'identifiant
+   * est déjà publié par l'entrepôt OAI à qui veut le moissonner.
+   *
+   * ## ⚠ POURQUOI LES DEUX, ET PAS SEULEMENT L'ADRESSE
+   *
+   * « Une URL est une ADRESSE : elle dit où trouver, aujourd'hui. Un
+   * identifiant dit QUOI, pour toujours. » Le module qui les construit le dit
+   * déjà pour l'OAI ; la fiche publique les sert donc tous les deux, nommés
+   * différemment, pour qu'aucun client n'ait à deviner lequel il tient.
+   */
+  private async poserLAdresse(
+    reponse: Record<string, unknown>,
+    id: string,
+    slug?: string,
+  ): Promise<void> {
+    if (!slug) {
+      // ⚠ Les clés EXISTENT quand même : le contrat est gelé, et une clé qui
+      // apparaît par intermittence est pire qu'une clé absente.
+      reponse.publicUrl = null;
+      reponse.identifiantPerenne = null;
+      return;
+    }
+    reponse.identifiantPerenne = construireIdentifiant(slug, id);
+    const appUrl = this.config.get<string>('APP_URL')?.trim() ?? '';
+    // ⚠ Sans `APP_URL`, on ne DEVINE pas : `null` est une réponse, une adresse
+    // fabriquée n'en est pas une. Un QR qui mène ailleurs ne se remarque jamais.
+    reponse.publicUrl = appUrl
+      ? adressePubliqueDeLaNotice(appUrl, await this.domainePrincipal(slug), id)
+      : null;
   }
 
   /**

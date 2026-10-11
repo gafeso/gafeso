@@ -13,6 +13,7 @@ import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
 import { CouvertureComposee } from '@/components/couverture-composee';
+import { BlocPartage } from '@/components/bloc-partage';
 import { LockIcon, MemberLock } from '@/components/member-lock';
 import { ID_CONTENU } from '@/components/lien-evitement';
 import { formatTitle } from '@/lib/titles';
@@ -540,6 +541,18 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
             : LIBELLES.ficheNotice.sansVersionNumerique}
         </p>
       )}
+      {/*
+        ⭐ LE BLOC « PARTAGER » — QR code calculé LOCALEMENT, adresse en clair,
+        affiche A4. Il est en FIN de fiche, après les métadonnées : on partage
+        un document qu'on a identifié, pas l'inverse.
+
+        ⚠ Il ne s'affiche PAS sous condition de droit : une notice publique est
+        publique, et son adresse l'est avec elle. Ce que la classe et
+        l'abonnement gardent est la LECTURE du fichier, pas l'existence de la
+        notice — tranché le 8 octobre 2026.
+      */}
+      <BlocPartage recordId={record.id} />
+
     </main>
   );
 }

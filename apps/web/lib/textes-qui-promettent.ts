@@ -37,6 +37,19 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'etiquettes.seulementSelection',
+    nature: 'promet',
+    raison:
+      'Elle promet une BORNE, et c’est la seule phrase qui dise pourquoi deux ' +
+      'des trois portées n’ont pas d’aperçu : l’API ne sert les étiquettes ' +
+      'qu’en PDF, et « par localisation » comme « nouveautés » désignent un ' +
+      'ensemble que seul le catalogue connaît. Elle doit continuer de NOMMER ' +
+      'les deux portées et de RENVOYER au PDF — sans quoi une bibliothécaire ' +
+      'coche une localisation, obtient une planche vide, et croit l’écran cassé. ' +
+      'Le jour où une route JSON existe, cette phrase doit DISPARAÎTRE : un ' +
+      'avertissement exact devient un mensonge quand sa condition disparaît.',
+  },
+  {
     cle: 'espaceLecteur.consultations.retention',
     nature: 'promet',
     raison:

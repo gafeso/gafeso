@@ -1,9 +1,16 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { adressePubliqueDeLaNotice } from '../opac/identifiant-perenne';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { normalizeHomeContent } from '../tenancy/home-content';
-import { buildLabelsPdf, LabelData, LabelLayout } from './label-pdf';
+import {
+  LabelData,
+  LabelLayout,
+  PlancheEtiquettes,
+  buildLabelsPdf,
+} from './label-pdf';
 
 export type TenantDb = PrismaClient;
 
@@ -23,27 +30,49 @@ export interface LabelCriteria {
 
 @Injectable()
 export class LabelsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async generatePdf(
     tenant: ResolvedTenant,
     criteria: LabelCriteria,
     layout: Partial<LabelLayout>,
     now: Date = new Date(),
-  ): Promise<Uint8Array> {
+  ): Promise<PlancheEtiquettes> {
     const db = this.prisma.forTenant(tenant.slug);
     const sigle = await this.resolveSigle(tenant);
     const items = await this.selectItems(db, criteria, now);
     if (items.length === 0) {
       throw new BadRequestException('Aucun exemplaire ne correspond à cette sélection.');
     }
+    // ⚠ L'adresse publique est celle de la NOTICE, pas de l'exemplaire : un
+    // lecteur qui scanne veut la fiche du document, pas le volume qu'il tient.
+    // Les exemplaires n'ont aucune page publique.
+    const appUrl = this.config.get<string>('APP_URL')?.trim() ?? '';
+    const domaine = appUrl ? await this.domainePrincipal(tenant.slug) : null;
     const labels: LabelData[] = items.map((it) => ({
       barcode: it.barcode,
       callNumber: it.callNumber,
       title: it.record.title,
       sigle,
+      // `null` sans APP_URL : pas de QR, et le code-barres reprend toute la
+      // largeur. On ne devine pas une adresse qu'on imprimerait sur un livre.
+      publicUrl: appUrl
+        ? adressePubliqueDeLaNotice(appUrl, domaine, it.record.id)
+        : null,
     }));
     return buildLabelsPdf(labels, layout);
+  }
+
+  /** Le domaine principal de l'école — une lecture par planche, pas par étiquette. */
+  private async domainePrincipal(slug: string): Promise<string | null> {
+    const t = await this.prisma.tenant.findUnique({
+      where: { slug },
+      select: { domains: { where: { isPrimary: true }, select: { domain: true }, take: 1 } },
+    });
+    return t?.domains[0]?.domain ?? null;
   }
 
   private async selectItems(db: TenantDb, criteria: LabelCriteria, now: Date) {
@@ -67,7 +96,7 @@ export class LabelsService {
         barcode: true,
         callNumber: true,
         location: true,
-        record: { select: { title: true } },
+        record: { select: { id: true, title: true } },
       },
       orderBy: [{ location: 'asc' }, { callNumber: 'asc' }, { barcode: 'asc' }],
     });

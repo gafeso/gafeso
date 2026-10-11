@@ -687,6 +687,120 @@ export const LIBELLES = {
    * développement ce jour-là. Un nombre mesuré porte sa date pour cette
    * raison exacte.
    */
+  /**
+   * PARTAGER UNE NOTICE — QR code, affiche imprimable, ouverture dans l'app.
+   */
+  partage: {
+    titre: 'Partager ce document',
+    /**
+     * ⚠ DIT CE QUE LE QR CONTIENT, parce que l'adresse est AFFICHÉE juste en
+     * dessous : c'est elle qui permet à un humain de vérifier avant de coller
+     * une affiche dans un couloir. L'adresse publique est dérivée de l'origine
+     * du navigateur, donc une impression faite depuis une adresse interne
+     * encoderait celle-là — et seul le texte en clair le révèle.
+     */
+    aide: 'Scannez ce code pour ouvrir cette page sur un téléphone.',
+    /** Le libellé de l'adresse affichée sous le code. */
+    adresse: 'Adresse de cette page',
+    imprimer: 'Imprimer l’affiche',
+    /** ⚠ Le lien d'affiche s'ouvre dans un onglet : on le DIT. */
+    imprimerAide: 'Ouvre une affiche A4 prête à imprimer, dans un nouvel onglet.',
+
+    /**
+     * ⚠⚠ « SI ELLE EST INSTALLÉE » N'EST PAS UNE PRÉCAUTION DE STYLE.
+     *
+     * Un lien `gafeso://` sans application installée ne fait RIEN — pas
+     * d'erreur, pas de message, rien. C'est exactement « un bouton sans
+     * effet », que ce dépôt refuse d'afficher. Et on ne peut PAS détecter
+     * l'installation depuis une page web : il n'y a pas d'interrogation
+     * possible, par construction.
+     *
+     * ⭐ Ce qui reste est donc de dire la CONDITION dans le libellé — « une
+     * règle conditionnelle se lit à l'écran, elle ne se découvre pas par un
+     * refus ». Le bouton est une COMMODITÉ ajoutée : la page entière fonctionne
+     * sans lui, et il ne remplace aucun chemin.
+     */
+    ouvrirDansApp: 'Ouvrir dans l’app Gafeso',
+    ouvrirDansAppAide:
+      'Si l’application Gafeso est installée sur ce téléphone. Sinon, cette page ' +
+      'reste utilisable telle quelle — lecture comprise.',
+  },
+
+  /**
+   * L'AFFICHE A4 D'UNE NOTICE — une seule page, sans menu ni pied de page.
+   */
+  affiche: {
+    /** ⚠ La phrase que le lot demande, mot pour mot. */
+    scannez: 'Scannez pour lire ce document',
+    /**
+     * ⚠ Dit où l'on est, parce qu'une affiche VOYAGE : décrochée d'un couloir,
+     * photographiée, repartagée. Sans le nom de l'établissement, elle ne dit
+     * plus de quelle bibliothèque elle parle.
+     */
+    sousTitre: 'Catalogue en ligne',
+    imprimer: 'Imprimer',
+    retour: 'Revenir à la notice',
+    /**
+     * ⚠ L'AFFICHE NE PEUT PAS SE DÉGRADER À MOITIÉ : sans titre ni adresse,
+     * elle n'est pas une affiche. Quand l'API est injoignable on le DIT, et on
+     * ne rend pas une feuille muette qu'on imprimerait sans s'en apercevoir.
+     * ⚠ Et on ne rend PAS 404 pour autant — déclarer disparu ce qu'on n'a pas
+     * pu joindre le ferait savoir aux moteurs.
+     */
+    indisponible:
+      'Cette affiche n’a pas pu être préparée : le catalogue est momentanément ' +
+      'injoignable. La notice existe peut-être — réessayez dans un instant.',
+    /**
+     * ⚠ L'AIDE À L'IMPRESSION DIT CE QUI SE PERD. Les navigateurs n'impriment
+     * pas les fonds de couleur par défaut, et la couverture composée EST un
+     * fond. L'affiche est donc conçue pour rester lisible en noir et blanc —
+     * mais le dire évite qu'on croie l'affiche cassée.
+     */
+    aideImpression:
+      'Une page A4. L’affiche reste lisible en noir et blanc : si votre ' +
+      'navigateur n’imprime pas les fonds de couleur, rien d’essentiel ne manque.',
+  },
+
+  /**
+   * L'APERÇU DES ÉTIQUETTES DE RAYON.
+   */
+  etiquettes: {
+    titre: 'Aperçu des étiquettes',
+    /**
+     * ⚠ DIT CE QUE L'APERÇU EST, et ce qu'il n'est PAS. Deux sorties existent —
+     * cette planche, imprimée par le navigateur, et le PDF du serveur. Elles ne
+     * portent PAS la même chose : le PDF n'a pas de QR code, et il appose le
+     * sigle de l'établissement, que le front ne connaît pas. Taire cet écart
+     * ferait croire à un aperçu du PDF.
+     */
+    intro:
+      'Cette planche est ce qui s’imprimera depuis cette page. Le PDF du ' +
+      'catalogue, lui, ne porte pas de QR code — les deux sorties ne sont pas ' +
+      'interchangeables.',
+    imprimer: 'Imprimer la planche',
+    /**
+     * ⚠ LES DEUX AUTRES PORTÉES NE SONT CONNUES QUE DU SERVEUR. « Par
+     * localisation » et « nouveautés » désignent un ensemble que le front ne
+     * peut pas énumérer : l'API ne sert les étiquettes qu'en PDF, et il n'existe
+     * aucune route JSON. On le DIT plutôt que d'afficher un aperçu partiel.
+     */
+    seulementSelection:
+      'L’aperçu ne couvre que la sélection cochée. « Par localisation » et ' +
+      '« Nouveautés » désignent un ensemble que seul le catalogue connaît : ' +
+      'passez par le PDF pour ces deux portées.',
+    aucuneSelection: 'Aucune notice cochée : il n’y a rien à prévisualiser.',
+    /** ⚠ Une notice sans exemplaire n'a pas de code-barres à imprimer. */
+    sansExemplaire: (titre: string) =>
+      `« ${titre} » n’a aucun exemplaire : pas de code-barres à imprimer.`,
+    /**
+     * ⚠ Code 128 n'accepte que l'ASCII imprimable. Un code refusé se DIT, avec
+     * sa valeur : sinon on imprime une étiquette dont les barres manquent, et
+     * on croit l'imprimante en cause.
+     */
+    codeNonEncodable: (code: string) => `Code non encodable : ${code}`,
+    chargement: 'Lecture des exemplaires…',
+  },
+
   filtreNumerique: {
     /** La case, et elle dit un ÉTAT du document, pas une capacité du produit. */
     libelle: 'Lecture en ligne disponible',
@@ -1346,6 +1460,13 @@ export const LIBELLES = {
    * l'utilisateur ne sait pas quoi demander à son administrateur.
    */
   refusDeDroit: {
+    /**
+     * ⚠ L'APERÇU DES ÉTIQUETTES exige `catalogue.gerer` — la même fonction que
+     * l'écran qui le lance, et que la route `GET /labels` du serveur. Un refus
+     * NOMME la fonction : sans elle, le lecteur ne sait pas quoi demander à qui.
+     */
+    etiquettes:
+      'Vous n’avez pas la permission de gérer le catalogue (fonction « catalogue.gerer »).',
     modules:
       'Vous n’avez pas la permission de gérer les modules (fonction « modules.gerer »).',
     reglesDePret:

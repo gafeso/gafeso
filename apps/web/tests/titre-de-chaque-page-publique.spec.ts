@@ -96,6 +96,19 @@ const TITRE_PROPRE = [
   '/confidentialite',
   '/mentions-legales',
   /*
+   * ⚠ L'AFFICHE A4 D'UNE NOTICE, 11 octobre 2026. Son titre d'onglet est
+   * `absolute` et ne nomme AUCUNE école — volontairement : le nom de
+   * l'établissement est IMPRIMÉ sur l'affiche, en tête, et le répéter dans
+   * l'onglet d'un aperçu d'impression n'apprend rien. Ce qui compte dans cet
+   * onglet est de reconnaître QUELLE affiche on s'apprête à sortir, donc le
+   * titre du document.
+   *
+   * ⚠ Et elle est dans `PUBLIC_PREFIXES` — vérifié par un appel SANS COOKIE,
+   * pas supposé. Sans cela elle rendait 307 vers /login, exactement comme les
+   * deux pages ci-dessus le 9 octobre.
+   */
+  '/affiche/[id]',
+  /*
    * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — et il est ici pour un motif
    * qui lui est propre : son titre ne nomme AUCUNE école, parce que sur une
    * instance neuve il n'en existe pas encore. Hériter du gabarit racine ferait

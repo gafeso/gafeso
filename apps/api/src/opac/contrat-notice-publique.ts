@@ -157,6 +157,28 @@ export const CLES_DU_CONTRAT: string[] = [
    */
   'hasDigital',
   'offlineReady',
+  /**
+   * ⭐ L'ADRESSE PUBLIQUE DE CETTE NOTICE, et son IDENTIFIANT PÉRENNE.
+   *
+   * `publicUrl` est ce qu'un QR fait ouvrir : l'adresse web de la fiche sur le
+   * domaine de l'établissement. `identifiantPerenne` est `oai:<école>:<uuid>`,
+   * publié depuis P4-3 — il ne porte aucun domaine et survit donc à un
+   * déménagement de serveur.
+   *
+   * ⚠ LES DEUX, parce qu'ils ne disent pas la même chose : « une URL dit OÙ
+   * trouver, aujourd'hui ; un identifiant dit QUOI, pour toujours ». Les
+   * confondre est ce qui fait mourir la moitié des liens d'un catalogue après
+   * une migration.
+   *
+   * ⚠ `publicUrl` peut être `null` — sans `APP_URL` configurée, on ne devine
+   * pas une adresse. Le client doit donc le tester avant de fabriquer un QR :
+   * un code qui encode « null » est pire qu'un code absent.
+   *
+   * ⚠ EN DERNIER, après les deux booléens, pour la raison déjà écrite deux fois
+   * ici : un filet qui compare des octets doit lire un AJOUT.
+   */
+  'publicUrl',
+  'identifiantPerenne',
 ];
 
 /**

@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { ITEM_LOCATIONS } from '@/lib/item-locations';
 import { Button, Input, Select } from '@/components/ui';
+import { LIBELLES } from '@/lib/libelles';
 
 type Scope = 'selection' | 'location' | 'nouveaute';
 
@@ -88,6 +89,27 @@ export function LabelsPanel({ selectedRecordIds }: { selectedRecordIds: string[]
             title="Sauter les premières étiquettes d’une planche déjà entamée"
           />
         </label>
+        {/*
+          ⭐ L'APERÇU AVANT IMPRESSION, 11 octobre 2026 — et il n'existe QUE
+          pour la sélection cochée. Mesuré : `GET /labels` ne rend que du PDF,
+          et aucune route JSON ne sert les données d'étiquettes. « Par
+          localisation » et « nouveautés » désignent un ensemble que seul le
+          catalogue connaît.
+
+          ⚠ Le lien n'est donc PAS rendu pour les deux autres portées : un
+          aperçu qui s'ouvrirait vide serait un geste sans effet, et l'écran
+          d'aperçu dit lui-même pourquoi il ne couvre que la sélection.
+        */}
+        {scope === 'selection' && !selectionEmpty && (
+          <a
+            href={`/admin/etiquettes?recordIds=${selectedRecordIds.join(',')}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex min-h-11 items-center rounded-md border border-line bg-white px-3 py-2 text-sm font-medium hover:border-ocre/50"
+          >
+            {LIBELLES.etiquettes.titre}
+          </a>
+        )}
         {selectionEmpty ? (
           <Button variant="ghost" disabled title="Cochez au moins une notice">
             Aucune sélection

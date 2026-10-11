@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OpacService } from './opac.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
@@ -51,7 +52,7 @@ const ctx: StudentAccessContext = {
 describe('OpacService — recherche', () => {
   it('construit les filtres échappés et demande les facettes', async () => {
     const search = makeSearch();
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
 
     await service.searchCatalog('zinda', {
       q: 'droit',
@@ -73,14 +74,14 @@ describe('OpacService — recherche', () => {
 
   it('échappe les guillemets dans les valeurs de facette', async () => {
     const search = makeSearch();
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     await service.searchCatalog('zinda', { category: 'a"b' });
     expect(search.search.mock.calls[0][1].filter).toEqual(['category = "a\\"b"']);
   });
 
   it('valeurs par défaut : page 1, 20 résultats, pas de filtre', async () => {
     const search = makeSearch({ totalHits: 3 });
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const result = await service.searchCatalog('zinda', {});
     expect(search.search.mock.calls[0][1]).toMatchObject({
       filter: [],
@@ -99,7 +100,7 @@ describe('OpacService — constellation', () => {
     });
     // Le fonds compte 6 lignes en base, et le moteur en indexe 6 : les deux
     // sources s'accordent, cas nominal.
-    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma(6) as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(search as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma(6) as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
 
     const result = await service.constellation('zinda');
 
@@ -112,7 +113,7 @@ describe('OpacService — constellation', () => {
   });
 
   it('catalogue vide → aucun domaine', async () => {
-    const service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     expect(await service.constellation('zinda')).toEqual({
       totalRecords: 0,
       domains: [],
@@ -136,7 +137,7 @@ describe('OpacService — fiche détaillée', () => {
   let service: OpacService;
 
   beforeEach(() => {
-    service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    service = new OpacService(makeSearch() as any, makeDigitalCopyService() as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
   });
 
   it('synthétise la disponibilité depuis les exemplaires', async () => {
@@ -226,7 +227,7 @@ describe('OpacService — URL de lecture en ligne', () => {
   it('renvoie une URL signée à expiration courte (5 min) et le titre de la notice, quand l’accès est accordé', async () => {
     const digitalCopy = makeDigitalCopyService();
     const accessControl = makeAccessControl({ granted: true });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
@@ -264,8 +265,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       accorde as any,
       fauxPrisma() as any,
       { provenance: async () => null } as never,
-      { enregistrer } as never,
-    );
+      { enregistrer } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null, title: 'Droit foncier' }) },
     } as any;
@@ -289,15 +289,14 @@ describe('OpacService — URL de lecture en ligne', () => {
       refus as any,
       fauxPrisma() as any,
       { provenance: async () => null } as never,
-      { enregistrer } as never,
-    );
+      { enregistrer } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     await expect(bloque.getReadUrl(db, 'rec-1', ctx, 'u-test')).rejects.toThrow();
     expect(enregistrer, 'un accès REFUSÉ a été compté comme une lecture').toHaveBeenCalledTimes(1);
   });
 
   it('notice introuvable → 404, aucune URL générée', async () => {
     const digitalCopy = makeDigitalCopyService();
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, makeAccessControl() as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = { biblioRecord: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
 
     await expect(service.getReadUrl(db, 'ghost', ctx, 'u-test')).rejects.toBeInstanceOf(NotFoundException);
@@ -316,8 +315,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       makeAccessControl() as any,
       fauxPrisma() as any,
       { provenance: async () => null } as never,
-      { enregistrer } as never,
-    );
+      { enregistrer } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null, title: 'T' }) },
     } as any;
@@ -331,7 +329,7 @@ describe('OpacService — URL de lecture en ligne', () => {
   it('personnel (ctx null) : lecture sans contrôle de classe/abonnement', async () => {
     const digitalCopy = makeDigitalCopyService();
     const accessControl = makeAccessControl({ granted: false, message: 'peu importe' });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;
@@ -351,7 +349,7 @@ describe('OpacService — URL de lecture en ligne', () => {
       requiredClassName: 'L1_DROIT',
       message: 'Réservé aux étudiants de L1_DROIT.',
     });
-    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never);
+    const service = new OpacService(makeSearch() as any, digitalCopy as any, accessControl as any, fauxPrisma() as any, { provenance: async () => null } as never, { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = {
       biblioRecord: { findUnique: vi.fn().mockResolvedValue({ embargoUntil: null,  title: 'Droit foncier' }) },
     } as any;

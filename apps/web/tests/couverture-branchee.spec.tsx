@@ -30,9 +30,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { renderToStaticMarkup } from 'react-dom/server';
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CouvertureComposee } from '@/components/couverture-composee';
 import { FicheNotice } from '@/app/opac/[id]/fiche-notice';
 
 /**
@@ -70,6 +72,16 @@ interface Surface {
   /** Le nom de l'interface à lire dans ce fichier. */
   type: string;
   /**
+   * ⚠ LE NOM DU CHAMP, PAR SURFACE — et ce n'est pas une complication gratuite.
+   * `/reader/hors-ligne` sert le domaine sous le nom `domaine`, pas `category`.
+   * Mesuré le 11 octobre 2026 : c'est LA MÊME CHAÎNE (5 baux comparés contre
+   * `GET /opac/records/:id`, zéro écart), mais un garde qui chercherait
+   * `category` en dur déclarerait cette surface « sans domaine » et refuserait
+   * un branchement parfaitement juste. C'est « un grep sur un nom ne prouve pas
+   * qu'on lit la chose qui le porte », appliqué à un SYNONYME.
+   */
+  champ: string;
+  /**
    * Comment ce type déclare `category` AUJOURD'HUI — et c'est le lien
    * mécanique du motif : s'il change, le motif est à relire.
    */
@@ -79,10 +91,38 @@ interface Surface {
 
 const SURFACES: Surface[] = [
   {
+    ecran: 'app/affiche/[id]/page.tsx',
+    compose: true,
+    typeDans: 'app/affiche/[id]/page.tsx',
+    type: 'Notice',
+    champ: 'category',
+    categorie: 'requis',
+    motif:
+      'l’affiche A4 lit la notice par `noticePublique()`, donc la charge de ' +
+      '`GET /opac/records/:id`, qui sert `category`. ⚠ Et la couverture y est un ' +
+      'ORNEMENT : les navigateurs n’impriment pas les fonds par défaut, donc elle ' +
+      'peut disparaître à l’impression — rien d’essentiel n’en dépend, tout le ' +
+      'contenu de l’affiche est du texte et un tracé noir.',
+  },
+  {
+    ecran: 'app/mes-documents-hors-ligne/page.tsx',
+    compose: true,
+    typeDans: 'app/mes-documents-hors-ligne/page.tsx',
+    type: 'DocumentHorsLigne',
+    champ: 'domaine',
+    categorie: 'requis',
+    motif:
+      '`GET /reader/hors-ligne` sert `domaine` depuis le 11 octobre 2026, et c’est LA ' +
+      'MÊME CHAÎNE que `category` — 5 baux comparés contre `GET /opac/records/:id`, ' +
+      'zéro écart. La teinte est donc celle du document. Couverture en 56×76, donc ' +
+      'INITIALE SEULE : la spécification tranche ce cas pour les petites vignettes.',
+  },
+  {
     ecran: 'app/opac/[id]/fiche-notice.tsx',
     compose: true,
     typeDans: 'app/opac/[id]/fiche-notice.tsx',
     type: 'RecordDetail',
+    champ: 'category',
     categorie: 'requis',
     motif:
       '`GET /opac/records/:id` sert `category` — mesuré : « sciences ». La ' +
@@ -93,6 +133,7 @@ const SURFACES: Surface[] = [
     compose: false,
     typeDans: 'lib/server-api.ts',
     type: 'NoticeANouveaute',
+    champ: 'category',
     categorie: 'absent',
     motif:
       '`GET /opac/nouveautes` ne sert PAS `category` (mesuré). Composer ici ' +
@@ -105,6 +146,7 @@ const SURFACES: Surface[] = [
     compose: false,
     typeDans: 'app/opac/page.tsx',
     type: 'Hit',
+    champ: 'category',
     categorie: 'optionnel',
     motif:
       '`GET /opac/search` sert `category`, mais `GET /opac/parcourir` ne la ' +
@@ -154,11 +196,11 @@ describe('l’inventaire des surfaces', () => {
   it('chaque surface est branchée, ou déclarée non-branchée AVEC SON MOTIF', () => {
     // ⚠ Témoin de COMPTE : une surface ajoutée à la liste sans être traitée
     // ci-dessous convoque quelqu'un.
-    expect(SURFACES).toHaveLength(3);
+    expect(SURFACES).toHaveLength(5);
     for (const s of SURFACES) {
       expect(s.motif.length, `motif trop court pour ${s.ecran}`).toBeGreaterThan(60);
     }
-    expect(SURFACES.filter((s) => s.compose)).toHaveLength(1);
+    expect(SURFACES.filter((s) => s.compose)).toHaveLength(3);
   });
 
   it('une surface BRANCHÉE importe le composant, et reçoit `category` À COUP SÛR', () => {
@@ -171,7 +213,7 @@ describe('l’inventaire des surfaces', () => {
       // c'est exactement la couleur fausse que l'obligation ① interdit.
       expect(
         s.categorie,
-        `${s.ecran} compose : ${s.type} doit déclarer \`category\` en REQUIS`,
+        `${s.ecran} compose : ${s.type} doit déclarer \`${s.champ}\` en REQUIS`,
       ).toBe('requis');
     }
   });
@@ -196,12 +238,12 @@ describe('l’inventaire des surfaces', () => {
    * *Une dette qui ne se rappelle pas d'elle-même n'est pas une dette, c'est
    * un oubli en attente.*
    */
-  it('la déclaration de `category` de chaque type est ENCORE celle du motif', () => {
+  it('la déclaration du champ de domaine de chaque type est ENCORE celle du motif', () => {
     for (const s of SURFACES) {
-      const reelle = declarationDe(s.typeDans, s.type, 'category');
+      const reelle = declarationDe(s.typeDans, s.type, s.champ);
       expect(
         reelle,
-        `⚠ ${s.type} (${s.typeDans}) déclare \`category\` en « ${reelle} », ` +
+        `⚠ ${s.type} (${s.typeDans}) déclare \`${s.champ}\` en « ${reelle} », ` +
           `alors que le motif de ${s.ecran} suppose « ${s.categorie} ». Le motif ` +
           `est à RELIRE. Deux issues — branchez la couverture composée sur cet ` +
           `écran si la teinte y est désormais sûre, ou réécrivez le motif en ` +
@@ -308,7 +350,50 @@ describe('la couverture de la fiche, mesurée sur l’écran', () => {
    */
   it('tout texte de la couverture est AUSSI affiché en texte ailleurs', () => {
     monter();
-    const svg = document.querySelector('svg[aria-hidden="true"]')!;
+    verifierRedondance(document.querySelector('svg[aria-hidden="true"]')!);
+  });
+
+  /**
+   * ⭐ LA MÊME RÈGLE, SUR LA SECONDE SURFACE — et c'est ce qui rend la règle
+   * utile plutôt que décorative : elle ne vaut que si elle s'applique à toute
+   * surface qui compose, sinon la suivante échappe par construction.
+   *
+   * Sur l'étagère, la couverture fait 56×76 : elle ne porte donc QUE
+   * l'INITIALE du titre, qui est un fragment du titre affiché à côté. La
+   * redondance est satisfaite.
+   *
+   * ⚠ ET MA PREMIÈRE RÉDACTION AFFIRMAIT UNE GARANTIE QUE CE CAS N'A PAS :
+   * « si quelqu'un agrandissait la vignette au-dessus de 80 px sans afficher
+   * l'auteur ni l'année, ce cas tomberait ». Mesuré par un contrôle négatif —
+   * il ne tombe PAS. L'appel de l'étagère ne passe ni `auteur` ni `annee` :
+   * agrandie, la couverture ne porterait que des lignes de titre, qui sont
+   * affichées. La redondance reste donc vraie, et c'est la LISIBILITÉ qui
+   * souffrirait.
+   *
+   * ⭐ Ce qui tient réellement le choix des 56×76 est le cas voisin
+   * `espace-lecteur-rendu.spec.tsx` : « l'étagère rend une couverture à
+   * l'INITIALE SEULE ». Lui tombe si on agrandit.
+   */
+  it('⚠ et sur l’ÉTAGÈRE hors ligne aussi — sinon la règle ne vaut rien', () => {
+    const html = renderToStaticMarkup(
+      <CouvertureComposee
+        notice={{ titre: 'Textiles et motifs', domaine: 'arts' }}
+        largeur={56}
+        hauteur={76}
+      />,
+    );
+    // L'écran de l'étagère est monté dans `espace-lecteur-rendu.spec.tsx` ;
+    // ici on vérifie la propriété du COUPLE couverture/texte tel que la carte
+    // l'assemble : l'initiale est contenue dans le titre affiché.
+    const initiale = (html.match(/>([^<]+)<\/text>/) ?? [])[1] ?? '';
+    expect(initiale, 'la couverture de 56×76 doit porter une initiale').toHaveLength(1);
+    expect(
+      'Textiles et motifs',
+      `l’initiale « ${initiale} » n’est pas dans le titre affiché à côté`,
+    ).toContain(initiale);
+  });
+
+  function verifierRedondance(svg: Element) {
     // ⚠ LES FEUILLES SEULEMENT. `querySelectorAll('text, tspan')` rendait
     // AUSSI le `<text>` parent, dont le `textContent` est la concaténation de
     // ses lignes SANS séparateur — « Contes ettransmissionorale auBurkina
@@ -332,10 +417,10 @@ describe('la couverture de la fiche, mesurée sur l’écran', () => {
         dehors,
         `⚠ « ${t} » n’est porté QUE par la couverture, qui est aria-hidden : ` +
           'invisible pour un lecteur d’écran. Affichez ce champ en texte sur ' +
-          'la fiche, ou retirez-le de la couverture.',
+          'l’écran, ou retirez-le de la couverture.',
       ).toContain(t.replace(/\s+/g, ' '));
     }
-  });
+  }
 
   it('la couverture n’ajoute AUCUNE requête à la fiche', () => {
     const { container } = monter();

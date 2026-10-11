@@ -77,6 +77,16 @@ const PUBLIC_PREFIXES = [
   '/installation',
   '/mentions-legales',
   '/confidentialite',
+  /**
+   * ⚠ L'AFFICHE IMPRIMABLE D'UNE NOTICE EST PUBLIQUE, comme la notice.
+   *
+   * Elle vit à la RACINE et non sous `/opac/` parce qu'un layout imbriqué ne
+   * peut pas retirer son parent, et que le lot exige « sans menu ni pied ».
+   * Elle sort donc du préfixe `/opac` et doit être déclarée ici — sans quoi
+   * elle rend **307 vers /login**, exactement comme les pages légales le
+   * 9 octobre 2026. Mesuré sans cookie, pas supposé.
+   */
+  '/affiche/',
 ];
 
 /**

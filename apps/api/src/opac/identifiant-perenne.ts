@@ -85,3 +85,126 @@ export function localisationOai(
   const identifiant = construireIdentifiant(slug, recordId);
   return new URL(`/opac/resoudre/${encodeURIComponent(identifiant)}`, base.origin).toString();
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ⭐ L'ADRESSE PUBLIQUE DE LA NOTICE — celle qu'on imprime dans un QR.
+ *
+ * ## ⚠ POURQUOI PAS `localisationOai` — elles ne s'adressent pas au même lecteur
+ *
+ * `localisationOai` bâtit `/opac/resoudre/<identifiant>` sur l'origine de
+ * l'ENTREPÔT, pour un moissonneur. C'est juste là-bas, et ça ne l'est pas ici :
+ *
+ * · elle emploie l'origine par laquelle le moissonneur vient de parler — une
+ *   adresse d'API, pas celle qu'un lecteur ouvre ;
+ * · et **le WEB NE SERT AUCUNE PAGE `/opac/resoudre/…`** — mesuré le 11 octobre
+ *   2026 : `apps/web/app/opac/` porte `page.tsx`, `[id]`, `auteurs`, `lire`, et
+ *   rien d'autre. Un QR pointant là mènerait à un 404.
+ *
+ * 🔴 ET C'EST CE QUI TRANCHE : ce QR est IMPRIMÉ SUR UNE ÉTIQUETTE COLLÉE DANS
+ * UN LIVRE. Il ne se reprend pas. Publier une adresse qui ne répond pas
+ * aujourd'hui dans l'espoir qu'une page existe demain, c'est coller des liens
+ * morts sur un fonds entier.
+ *
+ * ⚠ Dette RAPPORTÉE au front plutôt que corrigée ici : si
+ * `/opac/resoudre/[identifiant]` devient une page web (une simple redirection
+ * vers `/opac/<id>` suffit), cette fonction bascule dessus en une ligne — et le
+ * QR cesse alors de porter un identifiant de base dans son chemin.
+ *
+ * ## ⚠ L'HÔTE EST CELUI DE L'ÉCOLE, pas `APP_URL` tel quel
+ *
+ * `APP_URL` porte le SCHÉMA et le PORT de l'instance — c'est elle qui dit
+ * `https` ou `http://…:3000`, et on ne les devine pas. Mais une instance
+ * multi-établissement sert plusieurs domaines : publier l'hôte d'`APP_URL` pour
+ * toutes les écoles donnerait à chacune l'adresse d'une autre.
+ *
+ * On compose donc : le schéma et le port d'`APP_URL`, l'HÔTE du domaine
+ * principal de l'école. Sans domaine déclaré, `APP_URL` entière — c'est le cas
+ * d'une instance mono-établissement, et c'est alors exact.
+ */
+export function adressePubliqueDeLaNotice(
+  appUrl: string,
+  domainePrincipal: string | null,
+  recordId: string,
+): string | null {
+  let base: URL;
+  try {
+    base = new URL(appUrl);
+  } catch {
+    // ⚠ Rien plutôt qu'une adresse fabriquée : un QR illisible se remarque, un
+    // QR qui mène ailleurs ne se remarque jamais.
+    return null;
+  }
+  if (domainePrincipal) {
+    const hote = domainePrincipal.trim().toLowerCase();
+    // ⚠ On n'accepte QUE ce qui ressemble à un hôte. Une valeur arbitraire en
+    // base — un chemin, un espace, un `@` — fabriquerait une URL qui pointe
+    // ailleurs, et c'est exactement ce qu'un QR ne doit pas faire.
+    if (/^[a-z0-9.-]+$/.test(hote) && !hote.startsWith('.') && !hote.endsWith('.')) {
+      base.hostname = hote;
+    }
+  }
+  return new URL(`/opac/${encodeURIComponent(recordId)}`, base).toString();
+}
+
+/** Ce qu'une adresse scannée peut être. */
+export type AdresseScannee =
+  | { reconnue: true; recordId: string }
+  | { reconnue: false; motif: 'illisible' }
+  | { reconnue: false; motif: 'autre-etablissement'; hote: string };
+
+/**
+ * ⭐ RECONNAÎT UNE ADRESSE SCANNÉE, et dit POURQUOI quand elle ne l'est pas.
+ *
+ * ## ⚠ POURQUOI UN TYPE À TROIS BRANCHES, et pas un `string | null`
+ *
+ * « Un booléen qui refuse détruit le motif à la source — aucun client ne peut
+ * le retrouver. » Les deux refus n'appellent pas le même geste :
+ *
+ * | Le refus | Ce que la personne doit faire |
+ * |---|---|
+ * | illisible | ce n'est pas un QR Gafeso — rien à faire, elle a scanné autre chose |
+ * | autre établissement | changer d'établissement dans l'application |
+ *
+ * Les confondre enverrait quelqu'un chercher un défaut dans son application
+ * alors qu'il tient le livre d'une AUTRE bibliothèque.
+ *
+ * ## ⚠ LA COMPARAISON PORTE SUR L'HÔTE, et elle est stricte
+ *
+ * Deux établissements se distinguent par leur domaine. `bib.uo.bf` et
+ * `bib.uo.bf.exemple.org` sont deux hôtes DIFFÉRENTS : une comparaison par
+ * `endsWith` les confondrait, et c'est exactement la forme qu'un hameçonnage
+ * emploie. On compare l'hôte ENTIER, en minuscules.
+ *
+ * ⚠ Le PORT n'entre pas dans la comparaison : en développement l'application
+ * est sur 3000 et l'API sur 4000, et une étiquette imprimée depuis l'une se
+ * scanne depuis l'autre. Le port ne distingue pas deux établissements.
+ */
+export function reconnaitreAdresse(
+  url: string,
+  hotesDeLEcole: readonly string[],
+): AdresseScannee {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return { reconnue: false, motif: 'illisible' };
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    return { reconnue: false, motif: 'illisible' };
+  }
+  // ⚠ Le CHEMIN d'abord : une adresse qui n'est pas une fiche de notice n'est
+  // pas « d'un autre établissement », elle est illisible — et le dire
+  // autrement enverrait quelqu'un changer d'école pour rien.
+  const m = /^\/opac\/([^/]+)\/?$/.exec(u.pathname);
+  if (!m || !m[1]) return { reconnue: false, motif: 'illisible' };
+
+  const hote = u.hostname.toLowerCase();
+  const connus = hotesDeLEcole.map((h) => h.trim().toLowerCase()).filter(Boolean);
+  // ⚠ Une école sans domaine déclaré n'a rien à comparer : on ne REFUSE pas
+  // pour autant — refuser toutes les adresses sur une instance
+  // mono-établissement fermerait la fonction au lieu de la protéger.
+  if (connus.length > 0 && !connus.includes(hote)) {
+    return { reconnue: false, motif: 'autre-etablissement', hote };
+  }
+  return { reconnue: true, recordId: decodeURIComponent(m[1]) };
+}

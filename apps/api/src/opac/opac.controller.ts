@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Controller,
   Get,
   Header,
@@ -13,7 +14,10 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentTenant } from '../tenancy/current-tenant.decorator';
-import { analyserIdentifiant } from './identifiant-perenne';
+import {
+  analyserIdentifiant,
+  reconnaitreAdresse,
+} from './identifiant-perenne';
 import { ProvenanceService } from '../moissonnage/provenance.service';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -246,6 +250,68 @@ export class OpacController {
    *    catalogue d'un tiers ;
    *  · la notice n'existe pas → 404, et c'est `recordDetail` qui le rend.
    */
+  /**
+   * ⭐ UNE ADRESSE SCANNÉE — ce que l'application mobile tient après un QR.
+   *
+   * Le QR d'une étiquette porte une URL, pas un identifiant : c'est ce qu'un
+   * appareil photo ordinaire sait ouvrir. L'application, elle, veut la NOTICE.
+   *
+   * ## ⚠ POURQUOI UNE ROUTE, ET PAS « que le client découpe l'URL »
+   *
+   * Parce que le refus qui compte ne se lit pas dans le chemin : **une adresse
+   * d'un AUTRE établissement se reconnaît à son HÔTE**, et seul le serveur sait
+   * quels domaines sont les siens. Un client qui découperait l'URL lui-même
+   * appellerait `/opac/records/<id>` sur SA propre école, ne trouverait rien,
+   * et dirait « notice introuvable » — alors que le livre existe, ailleurs.
+   *
+   * ⚠ ET LES DEUX REFUS NE SE DISENT PAS PAREIL : « ce n'est pas un QR
+   * Gafeso » et « ce livre appartient à une autre bibliothèque » appellent deux
+   * gestes différents. Le second NOMME l'hôte, pour que l'application puisse
+   * dire à son lecteur où aller — sans rien révéler du catalogue d'en face.
+   */
+  @Get('scan')
+  @ApiOperation({
+    summary: 'Reconnaître une adresse scannée (QR d’étiquette) et rendre la notice',
+    description:
+      'Rend la fiche publique si l’adresse appartient à CET établissement. ' +
+      '⚠ 404 « illisible » si ce n’est pas une adresse de notice Gafeso ; ' +
+      '409 si elle appartient à un AUTRE établissement, avec son hôte — pour ' +
+      'que l’application dise où aller plutôt que « introuvable ».',
+  })
+  async scan(
+    @CurrentTenant() tenant: ResolvedTenant | null,
+    @Query('url') url: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('cookie') cookie?: string,
+  ) {
+    const resolved = this.requireTenant(tenant);
+    if (!url || typeof url !== 'string') {
+      throw new NotFoundException(
+        'Aucune adresse à reconnaître : passez l’adresse scannée dans `url`.',
+      );
+    }
+    const hotes = await this.opac.hotesDeLEcole(resolved.slug);
+    const lu = reconnaitreAdresse(url, hotes);
+    if (!lu.reconnue) {
+      if (lu.motif === 'autre-etablissement') {
+        throw new ConflictException(
+          `Ce document appartient à une autre bibliothèque (${lu.hote}). ` +
+            'Changez d’établissement dans l’application pour l’ouvrir.',
+        );
+      }
+      throw new NotFoundException(
+        'Cette adresse n’est pas celle d’une notice Gafeso. Scannez le QR de ' +
+          'l’étiquette, pas le code-barres.',
+      );
+    }
+    return this.opac.recordDetail(
+      this.prisma.forTenant(resolved.slug),
+      lu.recordId,
+      this.isMember(resolved.slug, authorization, cookie),
+      resolved.slug,
+    );
+  }
+
   @Get('resoudre/:identifiant')
   @ApiOperation({
     summary: 'Résoudre un identifiant pérenne (`oai:<école>:<uuid>`) vers sa notice',
@@ -283,6 +349,10 @@ export class OpacController {
       this.prisma.forTenant(resolved.slug),
       analyse.id,
       this.isMember(resolved.slug, authorization, cookie),
+      // ⚠ LE SLUG EST OBLIGATOIRE ICI, et un garde l'exige : sans lui,
+      // `publicUrl` et `identifiantPerenne` sortiraient à `null` pour
+      // toujours — « une colonne SERVIE que personne ne remplit ».
+      resolved.slug,
     );
   }
 
@@ -304,6 +374,10 @@ export class OpacController {
       this.prisma.forTenant(resolved.slug),
       id,
       this.isMember(resolved.slug, authorization, cookie),
+      // ⚠ LE SLUG EST OBLIGATOIRE ICI, et un garde l'exige : sans lui,
+      // `publicUrl` et `identifiantPerenne` sortiraient à `null` pour
+      // toujours — « une colonne SERVIE que personne ne remplit ».
+      resolved.slug,
     );
   }
 

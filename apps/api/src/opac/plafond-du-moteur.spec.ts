@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { OpacService } from './opac.service';
 
 /**
@@ -73,8 +74,7 @@ function service(total = FONDS) {
     {} as never,
     fausseBase(total) as never,
     { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never
-    );
+      { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
 }
 
 describe('La constellation ne peut pas se contredire elle-même', () => {

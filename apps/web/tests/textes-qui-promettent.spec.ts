@@ -264,3 +264,10 @@ describe('⚠ un texte qui promet est éprouvé sur sa propriété', () => {
     ).toEqual([]);
   });
 });
+
+/*
+ * ⚠ LES ASSERTIONS DE PROPRIÉTÉ DE `etiquettes.seulementSelection` VIVENT DANS
+ * `etiquettes-apercu.spec.tsx`, et pas ici : ce fichier s'EXCLUT lui-même de
+ * son propre relevé (ligne 35), pour ne pas se satisfaire tout seul. Je les
+ * avais écrites ici, et il a refusé — à juste titre.
+ */

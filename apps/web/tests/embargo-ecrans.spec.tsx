@@ -110,11 +110,36 @@ describe('MOITIÉ 2 — la fiche PROFESSIONNELLE dit l’embargo sans entrer en 
     expect(screen.queryByText(LIBELLES.embargo.enCours(dateLisible(IL_Y_A_UN_AN)))).toBeNull();
   });
 
+  /**
+   * ⚠ ON CHERCHE LE MESSAGE, PAS LE MOT — et c'est une mesure qui l'a imposé.
+   *
+   * `queryByText(/embargo/i)` a commencé à matcher le jour où la fiche affiche
+   * son ADRESSE PUBLIQUE en clair, sous le QR code de partage : la notice
+   * d'essai s'appelle `rec-embargo`, donc l'URL contient le mot. Le produit
+   * était juste ; l'assertion cherchait une CHAÎNE là où elle voulait une
+   * PHRASE.
+   *
+   * ⭐ C'est « un grep sur un nom ne prouve pas qu'on lit la chose qui le
+   * porte », appliqué à une assertion de test — et le remède est le même :
+   * viser le libellé, qui est la propriété, et non un mot qui peut apparaître
+   * dans un identifiant.
+   */
+  const aucunMessageDEmbargo = () => {
+    for (const phrase of [
+      LIBELLES.embargo.enCours(dateLisible(DANS_UN_AN)),
+      LIBELLES.embargo.enCours(dateLisible(IL_Y_A_UN_AN)),
+      LIBELLES.embargo.echu(dateLisible(DANS_UN_AN)),
+      LIBELLES.embargo.echu(dateLisible(IL_Y_A_UN_AN)),
+    ]) {
+      expect(screen.queryByText(phrase), `« ${phrase} » est affiché`).toBeNull();
+    }
+  };
+
   it('aucun embargo : rien n’est dit', async () => {
     brancher(null);
     render(<FicheNoticePage />);
     await screen.findByText(/Cryptographie appliquée/);
-    expect(screen.queryByText(/embargo/i)).toBeNull();
+    aucunMessageDEmbargo();
   });
 });
 
@@ -222,6 +247,13 @@ describe('MOITIÉ 2 — la notice PUBLIQUE dit pourquoi le fichier n’est pas l
 
   it('aucun embargo : rien', () => {
     monter(null);
-    expect(screen.queryByText(/embargo/i)).toBeNull();
+    // ⚠ Même raison que ci-dessus : le mot vit aussi dans l'identifiant de la
+    // notice d'essai, donc dans son adresse publique affichée sous le QR.
+    for (const phrase of [
+      LIBELLES.embargo.enCours(dateLisible(DANS_UN_AN)),
+      LIBELLES.embargo.echu(dateLisible(IL_Y_A_UN_AN)),
+    ]) {
+      expect(screen.queryByText(phrase), `« ${phrase} » est affiché`).toBeNull();
+    }
   });
 });

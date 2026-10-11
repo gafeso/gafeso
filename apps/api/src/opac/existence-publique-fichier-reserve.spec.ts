@@ -29,6 +29,7 @@
  * périme pas toute seule.
  */
 import { describe, expect, it } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OpacController } from './opac.controller';
 import { OpacService } from './opac.service';
@@ -47,6 +48,11 @@ const PUBLIQUES: Record<string, string> = {
   authorDetail: 'une fiche d’autorité — un auteur est public par destination',
   provenances: 'les écoles d’origine du fonds moissonné',
   resoudre: 'un identifiant pérenne vers sa notice',
+  // ⚠ PUBLIQUE, et elle ne donne rien de plus que `record` : c'est
+  // `recordDetail` qui répond, avec son `membersOnly`. La seule chose qu'elle
+  // AJOUTE est un refus — « ce livre appartient à une autre bibliothèque » —
+  // et refuser n'ouvre rien.
+  scan: 'une adresse scannée (QR d’étiquette) vers sa notice',
   record:
     'la DESCRIPTION d’une notice. Sert `hasDigital` / `offlineReady` à l’anonyme, ' +
     'et masque `digitalCopy`, `items`, `availability` (membersOnly).',
@@ -144,8 +150,7 @@ describe('l’existence d’un document est publique, le fichier est réservé',
       {} as never,
       {} as never,
       { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never,
-    );
+      { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService);
     const db = { biblioRecord: { findUnique: async () => ligne } } as never;
     const r = (await service.recordDetail(db, 'rec-1', false)) as Record<string, unknown>;
 

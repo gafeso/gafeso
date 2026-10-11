@@ -85,9 +85,18 @@ export class LabelsController {
       start: intInRange(start, 1, 1, 96),
     };
 
-    const bytes = await this.labels.generatePdf(tenant, criteria, layout);
+    const { pdf, qrAbandonnes } = await this.labels.generatePdf(tenant, criteria, layout);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="etiquettes.pdf"');
-    res.end(Buffer.from(bytes));
+    // ⭐ LE QR ABANDONNÉ SE DIT, dans un en-tête que le front peut lire.
+    //
+    // ⚠ Une planche où un QR manque sans un mot est une dégradation
+    // silencieuse : la bibliothécaire ne peut pas savoir si c'est un défaut ou
+    // une décision. La réponse est un PDF — il n'y a pas de corps JSON où le
+    // dire —, donc un en-tête, et le front l'affiche.
+    if (qrAbandonnes.length > 0) {
+      res.setHeader('X-Gafeso-Qr-Abandonnes', String(qrAbandonnes.length));
+    }
+    res.end(Buffer.from(pdf));
   }
 }

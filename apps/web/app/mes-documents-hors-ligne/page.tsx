@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Alert, Card } from '@/components/ui';
 import { ID_CONTENU } from '@/components/lien-evitement';
+import { CouvertureComposee } from '@/components/couverture-composee';
 import { LIBELLES } from '@/lib/libelles';
 
 const T = LIBELLES.espaceLecteur.horsLigne;
@@ -31,6 +32,19 @@ interface DocumentHorsLigne {
   titre: string | null;
   appareilId: string;
   expireLe: string;
+  /**
+   * ⚠ REQUIS, et nullable — comme `category` sur la fiche, et pour la même
+   * raison : la TEINTE de la couverture en dépend. Un `domaine?:` optionnel
+   * voudrait dire « parfois absent du contrat », donc une teinte de repli sur
+   * un écran qui compose, et le même document changerait de couleur selon
+   * l'écran où on le regarde — ce que l'obligation ① de la spécification
+   * interdit.
+   *
+   * Mesuré le 11 octobre 2026 : `/reader/hors-ligne` le sert, et c'est LA MÊME
+   * CHAÎNE que `category` — 5 baux comparés contre `GET /opac/records/:id`,
+   * zéro écart, casse et accents compris.
+   */
+  domaine: string | null;
 }
 
 export default function MesDocumentsHorsLignePage() {
@@ -64,6 +78,32 @@ export default function MesDocumentsHorsLignePage() {
         <div className="mt-5 flex flex-col gap-2">
           {docs.map((d, i) => (
             <Card key={`${d.recordId}-${d.appareilId}-${i}`} className="!p-4">
+              {/*
+                ⚠ LA COUVERTURE COMPOSÉE, EN 56×76 — DONC L'INITIALE SEULE, et
+                c'est la spécification qui le décide, pas une économie : « en
+                dessous de H = 80, on n'affiche que l'INITIALE du titre ». Une
+                étagère est une liste de lignes compactes ; y poser quatre
+                lignes de titre en 8 px serait illisible, et la spécification a
+                déjà tranché ce cas pour la liste du mobile (62 dp).
+
+                ⚠ ET ON NE MET PAS À L'ÉCHELLE EN CSS : le seuil des 80 px, le
+                dos borné et le rayon des angles ne sont pas proportionnels.
+                Une couverture calculée pour 164 puis réduite à 76 afficherait
+                son texte complet à 76 px.
+
+                ⚠ `aria-hidden` reste vrai ici : l'INITIALE est un fragment du
+                titre affiché juste à côté, et la teinte n'est pas un texte.
+                `couverture-branchee.spec.tsx` le vérifie par l'EFFET, sur cet
+                écran comme sur la fiche.
+              */}
+              <div className="flex items-start gap-3">
+                <CouvertureComposee
+                  notice={{ titre: d.titre ?? '', domaine: d.domaine }}
+                  largeur={56}
+                  hauteur={76}
+                  className="shrink-0 rounded"
+                />
+                <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium">
                   {d.titre ? (
@@ -82,6 +122,8 @@ export default function MesDocumentsHorsLignePage() {
               <p className="mt-1 text-xs text-muted">
                 {T.appareil} · <span className="font-mono">{d.appareilId.slice(0, 12)}</span>
               </p>
+                </div>
+              </div>
             </Card>
           ))}
         </div>

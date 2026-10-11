@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { OpacService } from './opac.service';
 
 /**
@@ -43,8 +44,7 @@ function fauxCatalogue(notices: { id: string; avecFichier: boolean }[]) {
       {} as never,
       { forTenant: () => ({ biblioRecord: { count, findMany } }) } as never,
       { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never
-    ),
+      { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService),
   };
 }
 
@@ -153,8 +153,7 @@ describe('constellation — elle n’interroge plus le moteur à chaque visite',
         {} as never,
         { forTenant: () => ({ biblioRecord: { count } }) } as never,
       { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never
-    ),
+      { enregistrer: async () => true } as never, { get: () => 'http://localhost:3000' } as unknown as ConfigService),
     };
   }
 

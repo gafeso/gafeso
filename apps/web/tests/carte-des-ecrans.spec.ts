@@ -40,6 +40,16 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
   '/opac': { pour: 'tout le monde', quoi: 'le catalogue public, facettes et recherche' },
   '/opac/[id]': { pour: 'tout le monde', quoi: 'la fiche d’une notice ; la lecture et la réservation exigent un compte' },
   '/opac/[id]/lire': { pour: 'membre AYANT DROIT', quoi: 'le lecteur en ligne (PDF ou EPUB), sans téléchargement' },
+  /*
+   * ⚠ L'AFFICHE A4, 11 octobre 2026 — et elle n'est PAS sous `/opac/` malgré
+   * les apparences : un layout imbriqué ne peut pas retirer son parent, et le
+   * lot exige « sans menu ni pied ». D'où un écran à la racine, et d'où sa
+   * déclaration ici plutôt qu'une entrée de barre, qu'elle n'aurait pas.
+   */
+  '/affiche/[id]': {
+    pour: 'une bibliothécaire qui affiche un document, et tout le monde',
+    quoi: 'une affiche A4 d’une notice : couverture, métadonnées, grand QR code et l’adresse en clair ; s’imprime en une page, lisible en noir et blanc',
+  },
   '/opac/auteurs': { pour: 'tout le monde', quoi: 'l’index des auteurs' },
   '/opac/auteurs/[id]': { pour: 'tout le monde', quoi: 'la fiche d’un auteur et ses documents' },
   '/e/[slug]': { pour: 'tout le monde', quoi: 'la page d’inscription par QR d’un établissement' },
@@ -47,6 +57,16 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
   '/inscription': { pour: 'tout le monde', quoi: 'création d’un compte lecteur' },
   '/definir-mot-de-passe': { pour: 'porteur du lien reçu', quoi: 'choix du mot de passe, lien à usage unique' },
   '/profil': { pour: 'tout compte', quoi: 'mon compte : informations, mot de passe, double authentification' },
+  /*
+   * ⚠ L'APERÇU DES ÉTIQUETTES, 11 octobre 2026 — hors barre parce qu'on n'y
+   * arrive QUE depuis le catalogue, avec une sélection cochée. Une entrée de
+   * menu y mènerait à une planche vide, ce qui est exactement le genre d'écran
+   * que ce dépôt refuse d'afficher.
+   */
+  '/admin/etiquettes': {
+    pour: 'qui gère le catalogue (catalogue.gerer)',
+    quoi: 'l’aperçu avant impression d’une planche d’étiquettes de rayon — QR code, code-barres Code 128, cote et titre ; s’imprime depuis le navigateur, et ce qu’on voit EST ce qui sort',
+  },
   /*
    * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — le seul écran du dépôt dont
    * le public est « personne qui n'a pas encore de compte ». Sur une instance
@@ -219,7 +239,7 @@ describe('la carte des écrans', () => {
     // ⚠ 54 le 8 octobre 2026 : les deux pages légales publiques et leur écran
     // de rédaction. Le compte a convoqué trois fois de suite aujourd'hui, et
     // chaque fois la question était la bonne — cet écran a-t-il une porte ?
-    expect(ecransSurLeDisque().length).toBe(54);
+    expect(ecransSurLeDisque().length).toBe(56);
   });
 
   it('le document sur disque est à jour', () => {

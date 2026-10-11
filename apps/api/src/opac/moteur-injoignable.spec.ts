@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { OpacService } from './opac.service';
 import { SearchService } from '../search/search.service';
@@ -69,7 +70,8 @@ function opac(search: SearchService, notices = 352) {
     {} as never,
     { forTenant: () => ({ biblioRecord: { count: async () => notices } }) } as never,
     { provenance: async () => null } as never,
-      { enregistrer: async () => true } as never
+      { enregistrer: async () => true } as never,
+      { get: () => 'http://localhost:3000' } as unknown as ConfigService,
     );
 }
 

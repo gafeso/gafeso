@@ -82,9 +82,11 @@ refuser la route par l’API.
 | `/admin/adherents/[id]` | adherents.gerer | fiche d’un adhérent : prêts, amendes, réservations |
 | `/admin/catalogue/[id]` | catalogue.gerer | fiche d’une notice : exemplaires, copie numérique, métadonnées |
 | `/admin/collections/[id]` | collections.gerer | une collection : son contenu et ses règles d’accès |
+| `/admin/etiquettes` | qui gère le catalogue (catalogue.gerer) | l’aperçu avant impression d’une planche d’étiquettes de rayon — QR code, code-barres Code 128, cote et titre ; s’imprime depuis le navigateur, et ce qu’on voit EST ce qui sort |
 | `/admin/moissonnage/[id]` | outils.catalogue | un entrepôt moissonné et ses comptes rendus de récolte |
 | `/admin/parametres` | quiconque avait l’ancienne adresse | redirige vers « Identité » — l’écran a été scindé en Identité et Règles de prêt, et l’ancienne adresse reste vivante exprès |
 | `/admin/recolement/[id]` | outils.catalogue | une session de récolement en cours |
+| `/affiche/[id]` | une bibliothécaire qui affiche un document, et tout le monde | une affiche A4 d’une notice : couverture, métadonnées, grand QR code et l’adresse en clair ; s’imprime en une page, lisible en noir et blanc |
 | `/confidentialite` | tout visiteur | la politique de confidentialité rédigée par l’établissement — 404 tant qu’elle n’est pas publiée |
 | `/definir-mot-de-passe` | porteur du lien reçu | choix du mot de passe, lien à usage unique |
 | `/e/[slug]` | tout le monde | la page d’inscription par QR d’un établissement |
