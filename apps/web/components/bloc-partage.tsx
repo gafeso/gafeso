@@ -69,15 +69,17 @@ export function BlocPartage({
         <p className="mt-2 text-sm text-muted">{LIBELLES.commun.chargement}</p>
       ) : (
         <div className="mt-3 flex flex-wrap items-start gap-5">
-          <QrCode valeur={url} taille={148} className="shrink-0" />
+          <QrCode
+            valeur={url}
+            taille={148}
+            className="shrink-0"
+            etiquette={LIBELLES.etiquettes.qrEtiquette(url)}
+          />
           <div className="min-w-0 flex-1">
             <p className="text-sm">{T.aide}</p>
             <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted">
               {T.adresse}
             </p>
-            {/* ⚠ `break-all` : une adresse de notice porte un UUID, donc 36
-                caractères sans espace. Sans elle, elle déborde sur mobile. */}
-            <p className="mt-0.5 break-all font-mono text-xs">{url}</p>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <a

@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
 import { LIBELLES } from '@/lib/libelles';
-import { PALETTE, fnv1a32 } from '@/lib/couverture-composee';
+import { TEINTE_DU_DOMAINE } from '@/lib/couvertures-v3.generated';
 
 const C = LIBELLES.espaceLecteur.consultations;
 const H = LIBELLES.espaceLecteur.horsLigne;
@@ -155,6 +155,13 @@ describe('Mes documents hors ligne', () => {
     // ⚠ Le domaine fait partie du contrat depuis le 11 octobre 2026 : la TEINTE
     // de la couverture en dépend.
     domaine: 'arts' as string | null,
+    /*
+     * ⭐ LES DEUX CLÉS v3, telles que la route les sert (mesuré). `domaine`
+     * SUBSISTE : il est servi aussi, et il alimente d'autres cas de ce fichier.
+     * Ce qui décide de la TEINTE est désormais `coverDomain`.
+     */
+    coverTemplate: 'manuel',
+    coverDomain: 'arts',
   };
 
   it('un bail porte son titre en LIEN et son échéance', async () => {
@@ -190,11 +197,31 @@ describe('Mes documents hors ligne', () => {
 
   /* ───────────── LA COUVERTURE COMPOSÉE SUR L'ÉTAGÈRE ───────────── */
 
-  const teinteDe = (n: number) => PALETTE[n];
+  /**
+   * ⭐⭐ L'ÉTAGÈRE PORTE LA v3 DEPUIS LE 12 OCTOBRE 2026, et la mesure change de
+   * forme : la v3 est un `<div aria-hidden>` dont le FOND est en CSS, non un
+   * `<rect fill>` dans un SVG.
+   *
+   * 🔴 ET UNE GARANTIE EST PERDUE, il faut le dire : ces cas affirmaient « la
+   * teinte de LEUR domaine ». `GET /reader/hors-ligne` ne sert PAS encore
+   * `coverDomain` (mesuré), donc le repli PRESCRIT s'applique — `manuel` /
+   * `autre` — et toutes les vignettes de cette étagère partagent la teinte
+   * neutre.
+   *
+   * ⚠ C'est voulu plutôt que subi : « un fond de domaine FAUX est pire qu'un
+   * fond neutre, il AFFIRME ». Le jour où la route sert la clé, ces cas
+   * redeviennent per-domaine — et le témoin ci-dessous TOMBE pour le rappeler,
+   * au lieu de laisser la garantie perdue en silence.
+   */
   const fondsRendus = () =>
-    [...document.querySelectorAll('svg[aria-hidden="true"]')].map(
-      (svg) => svg.querySelector('rect[fill^="#"]')?.getAttribute('fill') ?? null,
+    [...document.querySelectorAll('div[aria-hidden="true"]')].map(
+      (n) => (n as HTMLElement).style.background || null,
     );
+  /** ⚠ jsdom rend les couleurs en `rgb(...)` : on convertit plutôt que de recopier. */
+  const rgb = (hex: string) =>
+    `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
+  /** `#3D4A54`, la teinte du repli `autre`. */
+  const NEUTRE = rgb(TEINTE_DU_DOMAINE.autre);
 
   /**
    * ⭐ LES CINQ BAUX DE `recette-etu@` PORTENT LEUR COUVERTURE — le cas que
@@ -203,19 +230,67 @@ describe('Mes documents hors ligne', () => {
    */
   it('les cinq baux portent leur couverture, à la teinte de LEUR domaine', async () => {
     await monter([
-      { ...BAIL, titre: 'Textiles et motifs', domaine: 'arts' },
-      { ...BAIL, appareilId: '47bb607e-x', titre: 'Textiles et motifs', domaine: 'arts' },
-      { ...BAIL, recordId: 'r2', titre: 'Contes et transmission', domaine: 'litterature' },
-      { ...BAIL, recordId: 'r2', appareilId: '47bb607e-x', titre: 'Contes', domaine: 'litterature' },
-      { ...BAIL, recordId: 'r3', titre: 'Gafeso — Guide', domaine: 'informatique' },
+      { ...BAIL, titre: 'Textiles et motifs', domaine: 'arts', coverDomain: 'arts' },
+      { ...BAIL, appareilId: '47bb607e-x', titre: 'Textiles et motifs', domaine: 'arts', coverDomain: 'arts' },
+      { ...BAIL, recordId: 'r2', titre: 'Contes et transmission', domaine: 'litterature', coverDomain: 'litterature' },
+      { ...BAIL, recordId: 'r2', appareilId: '47bb607e-x', titre: 'Contes', domaine: 'litterature', coverDomain: 'litterature' },
+      { ...BAIL, recordId: 'r3', titre: 'Gafeso — Guide', domaine: 'informatique', coverDomain: 'informatique' },
     ]);
     await waitFor(() => expect(fondsRendus()).toHaveLength(5));
-    // arts → 7, litterature → 10, informatique → 2 (table de la spécification)
+    /*
+     * ⭐⭐ LA DETTE S'EST EFFACÉE LE JOUR MÊME. `/reader/hors-ligne` sert
+     * désormais `coverDomain` (mesuré : `{ documents: [{ …, coverTemplate,
+     * coverDomain }] }`), donc chaque vignette porte la teinte de SON domaine —
+     * et non plus le neutre du repli.
+     *
+     * ⚠ Et le jeu d'essai le porte, sans quoi ce cas mesurerait encore le
+     * repli : « une doublure est une hypothèse, et un test vert ne confirme
+     * que moi ».
+     */
     expect(fondsRendus()).toEqual([
-      teinteDe(7), teinteDe(7), teinteDe(10), teinteDe(10), teinteDe(2),
+      rgb(TEINTE_DU_DOMAINE.arts),
+      rgb(TEINTE_DU_DOMAINE.arts),
+      rgb(TEINTE_DU_DOMAINE.litterature),
+      rgb(TEINTE_DU_DOMAINE.litterature),
+      rgb(TEINTE_DU_DOMAINE.informatique),
     ]);
-    // ⚠ Témoin d'ABSENCE : aucune requête d'image pour ces cinq couvertures.
-    expect(document.querySelectorAll('img')).toHaveLength(0);
+    /*
+     * ⚠ TÉMOIN D'ABSENCE : aucune n'est le NEUTRE du repli. Sans lui, un repli
+     * qui mangerait les clés rendrait cinq fois `autre` — et cinq fonds
+     * identiques passeraient pour « la teinte de leur domaine » si les trois
+     * domaines du jeu d'essai venaient à partager leur teinte.
+     */
+    expect(fondsRendus()).not.toContain(NEUTRE);
+    /*
+     * ⚠ Témoin d'ABSENCE : aucune requête d'image pour ces cinq couvertures —
+     * et il est SCOPÉ à `main`.
+     *
+     * ⭐ Il comptait les `<img>` du DOCUMENT, et il est tombé le 12 octobre 2026
+     * quand cet écran est entré dans la coque de l'espace lecteur : l'en-tête
+     * porte le logo de l'établissement. Le produit allait bien ; c'est le
+     * périmètre du témoin qui était trop large.
+     *
+     * C'est la deuxième fois exactement : « mon compte d'images disait "aucune
+     * image (1)" en comptant le logo de la coque d'administration ». Un témoin
+     * d'absence se scope à ce dont il parle.
+     */
+    /*
+     * ⭐⭐ L'INVARIANT A CHANGÉ PAR DÉCISION, et il est plus fort. La v3 porte un
+     * logo — le fournisseur le répétait dans ses HUIT gabarits, 9 670 octets
+     * chacun. « Logo défini une seule fois » (décision).
+     *
+     * > ⭐ **Cinq vignettes ne demandent qu'UNE image.** Même adresse pour
+     * > toutes : une requête, puis le cache. C'est la seule chose qui rendait
+     * > « zéro requête » désirable.
+     */
+    const liste = document.querySelector('main');
+    expect(liste, 'la coque de l’espace lecteur doit fournir un <main>').not.toBeNull();
+    const adresses = new Set(
+      [...liste!.querySelectorAll('img')].map((n) => n.getAttribute('src')),
+    );
+    expect(adresses.size, 'plus d’une adresse : le cache ne sert plus').toBe(1);
+    // ⚠ Et c'est le logo SYMBOLE, variante de miniature, DÉJÀ public.
+    expect([...adresses][0]).toBe('/marque/gafeso_icone_simplifiee.svg');
   });
 
   /**
@@ -242,43 +317,84 @@ describe('Mes documents hors ligne', () => {
    * Si ce cas tombe, c'est que la vignette a grandi — relisez la lisibilité
    * avant de mettre le compte à jour.
    */
-  it('⚠ l’étagère rend une couverture à l’INITIALE SEULE — sous le seuil des 80 px', async () => {
-    await monter([{ ...BAIL, titre: 'Textiles et motifs', domaine: 'arts' }]);
+  /**
+   * ⭐⭐ LA v3 NE PORTE AUCUN TEXTE EN MINIATURE, et c'est plus franc que
+   * l'initiale.
+   *
+   * ⚠ Mesuré : à 56 px de large, le titre de la v3 ferait **3,7 px**
+   * (33 × 56/500). La v2 répondait « l'initiale seule » ; la v3 répond « rien
+   * du tout » — une initiale seule est encore une information que personne ne
+   * lit à cette taille, et le titre est affiché en texte juste à côté.
+   */
+  it('⚠ l’étagère rend une MINIATURE sans aucun texte — sous le seuil des 80 px', async () => {
+    await monter([BAIL]);
     await waitFor(() => expect(fondsRendus()).toHaveLength(1));
-    const textes = [...document.querySelectorAll('svg[aria-hidden="true"] text')];
-    expect(textes, 'une couverture d’étagère porte UN seul bloc de texte').toHaveLength(1);
-    expect(textes[0].textContent, 'et ce bloc est une INITIALE, pas un titre').toHaveLength(1);
-    // Témoin d'ABSENCE : aucune ligne de titre découpée en tspan.
-    expect(document.querySelectorAll('svg[aria-hidden="true"] tspan')).toHaveLength(0);
+    const couv = document.querySelector('div[aria-hidden="true"]')!;
+    expect(
+      (couv.textContent ?? '').trim(),
+      'la miniature porte du texte, illisible à cette taille',
+    ).toBe('');
+    /*
+     * ⚠ Témoin d'ABSENCE sur la confusion PLAUSIBLE : « aucun texte » ne doit
+     * pas vouloir dire « aucune couverture ». Le motif, lui, est bien là.
+     */
+    expect(couv.querySelector('svg g'), 'la miniature ne porte pas son motif').not.toBeNull();
   });
 
-  it('⚠ un domaine NUL rend la teinte 0 — jamais une case vide', async () => {
-    await monter([{ ...BAIL, domaine: null }]);
+  it('⚠ un domaine NUL rend le fond NEUTRE — jamais une case vide', async () => {
+    await monter([{ ...BAIL, domaine: null, coverDomain: 'autre' }]);
     await waitFor(() => expect(fondsRendus()).toHaveLength(1));
-    expect(fondsRendus()[0]).toBe(teinteDe(0));
-    // Et la couverture porte bien son initiale : une teinte sans initiale
-    // serait précisément la « case vide ».
-    expect(document.querySelector('svg[aria-hidden="true"] text')?.textContent).toBe('T');
+    expect(fondsRendus()[0]).toBe(NEUTRE);
+    /*
+     * ⚠ L'INITIALE N'EXISTE PLUS EN MINIATURE (v3) : ce qui distingue une
+     * vignette d'une case vide est son MOTIF, pas une lettre. Le témoin porte
+     * donc là — et il reste un témoin d'absence de case vide.
+     */
+    const couv = document.querySelector('div[aria-hidden="true"]')!;
+    expect(couv.querySelector('svg g'), 'une case vide : ni teinte ni motif').not.toBeNull();
   });
 
-  it('⚠ un domaine HORS TABLE passe par le hachage de repli, et reste dans la palette', async () => {
-    await monter([{ ...BAIL, domaine: 'agronomie' }]);
+  /**
+   * ⭐⭐ LE HACHAGE DE REPLI A DISPARU, ET C'EST UNE DÉCISION.
+   *
+   * La v2 hachait un domaine hors table pour lui donner UNE des douze teintes.
+   * La v3 ne hache pas : `coverDomain` est **résolu par le serveur** — NFC,
+   * minuscules, table et repli déjà appliqués, « jamais hors liste ».
+   *
+   * > ⚠ « Vous n'avez donc plus à normaliser ni à replier. Si vous le refaites,
+   * >   vous le referez autrement — et trois clients composeraient trois
+   * >   couvertures pour un même document. » *(session backend)*
+   *
+   * ⭐ Un hachage côté front rendrait donc une teinte QUE LE WEB CONNAÎT : le
+   * mobile en afficherait une autre pour la même notice. Le repli est
+   * désormais une CLÉ NOMMÉE — `autre` — et son fond est neutre exprès.
+   */
+  it('⚠ un domaine hors table ne HACHE plus : il rend le fond neutre d’`autre`', async () => {
+    await monter([{ ...BAIL, domaine: 'agronomie', coverDomain: 'agronomie' }]);
     await waitFor(() => expect(fondsRendus()).toHaveLength(1));
-    const fond = fondsRendus()[0]!;
-    expect(PALETTE as readonly string[]).toContain(fond);
-    // ⚠ Témoin d'ABSENCE : ce n'est PAS la teinte du domaine vide. Sans lui, un
-    // repli qui rendrait 0 pour tout serait indiscernable du hachage.
-    expect(fond).toBe(teinteDe(fnv1a32('agronomie') % PALETTE.length));
-    expect(fond).not.toBe(teinteDe(0));
+    expect(fondsRendus()[0]).toBe(NEUTRE);
+    /*
+     * ⚠ Témoin d'ABSENCE sur la confusion PLAUSIBLE : aucune des dix autres
+     * teintes ne doit sortir d'un domaine inconnu. Sans lui, un hachage
+     * réintroduit en douce serait indiscernable du repli.
+     */
+    const autres = Object.entries(TEINTE_DU_DOMAINE)
+      .filter(([c]) => c !== 'autre' && c !== 'economie')
+      .map(([, h]) => h);
+    for (const h of autres) {
+      expect(fondsRendus()[0], `le domaine inconnu a pris la teinte ${h}`).not.toBe(h);
+    }
   });
 
   it('⚠ et un titre NUL ne laisse pas une couverture muette', async () => {
     // Pas d'initiale à inventer — mais la teinte du domaine reste, et c'est
     // elle qui distingue la ligne. Une case BLANCHE serait le défaut.
-    await monter([{ ...BAIL, titre: null, domaine: 'arts' }]);
+    await monter([{ ...BAIL, titre: null, domaine: 'arts', coverDomain: 'arts' }]);
     await waitFor(() => expect(fondsRendus()).toHaveLength(1));
-    expect(fondsRendus()[0]).toBe(teinteDe(7));
-    expect(document.querySelector('svg[aria-hidden="true"] text')).toBeNull();
+    // ⚠ La teinte est celle du DOMAINE, pas le neutre : la route sert la clé.
+    expect(fondsRendus()[0]).toBe(rgb(TEINTE_DU_DOMAINE.arts));
+    // ⚠ Et AUCUN texte à 56×78 : la v3 n'en porte pas à cette taille.
+    expect(document.querySelector('div[aria-hidden="true"] span')).toBeNull();
   });
 
   it('⚠ l’état vide ne prétend PAS « jamais rien emporté »', async () => {

@@ -14,27 +14,44 @@ import {
  * pas ici — c'est le seul endroit du front où une couleur est écrite en dur, et
  * `qr-code.spec.tsx` l'exige.
  *
- * ⚠ `aria-hidden`, COMME LA COUVERTURE, et à la même condition : l'adresse que
- * le QR encode doit être affichée EN TEXTE à côté de lui. Un QR est inutilisable
- * pour qui ne voit pas, et un lecteur d'écran qui annoncerait « image » sans
- * l'adresse ne donnerait rien. L'appelant est tenu d'afficher l'adresse —
- * `qr-code.spec.tsx` le vérifie sur chaque surface.
+ * ## ⭐⭐ L'ACCESSIBILITÉ SUIT CE QUE L'APPELANT AFFICHE — les deux cas, et
+ * aucun n'est un défaut
  *
- * ⚠ ET C'EST AUSSI LA PROTECTION CONTRE UNE ADRESSE FAUSSE. L'URL publique est
- * dérivée de l'origine du navigateur (voir `lib/url-publique.ts`) : une affiche
- * imprimée depuis une adresse interne encoderait cette adresse-là. L'adresse en
- * clair sous le QR est ce qui permet à un humain de le voir.
+ * | L'adresse est… | Ce QR est… | Pourquoi |
+ * |---|---|---|
+ * | affichée EN TEXTE à côté | `aria-hidden` | un `aria-label` doublerait un texte déjà visible — CLAUDE.md tranche ce cas |
+ * | **absente de l'écran** | `role="img"` + `aria-label` qui la NOMME | sinon elle devient inaccessible : un lecteur d'écran annoncerait « image » et rien d'autre |
+ *
+ * ⚠ **Et c'est la seconde qui s'applique depuis le 12 octobre 2026**, sur
+ * décision de Jean : l'adresse en clair est retirée de l'affiche et du bloc
+ * « Partager » — le QR suffit à l'œil. Retirer le texte SANS donner l'étiquette
+ * aurait rendu l'adresse inatteignable pour qui ne voit pas : le changement a
+ * deux côtés, et c'est le second qu'on oublie.
+ *
+ * ⚠ CE QUE LE RETRAIT COÛTE, ET IL FAUT LE DIRE. L'adresse en clair était aussi
+ * la PROTECTION CONTRE UNE ADRESSE FAUSSE : l'URL se dérive parfois de l'origine
+ * du navigateur, et une affiche imprimée depuis une adresse interne encode cette
+ * adresse-là. Un humain le voyait d'un coup d'œil ; il ne le verra plus. Sur
+ * l'aperçu des ÉTIQUETTES, l'adresse reste donc affichée — c'est l'écran depuis
+ * lequel on imprime un fonds entier.
  */
 export function QrCode({
   valeur,
   taille,
   className,
+  etiquette,
 }: {
-  /** Ce que le QR encode. Affiché en texte par l'appelant, jamais ici. */
+  /** Ce que le QR encode. */
   valeur: string;
   /** Côté du rendu, en pixels CSS. Le tracé, lui, est en MODULES. */
   taille: number;
   className?: string;
+  /**
+   * ⚠ L'étiquette accessible, à donner EXACTEMENT quand l'adresse n'est pas
+   * affichée en texte à côté. Omise, le QR reste `aria-hidden` — et il DOIT le
+   * rester quand l'adresse est visible, sinon elle est annoncée deux fois.
+   */
+  etiquette?: string;
 }) {
   const m = matriceQr(valeur);
   const cote = coteAvecSilence(m);
@@ -44,7 +61,7 @@ export function QrCode({
       width={taille}
       height={taille}
       viewBox={`0 0 ${cote} ${cote}`}
-      aria-hidden="true"
+      {...(etiquette ? { role: 'img', 'aria-label': etiquette } : { 'aria-hidden': 'true' as const })}
       focusable="false"
       /* ⚠ `shapeRendering="crispEdges"` : sans lui, l'anti-aliasage du
          navigateur floute les bords des modules à certaines échelles, et c'est

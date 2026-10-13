@@ -12,7 +12,7 @@ import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
-import { CouvertureComposee } from '@/components/couverture-composee';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { BlocPartage } from '@/components/bloc-partage';
 import { LockIcon, MemberLock } from '@/components/member-lock';
 import { ID_CONTENU } from '@/components/lien-evitement';
@@ -58,6 +58,13 @@ interface RecordDetail {
   membersOnly: boolean;
   /** ⚠ Servi depuis le 11 octobre 2026 ; `null` sans `APP_URL` configuré. */
   publicUrl?: string | null;
+  /**
+   * ⭐ Les deux clés de la couverture v3, **résolues par le serveur** : NFC,
+   * minuscules, table et repli déjà appliqués. Jamais `null`, jamais hors
+   * liste — mesuré servi sur cette route le 12 octobre 2026.
+   */
+  coverTemplate: string;
+  coverDomain: string;
   /**
    * ⭐ L'EXISTENCE d'une version en ligne, PUBLIQUE — jamais le format ni l'URL.
    *
@@ -226,15 +233,24 @@ export function FicheNotice({ initial = null }: { initial?: RecordDetail | null 
         le seuil. On la rend à la taille où elle s'affiche.
       */}
       <div className="mt-4 flex items-start gap-5">
-        <CouvertureComposee
-          notice={{
-            titre: formatTitle(record.title, record.titleComplement),
-            auteur: record.author,
-            annee: record.publishYear,
-            domaine: record.category,
-          }}
+        {/*
+          ⭐⭐ COUVERTURE v3 — les deux clés viennent RÉSOLUES de l'API
+          (`coverTemplate`, `coverDomain`), mesurées servies sur cette route.
+
+          ⚠ Les trois autres surfaces qui rendent une couverture — la liste de
+          l'OPAC et les deux écrans de l'espace lecteur — ne les reçoivent PAS
+          encore : mesuré le 12 octobre 2026, elles gardent donc la couverture
+          composée. Deux dessins pour un même document selon l'écran, le temps
+          de l'intervalle — et c'est dit en passation plutôt que caché derrière
+          un repli qui inventerait une teinte.
+        */}
+        <CouvertureV3
+          coverTemplate={record.coverTemplate}
+          coverDomain={record.coverDomain}
+          titre={formatTitle(record.title, record.titleComplement)}
+          auteur={record.author}
+          annee={record.publishYear}
           largeur={120}
-          hauteur={164}
           className="shrink-0"
         />
         <div className="flex flex-1 items-start justify-between gap-4">

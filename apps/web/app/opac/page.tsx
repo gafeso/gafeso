@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, Suspense, useCallback, useEffect, useState } from 'react';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { ID_CONTENU } from '@/components/lien-evitement';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -21,6 +22,28 @@ interface Hit {
   category?: string | null;
   language?: string;
   publishYear: number | null;
+  /**
+   * ⭐⭐ LES DEUX CLÉS DE LA v3, REQUISES depuis le 13 octobre 2026.
+   *
+   * Cet écran lit DEUX routes, et les deux les servent désormais — mesuré sur
+   * l'objet entier après rebase sur `0399eb7` :
+   *
+   * | route | `coverTemplate` / `coverDomain` |
+   * |---|---|
+   * | `GET /opac/search` | ✅ |
+   * | `GET /opac/parcourir` | ✅ |
+   *
+   * ⭐ ELLES ÉTAIENT `?` UNE JOURNÉE, déclarées `en-attente` dans l'inventaire
+   * des surfaces AVEC LE NOM de la route manquante. Cette déclaration est
+   * devenue fausse à l'arrivée du champ, et le garde l'a dit — deuxième fois en
+   * deux jours que cette nature se solde d'elle-même.
+   *
+   * ⚠ REQUISES et non `?` : un `?` qui survit laisse la vignette retomber sur
+   * `manuel`/`autre` en silence le jour où le champ repartirait. Et c'est la
+   * page de démonstration principale.
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 
 interface SearchResponse {
@@ -484,7 +507,24 @@ function OpacSearch() {
             {result.hits.map((hit) => (
               <Card key={hit.id} className="transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  {/*
+                    ⭐ VIGNETTE v3, 56×78 — `GET /opac/search` sert
+                    `coverTemplate` et `coverDomain` (mesuré). Sous 80 px la v3
+                    passe en MINIATURE : aucun texte, logo simplifié — à cette
+                    taille un titre ferait 3,7 px.
+
+                    ⚠ Elle DOUBLE le titre et l'auteur affichés à côté, donc
+                    elle reste décorative (`aria-hidden`). Une vignette posée
+                    seule serait une information inaccessible.
+                  */}
+                  <CouvertureV3
+                    coverTemplate={hit.coverTemplate}
+                    coverDomain={hit.coverDomain}
+                    titre={hit.title}
+                    largeur={56}
+                    className="shrink-0 rounded"
+                  />
+                  <div className="min-w-0 flex-1">
                     <h2 className="font-serif text-lg font-bold">
                       <Link href={`/opac/${hit.id}`} className="hover:text-ocre">
                         {hit.title}

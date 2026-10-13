@@ -41,6 +41,15 @@ const RACINE = resolve(__dirname, '..');
  * la sortie.
  */
 const TOFIXED_DECLARE: Record<string, { nature: 'syntaxe-machine'; motif: string }> = {
+  'components/couverture-v3.tsx': {
+    nature: 'syntaxe-machine',
+    motif:
+      'l’ÉCHELLE d’un `transform="scale(…)"` et l’OPACITÉ d’un attribut ' +
+      '`opacity` — deux syntaxes SVG, que personne ne lit. ⚠ Et l’arrondi n’est ' +
+      'pas cosmétique : la référence de parité du mobile donne `1.06` et `0.12`, ' +
+      'et un `0.92 + 14/100` brut rendrait `1.0600000000000001`. Sans l’arrondi, ' +
+      'les cinq titres de `couverture-v3-parite.spec.ts` ne correspondent plus.',
+  },
   'components/stat-charts.tsx': {
     nature: 'syntaxe-machine',
     motif:

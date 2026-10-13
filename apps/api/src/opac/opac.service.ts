@@ -13,6 +13,11 @@ import { ProvenanceService } from '../moissonnage/provenance.service';
 import { StudentAccessContext } from '../access-control/access-control.matching';
 import { normalizeAuthorName } from '../authors/author-name';
 import {
+  champsDeCouverture,
+  type CoverDomain,
+  type CoverTemplate,
+} from './couverture';
+import {
   adresseCourteDeLaNotice,
   adressePubliqueDeLaNotice,
   construireIdentifiant,
@@ -207,6 +212,27 @@ const FACETS = ['category', 'language', 'publishYear', 'recordType'];
 // partageable/téléchargeable hors application.
 const READ_URL_TTL_SECONDS = 5 * 60;
 
+/**
+ * ⭐ POSE LE GABARIT ET LE DOMAINE DE COUVERTURE — en DERNIER, dans les deux
+ * branches.
+ *
+ * ⚠ HORS DE LA CLASSE, et sans `await` : la résolution ne touche ni la base ni
+ * la configuration. Elle ne lit que ce que la réponse porte déjà — c'est une
+ * fonction PURE, et c'est ce qui la rend éprouvable sans monter le service.
+ *
+ * ⚠ ET DANS LES DEUX BRANCHES, parce qu'une couverture ne dépend pas de qui
+ * regarde : c'est l'habillage d'une notice, pas une donnée réservée.
+ */
+function poserLaCouverture(reponse: Record<string, unknown>): void {
+  Object.assign(
+    reponse,
+    champsDeCouverture({
+      recordType: reponse.recordType as string | null,
+      category: reponse.category as string | null,
+    }),
+  );
+}
+
 @Injectable()
 export class OpacService {
   constructor(
@@ -384,7 +410,14 @@ export class OpacService {
       // On rend ce qu'il y a : moins de `limit` notices n'est pas une erreur, et
       // rien ne complète la liste. Une liste vide est une liste vide.
       return {
-        hits: hits.map(({ digitalCopy, ...n }) => ({ ...n, ...marqueursNumeriques(digitalCopy) })),
+        // ⭐ LA COUVERTURE AUSSI, par la MÊME fonction que les cinq autres routes.
+        // `SELECT_VITRINE` porte déjà `recordType` et `category` : il n'y a rien
+        // à ajouter en base, seulement à poser les deux clés.
+        hits: hits.map(({ digitalCopy, ...n }) => ({
+          ...n,
+          ...marqueursNumeriques(digitalCopy),
+          ...champsDeCouverture(n),
+        })),
       };
     });
   }
@@ -435,7 +468,14 @@ export class OpacService {
       // Une page au-delà de la fin rend une liste vide avec le VRAI total :
       // « il n'y a rien ici » et « il n'y a rien du tout » restent distincts.
       return {
-        hits: hits.map(({ digitalCopy, ...n }) => ({ ...n, ...marqueursNumeriques(digitalCopy) })),
+        // ⭐ LA COUVERTURE AUSSI, par la MÊME fonction que les cinq autres routes.
+        // `SELECT_VITRINE` porte déjà `recordType` et `category` : il n'y a rien
+        // à ajouter en base, seulement à poser les deux clés.
+        hits: hits.map(({ digitalCopy, ...n }) => ({
+          ...n,
+          ...marqueursNumeriques(digitalCopy),
+          ...champsDeCouverture(n),
+        })),
         totalHits,
         page,
         totalPages: Math.ceil(totalHits / limit),
@@ -463,10 +503,19 @@ export class OpacService {
    * même raison pour laquelle cette route rend 503 quand le moteur est
    * injoignable au lieu d'un catalogue vide.
    */
-  private async marquerLesResultats<T extends { id: string }>(
+  private async marquerLesResultats<
+    T extends { id: string; recordType?: string | null; category?: string | null },
+  >(
     slug: string,
     hits: T[],
-  ): Promise<(T & { hasDigital: boolean; offlineReady: boolean })[]> {
+  ): Promise<
+    (T & {
+      hasDigital: boolean;
+      offlineReady: boolean;
+      coverTemplate: CoverTemplate;
+      coverDomain: CoverDomain;
+    })[]
+  > {
     if (hits.length === 0) return [];
     const copies = await this.prisma.forTenant(slug).digitalCopy.findMany({
       where: { recordId: { in: hits.map((h) => h.id) } },
@@ -476,7 +525,16 @@ export class OpacService {
     // ⚠ Une notice ABSENTE de la table n'a pas de copie : `undefined` passe donc
     // par la définition unique, qui en fait `hasDigital: false`. C'est le même
     // chemin que `null` — et non une branche à part qui pourrait divergier.
-    return hits.map((h) => ({ ...h, ...marqueursNumeriques(parNotice.get(h.id)) }));
+    // ⭐ LA COUVERTURE SORT ICI AUSSI, et sans toucher à l'index : `category` et
+    // `recordType` sont DÉJÀ des attributs du document indexé (voir
+    // `SearchDocument`). Les deux champs sont donc DÉRIVÉS d'un résultat, par la
+    // même fonction que la fiche — aucune réindexation n'est nécessaire, et
+    // aucune règle ne vit en double.
+    return hits.map((h) => ({
+      ...h,
+      ...marqueursNumeriques(parNotice.get(h.id)),
+      ...champsDeCouverture(h),
+    }));
   }
 
   /**
@@ -779,6 +837,7 @@ export class OpacService {
       reponse.hasDigital = hasDigital;
       reponse.offlineReady = offlineReady;
       await this.poserLAdresse(reponse, id, slug);
+      poserLaCouverture(reponse);
       return reponse;
     }
 
@@ -802,6 +861,7 @@ export class OpacService {
     reponse.hasDigital = hasDigital;
     reponse.offlineReady = offlineReady;
     await this.poserLAdresse(reponse, id, slug);
+    poserLaCouverture(reponse);
     return reponse;
   }
 
@@ -835,6 +895,9 @@ export class OpacService {
       reponse.publicUrl = null;
       reponse.identifiantPerenne = null;
       reponse.shortUrl = null;
+      // ⚠ La couverture, elle, NE dépend PAS du slug : elle se résout depuis la
+      // notice. Les clés existent donc avec leur valeur, pas avec `null` — une
+      // couverture est composable même sans domaine déclaré.
       return;
     }
     reponse.identifiantPerenne = construireIdentifiant(slug, id);

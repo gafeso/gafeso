@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { champsDeCouverture } from '../opac/couverture';
 import { Prisma, PrismaClient } from '@prisma/client';
 import {
   ComptesALierDto,
@@ -161,13 +162,47 @@ export class PatronsService {
     const [openCheckouts, historyTotal, historyRows] = await Promise.all([
       db.checkout.findMany({
         where: { patronId, returnDate: null },
-        include: { item: { include: { record: { select: { id: true, title: true } } } } },
+        // ⚠ `recordType` et `category` EN PLUS : ils composent la COUVERTURE.
+        //
+        // ⭐ CETTE MÉTHODE SERT DEUX PUBLICS. `/reader/loans` (« Mes prêts »,
+        // l'écran du lecteur) y délègue, et `/patrons/:id/loans` (le guichet,
+        // derrière `adherents.gerer`) aussi. Jean a tranché « Mes prêts »
+        // COUVERT et le guichet en `lien-texte` — mesuré, c'est la MÊME
+        // fonction. Les champs sortent donc pour les deux : le guichet les
+        // ignore, ce qui ne coûte rien, là où une seconde requête ou un
+        // paramètre « avec couverture » coûterait une divergence.
+        include: {
+          item: {
+            include: {
+              record: {
+                select: { id: true, title: true, recordType: true, category: true },
+              },
+            },
+          },
+        },
         orderBy: { dueDate: 'asc' },
       }),
       db.checkout.count({ where: { patronId, returnDate: { not: null } } }),
       db.checkout.findMany({
         where: { patronId, returnDate: { not: null } },
-        include: { item: { include: { record: { select: { id: true, title: true } } } } },
+        // ⚠ `recordType` et `category` EN PLUS : ils composent la COUVERTURE.
+        //
+        // ⭐ CETTE MÉTHODE SERT DEUX PUBLICS. `/reader/loans` (« Mes prêts »,
+        // l'écran du lecteur) y délègue, et `/patrons/:id/loans` (le guichet,
+        // derrière `adherents.gerer`) aussi. Jean a tranché « Mes prêts »
+        // COUVERT et le guichet en `lien-texte` — mesuré, c'est la MÊME
+        // fonction. Les champs sortent donc pour les deux : le guichet les
+        // ignore, ce qui ne coûte rien, là où une seconde requête ou un
+        // paramètre « avec couverture » coûterait une divergence.
+        include: {
+          item: {
+            include: {
+              record: {
+                select: { id: true, title: true, recordType: true, category: true },
+              },
+            },
+          },
+        },
         orderBy: [{ returnDate: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -180,6 +215,7 @@ export class PatronsService {
         checkoutId: c.id,
         recordId: c.item.record.id,
         title: c.item.record.title,
+        ...champsDeCouverture(c.item.record),
         itemBarcode: c.item.barcode,
         dueDate: c.dueDate,
         renewals: c.renewals,
@@ -192,6 +228,7 @@ export class PatronsService {
       checkoutId: c.id,
       recordId: c.item.record.id,
       title: c.item.record.title,
+      ...champsDeCouverture(c.item.record),
       itemBarcode: c.item.barcode,
       checkoutDate: c.checkoutDate,
       dueDate: c.dueDate,

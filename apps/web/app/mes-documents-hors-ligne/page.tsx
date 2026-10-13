@@ -21,8 +21,11 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Alert, Card } from '@/components/ui';
-import { ID_CONTENU } from '@/components/lien-evitement';
-import { CouvertureComposee } from '@/components/couverture-composee';
+import { EtatVide } from '@/components/etat-vide';
+import { QrCode } from '@/components/qr-code';
+import { useSlugEtablissement } from '@/lib/etablissement';
+import { CoqueLecteur } from '@/components/coque-lecteur';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { LIBELLES } from '@/lib/libelles';
 
 const T = LIBELLES.espaceLecteur.horsLigne;
@@ -45,12 +48,36 @@ interface DocumentHorsLigne {
    * zéro écart, casse et accents compris.
    */
   domaine: string | null;
+  /**
+   * ⭐⭐ LES DEUX CLÉS DE LA v3, REQUISES — la route les sert (mesuré le
+   * 12 octobre 2026, `{ documents: [{ …, coverTemplate, coverDomain }] }`).
+   *
+   * ⚠ Elles étaient `?` quelques heures, le temps que le backend les livre. Un
+   * `?` qui SURVIT à l'arrivée du champ laisse passer un repli silencieux : la
+   * vignette retomberait sur `manuel`/`autre` sans que rien ne le dise, et
+   * c'est exactement le « repli qui rend invisible ce qu'on voulait voir ».
+   *
+   * ⚠ Et ma première sonde a dit « ABSENT » à tort : elle lisait `d.baux` et
+   * `d.items`, jamais `d.documents`. L'écran, lui, les consommait déjà — trois
+   * fonds distincts à la capture, là où le repli neutre n'en donnerait qu'un.
+   * « Lire l'objet ENTIER, jamais une propriété qui en coupe une part. »
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 
 export default function MesDocumentsHorsLignePage() {
   // ⚠ `null` = pas encore su, distinct d'une liste vide.
   const [docs, setDocs] = useState<DocumentHorsLigne[] | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const slug = useSlugEtablissement();
+  /*
+   * ⚠ L'ORIGINE VIENT DU NAVIGATEUR, et c'est juste ICI : le QR s'adresse à
+   * quelqu'un qui tient SON téléphone devant SON écran — l'adresse qu'il doit
+   * ouvrir est celle par laquelle il est arrivé. Ce n'est pas une affiche
+   * imprimée, où une origine interne serait figée dans le papier.
+   */
+  const origine = typeof window === 'undefined' ? '' : window.location.origin;
 
   useEffect(() => {
     api<{ documents: DocumentHorsLigne[] }>('/reader/hors-ligne')
@@ -59,19 +86,53 @@ export default function MesDocumentsHorsLignePage() {
   }, []);
 
   return (
-    <main id={ID_CONTENU} className="mx-auto max-w-3xl px-4 py-8">
+    <CoqueLecteur>
       <h1 className="font-serif text-2xl font-bold">{T.titre}</h1>
       <p className="mt-2 text-sm text-muted">{T.intro}</p>
       {erreur && <Alert tone="error" className="mt-4">{erreur}</Alert>}
       {!docs && !erreur && <p className="mt-6 text-sm text-muted">{LIBELLES.commun.chargement}</p>}
 
       {docs && docs.length === 0 && (
-        <Alert tone="warning" className="mt-5">
-          {T.aucunEnCours}
-          {/* ⚠ LA RÈGLE DANS LE MÊME SOUFFLE : sans elle, « aucun document » se
-              lit comme « j'ai perdu ce que j'avais emporté ». */}
-          <span className="mt-1 block text-xs">{T.aucunEnCoursMotif}</span>
-        </Alert>
+        /*
+         * ⭐ ÉTAT VIDE NEUTRE. Il portait `tone="warning"`, dont la table rend
+         * `bg-ocre/10` — un rose qui se lit comme une erreur. Un lecteur sans
+         * document emporté n'a rien fait de mal.
+         *
+         * ⚠ `aucunEnCoursMotif` RESTE, et dans le même souffle : sans elle,
+         * « aucun document » se lit « j'ai perdu ce que j'avais emporté ».
+         */
+        <EtatVide
+          className="mt-5"
+          phrase={T.aucunEnCours}
+          detail={T.aucunEnCoursMotif}
+          actions={[
+            { libelle: LIBELLES.etatsVides.parcourirCatalogue, href: '/opac' },
+            ...(slug
+              ? [{ libelle: LIBELLES.etatsVides.telechargerDepuisApp, href: `/e/${slug}` }]
+              : []),
+          ]}
+        >
+          <p className="mt-2 text-xs text-muted">{LIBELLES.etatsVides.emporterAvecApp}</p>
+          {/*
+            ⭐ LE QR MÈNE À `/e/<slug>`, la page d'atterrissage de
+            l'établissement — « elle dit quoi installer, et laisse consulter le
+            catalogue tout de suite pour ceux qui n'installeront rien ». C'est la
+            SEULE adresse du produit faite pour quelqu'un sans l'application.
+
+            ⚠ `slug === null` veut dire « pas encore su » : on n'affiche alors
+            PAS de QR. Une adresse devinée dans un QR se scanne et ne mène nulle
+            part — pire qu'un QR absent.
+          */}
+          {slug ? (
+            <span className="mt-3 block">
+              <QrCode
+                valeur={`${origine}/e/${slug}`}
+                taille={96}
+                etiquette={LIBELLES.etiquettes.qrEtiquette(`${origine}/e/${slug}`)}
+              />
+            </span>
+          ) : null}
+        </EtatVide>
       )}
 
       {docs && docs.length > 0 && (
@@ -97,10 +158,27 @@ export default function MesDocumentsHorsLignePage() {
                 écran comme sur la fiche.
               */}
               <div className="flex items-start gap-3">
-                <CouvertureComposee
-                  notice={{ titre: d.titre ?? '', domaine: d.domaine }}
+                {/*
+                  ⭐⭐ VIGNETTE v3, 56×78 — et le REPLI est prescrit : clé
+                  absente → `manuel` / `autre`, **jamais l'ancienne vignette**
+                  (décision du 12 octobre 2026).
+
+                  ⚠ `GET /reader/hors-ligne` ne sert PAS encore `coverTemplate`
+                  ni `coverDomain` (mesuré). Cette étagère affiche donc des
+                  vignettes au gabarit `manuel` et au fond NEUTRE d'`autre`
+                  jusqu'à ce que le backend les serve — et c'est voulu : un fond
+                  de domaine FAUX affirmerait un classement que personne n'a
+                  posé, là où `autre` n'affirme rien.
+
+                  ⚠ Pas de texte à cette taille : 78 px de haut ne portent pas
+                  une ligne lisible. Le titre est affiché juste à côté, et la
+                  couverture reste `aria-hidden`.
+                */}
+                <CouvertureV3
+                  coverTemplate={d.coverTemplate}
+                  coverDomain={d.coverDomain}
+                  titre={d.titre ?? ''}
                   largeur={56}
-                  hauteur={76}
                   className="shrink-0 rounded"
                 />
                 <div className="min-w-0 flex-1">
@@ -128,6 +206,6 @@ export default function MesDocumentsHorsLignePage() {
           ))}
         </div>
       )}
-    </main>
+    </CoqueLecteur>
   );
 }

@@ -212,6 +212,35 @@ export const CLES_DU_CONTRAT: string[] = [
    * est écrite ici, et c'est le signe qu'elle tient.
    */
   'shortUrl',
+  /**
+   * ⭐ LA COUVERTURE — le gabarit et le domaine, RÉSOLUS par le serveur.
+   *
+   * Trois clients composent cette couverture (web, mobile, PDF). Leur laisser
+   * la normalisation et le repli, c'est trois couvertures possibles pour un
+   * même document — et se reconnaître est la seule chose qu'une couverture doit
+   * faire. Même motif que `hasDigital` / `offlineReady`.
+   *
+   * | Le champ | Ce qu'il porte | Jamais |
+   * |---|---|---|
+   * | `coverTemplate` | l'un des 8 gabarits du fournisseur | `null`, ni hors liste |
+   * | `coverDomain` | l'un des 11 domaines, `autre` compris | `null`, ni hors liste |
+   *
+   * ⚠ CE SONT DES CLÉS, PAS DES COULEURS. Servir l'hexadécimal ferait du
+   * serveur le propriétaire de la palette : un changement de design
+   * demanderait une version d'API, et le mobile garde ses réponses en cache.
+   * La table clé → teinte vit dans la spécification et dans le module engendré
+   * du front.
+   *
+   * ⚠ ET CE N'EST PAS `category` DÉGUISÉE. `category` est la valeur de
+   * CATALOGUE — libre, parfois vide, parfois hors vocabulaire après un import
+   * MARC. `coverDomain` est RÉSOLUE : NFC, minuscules, table, repli appliqué.
+   * Un client qui lirait `category` referait ce travail, et le referait
+   * autrement.
+   *
+   * ⚠ EN DERNIER. Quatrième fois que cette ligne est écrite ici.
+   */
+  'coverTemplate',
+  'coverDomain',
 ];
 
 /**

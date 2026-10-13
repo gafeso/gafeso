@@ -79,6 +79,31 @@ export function oublierEtablissement(): void {
  * les non-réponses : une donnée pas encore chargée ne s'écrit pas comme un
  * fait.
  */
+/**
+ * ⭐ LE SLUG DE L'ÉCOLE — pour bâtir l'adresse de sa page d'atterrissage,
+ * `/e/<slug>`, celle qu'un QR fait ouvrir à qui n'a PAS l'application.
+ *
+ * ⚠ Aucune requête de plus : `chargerEtablissement()` est mise en cache et sert
+ * déjà le nom. Un état vide ne doit pas coûter un appel réseau.
+ *
+ * ⚠ `null` VEUT DIRE « PAS ENCORE SU » — l'appelant n'affiche alors pas le QR
+ * plutôt que de fabriquer une adresse. Une adresse devinée dans un QR est pire
+ * qu'un QR absent : elle se scanne et ne mène nulle part.
+ */
+export function useSlugEtablissement(): string | null {
+  const [slug, setSlug] = useState<string | null>(null);
+  useEffect(() => {
+    let vivant = true;
+    void chargerEtablissement().then((t) => {
+      if (vivant && t?.slug) setSlug(t.slug);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
+  return slug;
+}
+
 export function useNomEtablissement(): string | null {
   const [nom, setNom] = useState<string | null>(null);
   useEffect(() => {

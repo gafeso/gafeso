@@ -124,3 +124,59 @@ export function identifiantDuSegment(segment: string): string {
     return segment;
   }
 }
+
+/**
+ * ⭐⭐ L'ADRESSE DU QR D'UNE ÉTIQUETTE — la COURTE, et c'est une décision de Jean.
+ *
+ * ## ⚠ POURQUOI DEUX ADRESSES, ET LAQUELLE VA OÙ
+ *
+ * | Le support | L'adresse | Pourquoi |
+ * |---|---|---|
+ * | affiche A4, bloc « Partager » | `publicUrl` — PÉRENNE | elle survit à un déménagement de serveur, et la place ne manque pas |
+ * | **étiquette collée dans un livre** | **`shortUrl` — COURTE** | le QR y est un carré FIXE de 13 mm, et chaque caractère rétrécit ses modules |
+ *
+ * ⭐ **Le chiffre qui a motivé l'arbitrage**, mesuré le 11 octobre 2026 avant la
+ * bascule du backend : dans un carré de 13 mm, zone de silence comprise,
+ *
+ * | L'adresse | Caractères | Version | Module |
+ * |---|---|---|---|
+ * | `…/opac/<uuid>` | 72 | 5 | **0,289 mm** |
+ * | `…/opac/resoudre/oai:<école>:<uuid>` | 91 | 6 | **0,265 mm** |
+ * | école au nom long | 128 | 8 | **0,228 mm** |
+ *
+ * ⚠ La LISIBILITÉ n'a pas été mesurée — il faudrait une planche imprimée et des
+ * téléphones — donc aucun seuil n'est avancé ici. Ce qui est mesuré est que la
+ * grandeur DÉCROÎT avec la longueur de l'adresse, et que le carré ne grandit
+ * pas. C'est ce qui a fait choisir la forme courte pour l'étiquette.
+ *
+ * ## 🔴 ET CE QUE LA ROUTE DES ÉTIQUETTES SERT AUJOURD'HUI : RIEN
+ *
+ * Mesuré par le chemin normal (connexion par le formulaire, 11 octobre 2026) :
+ * `GET /cataloging/records/:id` ne porte **ni `shortUrl`, ni `publicUrl`, ni
+ * `identifiantPerenne`**. L'écran d'aperçu déclarait pourtant
+ * `publicUrl?: string | null` — un champ que la réponse n'a jamais porté, donc
+ * un repli qui s'appliquait TOUJOURS en silence.
+ *
+ * ⚠ Conséquence, et elle est irréversible : le QR d'une étiquette encode
+ * l'origine du NAVIGATEUR. Imprimée depuis un hôte de développement, elle colle
+ * `http://localhost:3000/...` dans un livre. **L'écran le DIT désormais**, et
+ * `shortUrl` est demandé au backend pour cette route (voir `docs/passation.md`).
+ */
+export function adresseCourteDuQr(
+  id: string,
+  shortUrl: string | null | undefined,
+  origine?: string,
+): string {
+  // ⚠ Une chaîne vide n'est pas une adresse — même garde que `adresseDuQr`.
+  const canonique = shortUrl?.trim();
+  return canonique ? canonique : urlPubliqueDeNotice(id, origine);
+}
+
+/**
+ * ⚠ CE QUI PERMET À L'ÉCRAN DE LE DIRE. Séparé d'`adresseCourteDuQr` exprès :
+ * une fonction qui rend une adresse ne peut pas aussi rendre la confiance qu'on
+ * lui accorde, et c'est la CONFIANCE qui décide d'un avertissement.
+ */
+export function adresseCourteEstServie(shortUrl: string | null | undefined): boolean {
+  return Boolean(shortUrl?.trim());
+}

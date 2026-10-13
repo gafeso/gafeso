@@ -186,6 +186,16 @@ describe('⚠ TROIS ÉTATS, et le troisième est celui qui coûte', () => {
         annee: 2025,
         etudiant: 'Traoré, Awa',
         universiteDeSoutenance: 'Université Joseph Ki-Zerbo',
+        // ⭐ 12/10/2026 : la COUVERTURE sort aussi — champs résolus, jamais
+        // `null`. Ce test compare l'objet ENTIER, donc il a refusé l'ajout :
+        // c'est exactement son office, un filet qui lit un AJOUT.
+        //
+        // ⚠ Et le jeu d'essai porte `recordType: 'these'` SANS `category` : il
+        // éprouve donc le repli du domaine (`autre`) en même temps que la
+        // résolution du gabarit (`these`). Les deux d'un coup, sans l'avoir
+        // cherché — et c'est le bon cas à figer ici.
+        coverTemplate: 'these',
+        coverDomain: 'autre',
       },
     ]);
   });

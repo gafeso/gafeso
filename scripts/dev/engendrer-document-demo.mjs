@@ -41,7 +41,29 @@ import * as QRCode from 'qrcode';
 import { decouper, pourWinAnsi } from '../lib/texte-pdf.mjs';
 
 const RACINE = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const CORPUS = join(RACINE, 'apps/api/src/cataloging/corpus-demonstration');
+/**
+ * ⭐ LE CORPUS VIT À CÔTÉ DU SCRIPT QUI LE LIT, et ce n'est pas un rangement.
+ *
+ * 🔴 Il était sous `apps/api/src/cataloging/`. L'image de production ne copie
+ * PAS `src/` — elle copie `dist`, `prisma`, `package.json` et `scripts`. Le
+ * 12 octobre 2026, `remplacer-documents-demo.mjs` a donc planté DANS le
+ * conteneur de la démonstration :
+ *
+ * ```
+ * ENOENT '/app/apps/api/src/cataloging/corpus-demonstration'
+ * ```
+ *
+ * ⚠ Et ma recette ne pouvait pas le voir : elle avait tourné HORS conteneur,
+ * dans l'arbre du dépôt, où `src/` existe. « Une recette qui fournit
+ * l'environnement qu'elle éprouve ne mesure que sa propre fixture. »
+ *
+ * ⭐ POURQUOI DÉPLACER PLUTÔT QU'AJOUTER UN `COPY` : `scripts/` est copié EN
+ * ENTIER par le Dockerfile. Un fichier de corpus ajouté demain est donc dans
+ * l'image **sans que personne y pense** — la dépendance devient structurelle,
+ * là où une ligne `COPY` de plus serait une liste à tenir, et donc un oubli en
+ * attente.
+ */
+const CORPUS = join(RACINE, 'scripts/dev/corpus-demonstration');
 
 const L = 595.28;
 const H = 841.89;

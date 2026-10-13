@@ -5,6 +5,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  champsDeCouverture,
+  type CoverDomain,
+  type CoverTemplate,
+} from '../opac/couverture';
 import { OfflineLicense, Prisma, PrismaClient } from '@prisma/client';
 import { AUDIT_ACTIONS } from '../audit/audit.actions';
 import { AuditService } from '../audit/audit.service';
@@ -580,6 +585,10 @@ export class OfflineLicensesService {
             id: true,
             title: true,
             category: true,
+            // ⚠ `recordType` ne s'affiche pas tel quel : il choisit le GABARIT de
+            // la couverture, et l'app l'affiche comme TYPE du document. Sans lui,
+            // toute l'étagère mobile porterait le repli `manuel` — thèses comprises.
+            recordType: true,
             publishYear: true,
             // La dénormalisation transitoire, en REPLI seulement.
             author: true,
@@ -602,6 +611,10 @@ export class OfflineLicensesService {
       auteur: string | null;
       domaine: string | null;
       annee: number | null;
+      /** Le TYPE du document, tel que le catalogue le porte. */
+      recordType: string;
+      coverTemplate: CoverTemplate;
+      coverDomain: CoverDomain;
     }> = [];
     for (const copy of copies) {
       const droit = await this.droitHorsLigne(db, tenant, user.sub, copy.recordId);
@@ -616,6 +629,14 @@ export class OfflineLicensesService {
           auteur: copy.record.contributors[0]?.name ?? copy.record.author ?? null,
           domaine: copy.record.category ?? null,
           annee: copy.record.publishYear ?? null,
+          // ⚠ `domaine` est la catégorie BRUTE, à afficher ; `recordType` est le
+          // type tel que le catalogue le porte ; `coverDomain` et
+          // `coverTemplate` sont les clés RÉSOLUES qui choisissent la teinte et
+          // le gabarit. Les confondre donnerait deux couleurs au même domaine,
+          // ou « MANUEL / COURS » sur une thèse.
+          recordType: copy.record.recordType,
+          // ⭐ LA MÊME FONCTION que les quatre autres routes.
+          ...champsDeCouverture(copy.record),
         });
       }
     }

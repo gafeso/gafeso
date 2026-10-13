@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
-import { CouvertureComposee } from '@/components/couverture-composee';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { QrCode } from '@/components/qr-code';
 import { LIBELLES } from '@/lib/libelles';
 import { fetchTenantHome, noticePublique } from '@/lib/server-api';
@@ -71,6 +71,12 @@ interface Notice {
    * retombe alors sur l'hôte de la requête, qui est tout ce qu'on connaît.
    */
   publicUrl: string | null;
+  /**
+   * ⭐ Les deux clés de la couverture v3, RÉSOLUES par le serveur — jamais
+   * `null`, jamais hors liste. Mesuré servi sur `/opac/records/:id`.
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 
 export default async function AffichePage({ params }: { params: Promise<{ id: string }> }) {
@@ -123,16 +129,24 @@ export default async function AffichePage({ params }: { params: Promise<{ id: st
       </header>
 
       <section className="flex flex-1 items-center gap-[10mm] py-[8mm]">
-        <CouvertureComposee
-          notice={{
-            titre: n.title,
-            auteur: n.author,
-            type,
-            annee: n.publishYear,
-            domaine: n.category,
-          }}
+        {/*
+          ⭐ COUVERTURE v3. Les deux clés viennent résolues de l'API.
+
+          ⚠ Et ICI le type MONTE sur la couverture, là où la fiche le lui
+          refuse : cette affiche l'imprime en texte juste à côté (« OUVRAGE ·
+          2026 »), donc la couverture le DOUBLE au lieu de le porter seule. La
+          borne est la même qu'ailleurs — `aria-hidden` ne peut dire que ce qui
+          est déjà dit.
+        */}
+        <CouvertureV3
+          coverTemplate={n.coverTemplate}
+          coverDomain={n.coverDomain}
+          type={type}
+          titre={n.title}
+          auteur={n.author}
+          annee={n.publishYear}
+          etablissement={home?.name ?? null}
           largeur={150}
-          hauteur={205}
           className="shrink-0"
         />
         <div className="min-w-0">
@@ -149,14 +163,18 @@ export default async function AffichePage({ params }: { params: Promise<{ id: st
       </section>
 
       <section className="flex items-center gap-[10mm] border-t-2 border-ink pt-[6mm]">
-        <QrCode valeur={url} taille={210} className="shrink-0" />
+        <QrCode
+          valeur={url}
+          taille={210}
+          className="shrink-0"
+          etiquette={LIBELLES.etiquettes.qrEtiquette(url)}
+        />
         <div className="min-w-0">
           <p className="font-serif text-2xl font-bold leading-snug">{T.scannez}</p>
           {/* ⚠ L'ADRESSE EN CLAIR, et c'est la pièce qui rattrape le reste :
               l'URL est dérivée du `Host` de la requête, donc une affiche
               imprimée depuis une adresse interne encoderait celle-là. Un humain
               le voit ici, avant de coller l'affiche dans un couloir. */}
-          <p className="mt-2 break-all font-mono text-sm">{url}</p>
         </div>
       </section>
 

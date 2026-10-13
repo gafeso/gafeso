@@ -94,13 +94,36 @@ describe('⚠ LE GARDE RETOURNÉ : plus jamais « pas encore »', () => {
     // source, pas seulement le dictionnaire.
     for (const e of ECRANS) {
       const src = readFileSync(resolve(process.cwd(), 'app', e, 'page.tsx'), 'utf-8');
-      // ⚠ Hors commentaires : ce fichier-ci RACONTE le « pas encore » d'avant,
-      // et l'écran le fait aussi dans son en-tête. Un relevé qui lit les
-      // commentaires signalerait le texte qui explique le retrait.
+      /*
+       * ⚠ HORS COMMENTAIRES — et la première écriture filtrait LES LIGNES, ce
+       * qui ne suffit pas.
+       *
+       * Elle retirait les lignes commençant par `*`, `//` ou `/*`. Or **les
+       * lignes de CONTINUATION d'un commentaire JSX ne portent aucun
+       * marqueur** : `{/*` ouvre, et les lignes suivantes commencent par du
+       * texte. Le 12 octobre 2026, un commentaire expliquant « `slug === null`
+       * veut dire pas encore su » a donc fait accuser un écran parfaitement
+       * juste.
+       *
+       * ⭐ C'est la forme éprouvée du dépôt (`fenetre-ouverte-au-clic.spec.ts`,
+       * `accueil-sans-chiffre-fige.spec.ts`) : on retire les BLOCS, pas les
+       * lignes. Troisième fois que ce piège se présente, et la troisième fois
+       * c'est le garde qui l'a dit, pas une relecture.
+       */
       const code = src
+        .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '')
         .split('\n')
-        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+        .filter((l) => !l.trim().startsWith('//'))
         .join('\n');
+      /*
+       * ⚠ TÉMOIN SUR L'INSTRUMENT : un retrait de blocs trop gourmand mangerait
+       * le fichier et rendrait ce cas vert sur rien. Mesuré ailleurs dans ce
+       * dépôt — 2 262 caractères avalés par un nettoyeur non borné.
+       */
+      expect(
+        code.length / src.length,
+        `${e} : le retrait des commentaires a mangé le fichier — l’instrument ment`,
+      ).toBeGreaterThan(0.25);
       expect(code, `${e} porte « pas encore » dans son code`).not.toMatch(/pas encore/i);
     }
   });
@@ -148,5 +171,43 @@ describe('⚠ LE GARDE RETOURNÉ : plus jamais « pas encore »', () => {
     const ancien = 'L’historique de vos lectures en ligne n’est pas encore disponible sur cette installation.';
     expect(/pas encore/i.test(ancien)).toBe(true);
     expect(/pas encore/i.test(C.retention(12))).toBe(false);
+  });
+});
+
+/**
+ * ⭐⭐ LES ÉTATS VIDES NEUTRES — ce que leurs textes DOIVENT dire.
+ *
+ * Constaté par Jean sur rc12 : l'état vide s'affichait dans un encadré
+ * rose/rouge, et se lisait comme une ERREUR. Le ton employé était `warning`,
+ * dont la table rend `bg-ocre/10` — l'ocre de marque à 10 %.
+ *
+ * ⚠ Et `ocre` est la couleur SECONDAIRE DU TENANT : un état vide peint avec
+ * elle change de couleur d'une école à l'autre.
+ */
+describe('⭐ les états vides : une phrase, et une SORTIE', () => {
+  /**
+   * ⚠ L'ASSERTION DE PROPRIÉTÉ QUE LE REGISTRE EXIGE. `sansCarte` est un
+   * RECOURS : il doit NOMMER à qui s'adresser. Sans le destinataire, il reste
+   * « vous ne pouvez pas emprunter » — une impasse, et c'est exactement le faux
+   * que ce dépôt refuse (« un recours doit nommer à qui s'adresser »).
+   */
+  it('`mesPrets.sansCarte` NOMME son destinataire', () => {
+    expect(LIBELLES.mesPrets.sansCarte).toMatch(/bibliothécaire|bibliothèque/i);
+    expect(LIBELLES.mesPrets.sansCarte).toMatch(/adressez|demandez|contactez/i);
+    /*
+     * ⚠ TÉMOIN D'ABSENCE : il ne doit pas accuser le lecteur. « Vous n'avez
+     * pas » décrirait une faute là où il n'y en a aucune.
+     */
+    expect(LIBELLES.mesPrets.sansCarte).not.toMatch(/erreur|interdit|refus/i);
+  });
+
+  it('les actions d’un état vide nomment un GESTE, pas un état', () => {
+    const a = LIBELLES.etatsVides;
+    expect(a.parcourirCatalogue).toMatch(/parcourir|voir|chercher/i);
+    expect(a.telechargerDepuisApp).toMatch(/télécharger|installer/i);
+    // ⚠ La phrase du hors-ligne dit le GESTE et l'OUTIL, pas « indisponible ».
+    expect(a.emporterAvecApp).toMatch(/application Gafeso/);
+    expect(a.emporterAvecApp).toMatch(/sans réseau|hors connexion|hors réseau/i);
+    expect(a.emporterAvecApp).not.toMatch(/impossible|indisponible|erreur/i);
   });
 });

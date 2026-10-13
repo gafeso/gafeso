@@ -62,14 +62,28 @@ describe('🔴 Les deux formes d’adressage restent servies', () => {
     });
   }
 
-  it('⚠ et ils sont les TROIS DERNIERS — une clé neuve s’ajoute après eux', () => {
+  it('⚠ et ils restent CONTIGUS et dans CET ordre — jamais permutés', () => {
     // Le filet qui compare des octets doit lire un AJOUT, jamais une
-    // permutation. Si quelqu'un insère un champ au milieu, ce test le dit.
-    const n = CLES_DU_CONTRAT.length;
-    expect(
-      [CLES_DU_CONTRAT[n - 3], CLES_DU_CONTRAT[n - 2], CLES_DU_CONTRAT[n - 1]],
-      'les trois formes d\u2019adressage doivent rester en fin de contrat',
-    ).toEqual(['publicUrl', 'identifiantPerenne', 'shortUrl']);
+    // permutation. Si quelqu'un insère un champ ENTRE les trois, ce test le dit.
+    //
+    // ⚠ 12/10/2026 — CETTE ASSERTION DISAIT « LES TROIS DERNIERS », et elle
+    // datait sa propre péremption : elle est tombée au premier ajout suivant
+    // (`coverTemplate`, `coverDomain`), sur un contrat parfaitement SAIN. Ce
+    // n'était pas la propriété qu'on voulait tenir — on voulait « aucune
+    // permutation, aucun retrait », et « en fin de liste » n'en était qu'une
+    // conséquence du jour où elle a été écrite.
+    //
+    // ⭐ La forme juste mesure la CONTIGUÏTÉ et l'ORDRE, jamais la POSITION.
+    const positions = SERVIS_POUR_TOUJOURS.map((c) => CLES_DU_CONTRAT.indexOf(c));
+    expect(positions, 'aucun des trois ne doit manquer').not.toContain(-1);
+    for (let i = 1; i < positions.length; i++) {
+      expect(
+        positions[i],
+        `\`${SERVIS_POUR_TOUJOURS[i]}\` doit suivre immédiatement ` +
+          `\`${SERVIS_POUR_TOUJOURS[i - 1]}\` — une clé insérée entre les trois ` +
+          'est une permutation pour un filet qui compare des octets.',
+      ).toBe(positions[i - 1] + 1);
+    }
   });
 
   it('⚠ TÉMOIN : le contrat n’est pas vide — sinon ce garde ne mesure rien', () => {

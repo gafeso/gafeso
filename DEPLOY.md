@@ -68,6 +68,36 @@ main sans ces variables répond « non étiquetée », ce qui est juste — il n
 pas. On refuse de FABRIQUER une image sans version ; on n'interdit pas d'en
 exécuter une.
 
+### ✅ rc13 : AUCUNE RÉINDEXATION — et c'est MESURÉ, pas supposé
+
+*Tranché le 12 octobre 2026. Lisez ceci avant de chercher une commande : il n'y
+en a pas.*
+
+rc13 ajoute `coverTemplate` et `coverDomain` à cinq routes, dont `GET
+/opac/search`, qui lit Meilisearch. La question se pose donc, et la réponse est
+**non** :
+
+| | |
+|---|---|
+| les deux champs sont-ils dans le document INDEXÉ ? | **non** |
+| d'où viennent-ils alors ? | ils sont **DÉRIVÉS** de chaque résultat, après la recherche |
+| de quoi ? | de `category` et `recordType`, qui sont **déjà** des attributs de l'index |
+
+⭐ C'est ce qui rend la réindexation inutile : `SearchDocument` porte `category`
+et `recordType` depuis toujours ; les deux clés de couverture se calculent à
+partir d'eux par la même fonction que la fiche. **Les réglages d'index ne
+changent pas, les documents indexés ne changent pas.**
+
+⚠ **Et ce n'est pas qu'une économie d'exploitation** : si les deux champs
+avaient été indexés, la table de correspondance aurait vécu en DEUX
+exemplaires — dans l'index et dans le code —, et une correction de teinte
+aurait exigé une réindexation de tout le fonds pour entrer en vigueur. Les
+dériver garde une seule règle, à un seul endroit.
+
+⚠ À comparer avec rc8 juste en dessous, où la réindexation ÉTAIT obligatoire :
+là, `hasDigital` est devenu un attribut **filtrable**, donc un réglage d'index
+— et un réglage ne se dérive pas.
+
 ### 🔴 rc8 : UNE COMMANDE À PASSER APRÈS LA MONTÉE — la réindexation
 
 *La démonstration doit la passer. Tranché le 9 octobre 2026, mesuré.*

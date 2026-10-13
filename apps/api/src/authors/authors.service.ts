@@ -5,6 +5,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  champsDeCouverture,
+  type CoverDomain,
+  type CoverTemplate,
+} from '../opac/couverture';
 import { PrismaClient } from '@prisma/client';
 import { normalizeAuthorName } from './author-name';
 
@@ -75,12 +80,32 @@ export class AuthorsService {
       where: { authorId: id },
       select: {
         role: true,
-        record: { select: { id: true, title: true, publishYear: true, recordType: true } },
+        // ⚠ `category` EN PLUS : avec `recordType`, déjà là, elle compose la
+        // COUVERTURE de chaque œuvre listée sur la fiche d'autorité.
+        record: {
+          select: {
+            id: true,
+            title: true,
+            publishYear: true,
+            recordType: true,
+            category: true,
+          },
+        },
       },
       orderBy: [{ record: { title: 'asc' } }],
     });
 
-    const byRole = new Map<string, { recordId: string; title: string; year: number | null; recordType: string }[]>();
+    const byRole = new Map<
+      string,
+      {
+        recordId: string;
+        title: string;
+        year: number | null;
+        recordType: string;
+        coverTemplate: CoverTemplate;
+        coverDomain: CoverDomain;
+      }[]
+    >();
     for (const c of contributions) {
       const list = byRole.get(c.role) ?? [];
       list.push({
@@ -88,6 +113,9 @@ export class AuthorsService {
         title: c.record.title,
         year: c.record.publishYear,
         recordType: c.record.recordType,
+        // ⭐ LA MÊME FONCTION que les autres routes. Les champs sortent
+        // MAINTENANT (coût nul) ; l'affichage viendra avec le lot front.
+        ...champsDeCouverture(c.record),
       });
       byRole.set(c.role, list);
     }

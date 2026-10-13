@@ -109,3 +109,59 @@ body {
 .lien-evitement:focus {
   top: 1rem;
 }
+
+/* ─────────── ⭐⭐ LES POLICES DES COUVERTURES — parité avec le mobile ─────────── */
+
+/*
+ * Ce sont EXACTEMENT les fichiers du mobile (`gafeso-mobile/assets/fonts/`),
+ * dérivés en woff2. Leurs sha256 de source sont consignés dans
+ * `public/polices/POLICES.json` — une fixture porte sa PROVENANCE, et c'est la
+ * seule chose qui permette de vérifier plus tard que la fonte servie vient bien
+ * de celle du mobile, et non d'un téléchargement approchant.
+ *
+ * ⚠ AUCUN APPEL À GOOGLE FONTS, ni ici ni ailleurs : les deux fichiers sont
+ * auto-hébergés sous `/polices/`.
+ *
+ * ⚠ ET LES DEUX NE SONT PAS DE MÊME NATURE — mesuré dans leur table `fvar` :
+ *
+ * | fichier | axes |
+ * |---|---|
+ * | `Poppins-Bold` | **AUCUN** — fonte STATIQUE, déjà en graisse 700 |
+ * | `SourceSans3-Variable` | `wght` 200–900, **défaut 200** |
+ *
+ * ⭐ La consigne disait « ce sont des fontes variables » : une seule l'est. La
+ * conséquence pratique diffère pour chacune, et c'est ce qui décide des
+ * déclarations ci-dessous.
+ */
+
+@font-face {
+  font-family: 'Poppins Gafeso';
+  src: url('/polices/Poppins-Bold.woff2') format('woff2');
+  /*
+   * ⚠ `700` ET PAS UNE PLAGE. Ce fichier EST le gras : lui demander 400 ou 600
+   * ferait SYNTHÉTISER au navigateur une graisse qui n'existe pas dans la
+   * fonte — un faux maigre, aussi faux qu'un faux gras. La couverture ne lui
+   * demande que 700.
+   */
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3 Gafeso';
+  src: url('/polices/SourceSans3-Variable.woff2') format('woff2');
+  /*
+   * ⭐⭐ LA PLAGE, ET ELLE EST OBLIGATOIRE ICI. Sans `200 900`, le navigateur
+   * tient ce fichier pour une fonte de graisse 400 unique : demander 600 ou 700
+   * lui fait alors SYNTHÉTISER un faux gras, au lieu de bouger l'axe `wght`.
+   *
+   * ⚠ Et le défaut de l'axe est **200** : un texte qui n'exprime aucune graisse
+   * sort en maigre extrême, pas en 400. C'est pourquoi chaque usage pose son
+   * `font-variation-settings` EXPLICITEMENT — voir `couverture-v3.tsx`, et
+   * l'épreuve qui tombe si l'un d'eux disparaît.
+   */
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}

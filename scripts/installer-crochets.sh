@@ -20,131 +20,38 @@ mkdir -p "$CROCHETS"
 # ══════════════════════════════════════════════════════════ pre-commit
 cat > "$CROCHETS/pre-commit" <<'CROCHET'
 #!/usr/bin/env bash
-# Refuse un commit qui emporterait un secret ou un fichier qui n'a rien à faire là.
-# Contournement : git commit --no-verify
-
+# ⭐⭐ CE CROCHET NE PORTE PLUS LES CONTRÔLES — IL LES DÉLÈGUE.
+#
+# Les contrôles vivent dans `scripts/controles-de-contenu.sh`, VERSIONNÉ, et la
+# CI lance LE MÊME SCRIPT. Avant le 12 octobre 2026 ils ne vivaient qu'ici :
+#
+#   · `git commit --no-verify` les sautait, et RIEN en aval ne les rejouait ;
+#   · un crochet non installé était indiscernable d'un crochet contourné.
+#
+# > ⭐ Un garde qui ne vit que dans `.git/hooks/` protège UN clone, et son vert
+# > n'est pas une mesure : c'est l'absence de mesure.
+#
+# Contournement toujours possible : `git commit --no-verify`. Il est désormais
+# RATTRAPÉ par la CI, qui rejoue le même script sur ce qui est poussé.
 set -uo pipefail
-ROUGE=$'\033[0;31m'; ORANGE=$'\033[0;33m'; GRIS=$'\033[0;90m'; FIN=$'\033[0m'
-REFUS=0
+ROUGE=$'\033[0;31m'; GRIS=$'\033[0;90m'; FIN=$'\033[0m'
+RACINE=$(git rev-parse --show-toplevel)
+CONTROLES="$RACINE/scripts/controles-de-contenu.sh"
 
-refuse() { printf '%s✗%s %s\n' "$ROUGE" "$FIN" "$1"; REFUS=1; }
-detail() { printf '   %s%s%s\n' "$GRIS" "$1" "$FIN"; }
-
-INDEXES=$(git diff --cached --name-only --diff-filter=ACM)
-[ -z "$INDEXES" ] && exit 0
-
-# ── 1 · Chaînes en forme de secret, dans le contenu indexé seulement.
-#    Le témoin positif est implicite : on cherche dans ce qu'on vient d'écrire.
-# ⚠ MOTIF RESSERRÉ DEUX FOIS LE 11 SEPTEMBRE 2026, ET MESURÉ LES DEUX FOIS.
-#
-# LA RÈGLE, plutôt qu'une liste d'exceptions : UN SECRET NE CONTIENT PAS
-# D'ESPACE, et ne commence ni par `\\`, ni par `<`, ni par `{`, ni par `$`.
-# Ces quatre débuts sont des échappements, des balises, des gabarits et des
-# variables — jamais des identifiants.
-#
-# Ce que cela écarte, constaté dans ce dépôt :
-#   token = '\\n    <resumptionToken/>'        nom d'élément OAI-PMH
-#   { token: '{prenom}', … }                  gabarit de rappel (5 fois)
-#   password: 'Mot de passe oublié ?'         libellé d'interface
-#
-# ⚠ ET LE TROU QUE LA MESURE A RÉVÉLÉ, plus grave que les faux positifs : le
-# motif était SENSIBLE À LA CASSE. `ADMIN_API_KEY = '…'` passait — c'est-à-dire
-# la forme la plus probable d'une constante d'environnement recopiée par
-# mégarde. D'où le `-i` sur le grep.
-#
-# Éprouvé sur 13 cas construits : 5 vrais secrets sur 5, 0 faux positif sur 8.
-# Un détecteur qui crie au loup se fait contourner par --no-verify, puis par
-# habitude, et ne sert plus le jour où il a raison.
-MOTIFS='(password|passwd|secret|token|api[_-]?key|jwt)[[:space:]]*[=:][[:space:]]*['"'"'"][^'"'"'"$<\\{[:space:]][^'"'"'"[:space:]]{6,}['"'"'"]'
-while IFS= read -r f; do
-  case "$f" in
-    *.example|*.md|*test*|*spec*|package-lock.json) continue ;;
-  esac
-  # ⚠ SEULES LES LIGNES AJOUTÉES, PAS LE FICHIER INDEXÉ EN ENTIER.
-  #
-  # Troisième incident de cohabitation, 11 septembre 2026. Le crochet lisait
-  # `git show ":$f"` — le fichier complet. Une ligne SUSPECTE ET PRÉÉXISTANTE
-  # bloquait donc quiconque touchait ce fichier, pour une chaîne qu'il
-  # n'introduisait pas. Invisible depuis la session qui avait déjà commité ce
-  # fichier : chez elle, la même ligne passait.
-  #
-  # Un scanner de pré-commit doit refuser ce qu'on INTRODUIT. `-U0` ne donne que
-  # les lignes ajoutées ; le `^+` les isole (et `^+++` est écarté par le motif
-  # lui-même, qui exige un `=` ou un `:`).
-  TROUVE=$(git diff --cached -U0 -- "$f" 2>/dev/null | grep '^+' | grep -niIE "$MOTIFS" | head -3 || true)
-  if [ -n "$TROUVE" ]; then
-    refuse "Chaîne en forme de secret AJOUTÉE dans : $f"
-    echo "$TROUVE" | while read -r l; do detail "${l:0:100}"; done
-  fi
-done <<< "$INDEXES"
-
-# ── 2 · Fichiers d'environnement.
-ENVS=$(echo "$INDEXES" | grep -E '^\.env$|\.env\.(prod|production|local)$' || true)
-[ -n "$ENVS" ] && { refuse "Fichier d'environnement indexé :"; echo "$ENVS" | while read -r f; do detail "$f"; done; }
-
-# ── 3 · Clés et certificats.
-CLES=$(echo "$INDEXES" | grep -E '\.(jks|keystore|p12|pfx|pem|key)$' || true)
-[ -n "$CLES" ] && { refuse "Clé ou certificat indexé :"; echo "$CLES" | while read -r f; do detail "$f"; done; }
-
-# ── 4 · Documents bureautiques à la racine.
-#    C'est ainsi qu'un document concernant un tiers a été versionné par git add -A.
-BUREAU=$(echo "$INDEXES" | grep -vE '/' | grep -iE '\.(docx?|xlsx?|pptx?|odt|ods|pdf)$' || true)
-[ -n "$BUREAU" ] && { refuse "Document bureautique à la racine :"; echo "$BUREAU" | while read -r f; do detail "$f"; done; }
-
-# ── 5 · Marqueurs de conflit laissés dans le contenu indexé.
-#
-# ⚠ POURQUOI CE CONTRÔLE EXISTE. Le 12 septembre 2026, un `git pull --rebase`
-# a produit DEUX blocs de conflit dans `docs/journal.md` — les deux sessions y
-# ajoutent leur entrée en fin de fichier. Le script de résolution n'en traitait
-# que le PREMIER, `git add` ne vérifie rien, et `git rebase --continue` a
-# committé les marqueurs du second sans un mot.
-#
-# Ce n'est pas une inattention rattrapable par la relecture : le fichier fait
-# sept cents lignes, et rien dans le déroulé ne dément. Ce qui l'a attrapé est
-# un témoin qui COMPTAIT les marqueurs restants — et le point de passage
-# obligé, c'est ici.
-#
-# La correction n'a coûté qu'un amend parce que rien n'était poussé. Elle ne se
-# reprend pas une fois publiée : un `main` qui porte `<<<<<<< HEAD` est vu par
-# tout le monde.
-while IFS= read -r f; do
-  [ -f "$f" ] || continue
-  if git show ":$f" 2>/dev/null | grep -qE '^(<<<<<<< |>>>>>>> |=======$)'; then
-    refuse "Marqueurs de conflit dans le contenu indexé : $f"
-    detail "Résolvez TOUS les blocs (il y en a souvent plus d'un), puis git add."
-  fi
-done <<< "$INDEXES"
-
-# ── 6 · Compte de fichiers : ce qui a attrapé ce qu'aucun scanner ne voyait.
-NB=$(echo "$INDEXES" | wc -l | tr -d ' ')
-if [ "$NB" -gt 30 ]; then
-  printf '%s⚠%s %s fichiers dans ce commit — justifiez-les avant de valider.\n' "$ORANGE" "$FIN" "$NB"
-fi
-
-if [ "$REFUS" -eq 1 ]; then
-  printf '\n%sCommit refusé.%s Si c'\''est un faux positif : git commit --no-verify\n' "$ROUGE" "$FIN"
+# ⚠ SI LE SCRIPT MANQUE, ON REFUSE — on ne passe PAS en silence. Un crochet qui
+# tolère l'absence de ce qu'il appelle est un faux dispositif : il s'exécute, il
+# rend 0, et il ne contrôle rien.
+if [ ! -x "$CONTROLES" ]; then
+  printf '%s✗ Contrôles introuvables :%s %s\n' "$ROUGE" "$FIN" "$CONTROLES"
+  printf '   %sLe crochet délègue à un script versionné. Tirez la branche, ou%s\n' "$GRIS" "$FIN"
+  printf '   %srelancez ./scripts/installer-crochets.sh%s\n' "$GRIS" "$FIN"
   exit 1
 fi
-exit 0
-CROCHET
 
-# ══════════════════════════════════════════════════════════ reference-transaction
-#
-# ⚠ BARRE `git stash push`. CLAUDE.md l'interdit « pour LIRE » depuis le
-# 11 septembre 2026, et la règle a tenu tant qu'on y pensait : le 12 au soir,
-# une session l'a employé pour un diagnostic, sans y penser, et ne s'en est
-# tirée que parce que l'arbre était propre. Troisième fois dans la journée
-# qu'une forme rapide se présente d'elle-même et gagne.
-#
-# La leçon tirée le même soir dit pourquoi une règle écrite ne suffisait pas :
-# elle protège contre l'ignorance, pas contre la pente. Ce qui protège contre
-# la pente est un point de passage — le voici.
-#
-# ⚠ IL NE BARRE QUE LA MISE EN RÉSERVE, JAMAIS LA RÉCUPÉRATION. Mesuré :
-#   push        → ancien=0000000  nouveau=<sha>   (création)
-#   pop / drop  → ancien=<sha>    nouveau=0000000 (suppression)
-# On refuse donc sur `nouveau` non nul. Un `pop` reste toujours possible :
-# barrer la sortie de réserve emprisonnerait le travail qu'on veut protéger.
+exec "$CONTROLES" --index
+CROCHET
+chmod +x "$CROCHETS/pre-commit"
+
 cat > "$CROCHETS/reference-transaction" <<'CROCHET'
 #!/usr/bin/env bash
 # Refuse `git stash push`. Contournement : GAFESO_STASH=je-sais git stash push

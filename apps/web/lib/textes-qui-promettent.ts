@@ -37,6 +37,15 @@ export interface TexteQuiPromet {
 
 export const TEXTES_QUI_PROMETTENT: TexteQuiPromet[] = [
   {
+    cle: 'mesPrets.sansCarte',
+    nature: 'promet',
+    raison:
+      'C’est un RECOURS, et un recours doit NOMMER à qui s’adresser : sans le ' +
+      'mot « bibliothécaire », il resterait « vous ne pouvez pas emprunter », ' +
+      'c’est-à-dire une impasse. Sorti du code le 12 octobre 2026 en rendant cet ' +
+      'état vide neutre.',
+  },
+  {
     cle: 'etiquettes.seulementSelection',
     nature: 'promet',
     raison:

@@ -91,6 +91,11 @@ const ORDRE_ANONYME = [
     // d'une version et r\u00e9tr\u00e9cir ses modules de 8 %, sans mesure de lisibilit\u00e9.
     // Les affiches et les PDF, eux, gardent `publicUrl`.
     'shortUrl',
+    // \u2b50 12/10/2026 \u2014 31 \u2192 33. Le gabarit et le domaine de couverture,
+    // R\u00c9SOLUS par le serveur : trois clients composent cette couverture, et
+    // leur laisser la normalisation et le repli donnerait trois couvertures
+    // possibles pour un m\u00eame document.
+    'coverTemplate', 'coverDomain',
 ];
 
 describe('contrat de /opac/records/:id — la forme servie est figée', () => {
@@ -120,7 +125,7 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
   // brief P7 dit que ce qui arrive par moissonnage reste marqué comme tel, et
   // cela ne dépend pas de qui regarde. C'est même l'anonyme qu'on renvoie vers
   // l'école d'origine, puisque le fichier n'est pas ici.
-  it('⚠ visiteur ANONYME : 31 clés, dans CET ordre', async () => {
+  it('⚠ visiteur ANONYME : 33 clés, dans CET ordre', async () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);
@@ -132,6 +137,27 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
     // Même jeu de clés que l'anonyme — c'est ce qui compte pour un APK qui
     // lit les deux vues sans savoir laquelle il reçoit.
     expect(Object.keys(r).sort()).toEqual([...ORDRE_ANONYME].sort());
+  });
+
+  it('⭐ et la COUVERTURE sort avec sa VALEUR, dans les DEUX branches', async () => {
+    // ⚠ UN TEST DE CLÉS NE MESURE PAS UNE VALEUR. Les deux cas ci-dessus
+    // comparent des noms : `coverDomain` y serait `autre` pour tout le monde
+    // sans qu'ils bronchent — c'est-à-dire que la résolution serait morte et
+    // le contrat vert.
+    //
+    // ⭐ Le jeu d'essai porte `recordType: 'ouvrage'` et
+    // `category: 'litterature'` : deux valeurs qui ne sont NI le repli du type
+    // (`manuel` vient bien d'`ouvrage`, mais `litterature` n'est pas `autre`),
+    // donc une résolution en panne se verrait.
+    const { db, service: s } = service();
+    for (const membre of [false, true]) {
+      const r = (await s.recordDetail(db, 'rec-1', membre)) as Record<string, unknown>;
+      expect(r.coverTemplate, `branche membre=${membre}`).toBe('manuel');
+      expect(r.coverDomain, `branche membre=${membre}`).toBe('litterature');
+      // ⚠ Et surtout PAS le repli : c'est le témoin qui distingue « résolu »
+      // de « tombé dans le défaut ».
+      expect(r.coverDomain, 'une résolution en panne rendrait `autre`').not.toBe('autre');
+    }
   });
 
   it('l’anonyme ne reçoit NI exemplaires NI copie numérique', async () => {

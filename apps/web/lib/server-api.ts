@@ -445,6 +445,18 @@ export interface NoticeANouveaute {
   publishYear: number | null;
   recordType: string;
   coverUrl: string | null;
+  /**
+   * ⭐ LES DEUX CLÉS DE LA v3, REQUISES — `GET /opac/nouveautes` les sert depuis
+   * le 13 octobre 2026 (mesuré sur l'objet entier : `coverUrl, coverTemplate,
+   * coverDomain`).
+   *
+   * ⚠ Elles servent le REPLI de l'étagère, pas la couverture principale :
+   * quand `coverUrl` existe, c'est la vraie image du document qui s'affiche.
+   * La v3 remplace ce qui était auparavant le TITRE dans un cadre — « jamais
+   * l'ancienne vignette » vaut aussi pour un repli typographique.
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 
 export async function fetchNouveautes(): Promise<NoticeANouveaute[] | null> {

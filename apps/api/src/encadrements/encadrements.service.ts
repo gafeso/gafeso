@@ -1,4 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import {
+  champsDeCouverture,
+  type CoverDomain,
+  type CoverTemplate,
+} from '../opac/couverture';
 import { PrismaClient } from '@prisma/client';
 import { CSV_BOM, toCsv } from '../stats/csv';
 
@@ -17,6 +22,10 @@ export interface Encadrement {
   /** L'étudiant : l'auteur principal de la notice, s'il y en a un. */
   etudiant: string | null;
   universiteDeSoutenance: string | null;
+  /** Le gabarit de couverture — résolu, jamais `null`, jamais hors liste. */
+  coverTemplate: CoverTemplate;
+  /** Le domaine de couverture — résolu, jamais `null`, jamais hors liste. */
+  coverDomain: CoverDomain;
 }
 
 /**
@@ -99,6 +108,8 @@ export class EncadrementsService {
               id: true,
               title: true,
               recordType: true,
+              // ⚠ `category` : avec `recordType`, elle compose la COUVERTURE.
+              category: true,
               publishYear: true,
               defenseUniversity: true,
               contributors: {
@@ -160,6 +171,8 @@ export class EncadrementsService {
             id: true,
             title: true,
             recordType: true,
+            // ⚠ `category` : avec `recordType`, elle compose la COUVERTURE.
+            category: true,
             publishYear: true,
             defenseUniversity: true,
             contributors: {
@@ -209,6 +222,7 @@ function versEncadrement(record: {
   id: string;
   title: string;
   recordType: string;
+  category: string | null;
   publishYear: number | null;
   defenseUniversity: string | null;
   contributors: { name: string }[];
@@ -220,5 +234,8 @@ function versEncadrement(record: {
     annee: record.publishYear,
     etudiant: record.contributors[0]?.name ?? null,
     universiteDeSoutenance: record.defenseUniversity,
+    // ⭐ LA MÊME FONCTION que les autres routes. Les champs sortent MAINTENANT
+    // (coût nul) ; l'affichage viendra avec le lot front.
+    ...champsDeCouverture(record),
   };
 }

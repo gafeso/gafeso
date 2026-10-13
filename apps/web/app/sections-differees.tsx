@@ -18,6 +18,7 @@ import { Suspense } from 'react';
 import { fetchChiffres, fetchConstellation, fetchNouveautes } from '@/lib/server-api';
 import { formaterNombre, tuilesSignificatives } from '@/lib/chiffres';
 import { ConstellationSection } from '@/components/constellation';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { LIBELLES } from '@/lib/libelles';
 import styles from './home.module.css';
 
@@ -81,11 +82,30 @@ async function Acquisitions() {
                   height={220}
                 />
               ) : (
-                /* Repli LISIBLE, jamais un cadre vide : le titre tient
-                   lieu de couverture, ce qui reste une information. */
-                <span className={styles.ficheSansCouverture} aria-hidden="true">
-                  {notice.title}
-                </span>
+                /*
+                  ⭐ REPLI EN COUVERTURE v3 depuis le 13 octobre 2026.
+
+                  Il affichait le TITRE dans un cadre — lisible, et moins bon
+                  qu'une couverture : `GET /opac/nouveautes` sert désormais
+                  `coverTemplate` et `coverDomain`, donc on compose.
+
+                  ⚠ Ce n'est PAS l'ancienne vignette dessinée, retirée du dépôt.
+                  Et la vraie image garde la priorité : quand `coverUrl` existe,
+                  c'est le document qu'on montre, pas un dessin.
+
+                  ⚠ 160×220 comme l'image qu'elle remplace — sans dimensions
+                  égales, la page sauterait entre les deux cas, ce qui fait
+                  cliquer à côté.
+                */
+                <CouvertureV3
+                  coverTemplate={notice.coverTemplate}
+                  coverDomain={notice.coverDomain}
+                  titre={notice.title}
+                  auteur={notice.author}
+                  annee={notice.publishYear}
+                  largeur={160}
+                  className={styles.ficheCouverture}
+                />
               )}
               <span className={styles.ficheTexte}>
                 <b>{notice.title}</b>

@@ -191,21 +191,82 @@ function domaineDeDemonstration(argv) {
  * supposer un accord. Un script lancé par un ordonnanceur ne doit pas pouvoir
  * réécrire un fonds parce que personne n'était là pour dire non.
  */
-async function confirmer(slug) {
+/** La confirmation donnée sur la ligne de commande, ou `null`. */
+function confirmationFournie(argv) {
+  const arg = argv.find((a) => a.startsWith('--confirmation'));
+  if (!arg) return null;
+  const valeur = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1).trim() : '';
+  if (!valeur) {
+    refuse('`--confirmation` exige une valeur.', [
+      'Usage : --confirmation=<slug de l’établissement>',
+      '',
+      'Une option vide ne confirme rien : elle ressemble à une confirmation,',
+      'et c’est exactement ce qu’on ne veut pas sur un script qui réécrit un fonds.',
+    ]);
+  }
+  return valeur;
+}
+
+/**
+ * ⭐ LA CONFIRMATION — tapée, ou fournie EXPLICITEMENT sur la ligne de commande.
+ *
+ * ## 🔴 POURQUOI L'INVITE NE S'AFFICHAIT PAS
+ *
+ * Elle était écrite avec `process.stdout.write(...)` PUIS lue par
+ * `rl.question('')`. Dans un terminal de `docker compose exec`, readline prend
+ * la main sur le terminal et redessine SA propre invite — vide. L'exploitant
+ * voyait donc **une ligne vide** et devait deviner ce qu'on lui demandait.
+ * Constaté sur la démonstration le 12 octobre 2026.
+ *
+ * ⭐ La forme juste donne l'invite À readline (`rl.question(invite)`) : c'est lui
+ * qui la dessine, donc elle survit à son redessin. On écrit en plus le
+ * récapitulatif AVANT, sur sa propre ligne, pour qu'il reste lisible quoi qu'il
+ * arrive à la ligne d'invite.
+ *
+ * ## ⚠ ET `--confirmation=<slug>` NE RELÂCHE RIEN
+ *
+ * Elle lève l'exigence de TERMINAL, pas les trois conditions cumulatives : il
+ * faut toujours l'option de démonstration, le domaine exact, et le marqueur en
+ * base. Et elle doit porter le slug — une valeur vide ou fausse REFUSE.
+ *
+ * ⚠ Ce que la sortie DIT alors : « confirmation fournie sur la ligne de
+ * commande ». Un journal qui ne distingue pas une confirmation humaine d'un
+ * drapeau ne permet plus de savoir qui a décidé.
+ */
+async function confirmer(slug, fournie) {
+  if (fournie !== null) {
+    if (fournie !== slug) {
+      refuse(`\`--confirmation=${fournie}\` ne correspond pas au slug visé.`, [
+        `Attendu : ${slug}`,
+        '',
+        'RIEN n’a été écrit.',
+      ]);
+    }
+    process.stdout.write(
+      `\n  ${J}⚠${Z} confirmation fournie sur la LIGNE DE COMMANDE (pas par un humain)\n`,
+    );
+    return;
+  }
+
   if (!process.stdin.isTTY) {
     refuse('aucun terminal : la confirmation ne peut pas être demandée.', [
       'Ce script réécrit les fichiers d’un fonds. Il ne s’exécute pas sans',
       'quelqu’un pour confirmer — ni par un ordonnanceur, ni dans un tuyau.',
       '',
       'Dans un conteneur : `docker compose exec` (pas `exec -T`).',
+      'Sans terminal du tout : --confirmation=<slug>, qui est un geste',
+      'aussi explicite que de le taper.',
     ]);
   }
+
+  // ⚠ L'INVITE EST DONNÉE À READLINE, et une ligne la précède : sans elle,
+  // `docker compose exec` n'affichait qu'un curseur sur une ligne vide.
   process.stdout.write(
-    `\n  Pour confirmer, tapez le slug de l’établissement (${slug}) : `,
+    `\n  Tapez le slug de l’établissement pour confirmer, ou Entrée pour renoncer.\n`,
   );
   const readline = await import('node:readline/promises');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const reponse = (await rl.question('')).trim();
+  const reponse = (await rl.question(`  ${slug} > `)).trim();
   rl.close();
   if (reponse !== slug) {
     // ⚠ RIEN N'A ÉTÉ ÉCRIT, et le message le dit : c'est la première chose
@@ -353,7 +414,7 @@ async function principal() {
     // de développement ; y ajouter une saisie rendrait le script pénible à
     // relancer, et ce qu'on use alors, c'est l'attention qu'on veut garder
     // pour la fois où elle compte.
-    if (domaineDemande) await confirmer(slug);
+    if (domaineDemande) await confirmer(slug, confirmationFournie(process.argv.slice(2)));
 
     let remplaces = 0;
     let deja = 0;

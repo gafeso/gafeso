@@ -79,9 +79,64 @@ describe('🔴 La voie de démonstration reste étroite', () => {
     expect(SCRIPT).toMatch(/process\.stdin\.isTTY/);
   });
 
+  it('⭐ `--confirmation` lève le TERMINAL, jamais les trois conditions', () => {
+    // ⚠ Ajoutée le 12/10/2026 pour un lancement non interactif. Elle doit être
+    // aussi explicite que de taper le slug — et surtout ne rien relâcher
+    // d'autre : c'est la pente d'une option de commodité.
+    expect(SCRIPT, 'l’option doit exister').toContain('--confirmation');
+
+    const fn = SCRIPT.slice(
+      SCRIPT.indexOf('function confirmationFournie'),
+      SCRIPT.indexOf('async function confirmer'),
+    );
+    expect(fn.length, 'la fonction doit être trouvée').toBeGreaterThan(100);
+    // Une valeur VIDE refuse : une option qui ressemble à une confirmation
+    // sans en être une est pire que pas d'option.
+    expect(fn, 'une valeur vide doit REFUSER').toContain('refuse(');
+
+    const corps = SCRIPT.slice(
+      SCRIPT.indexOf('async function confirmer'),
+      SCRIPT.indexOf('async function principal'),
+    );
+    // Elle doit être COMPARÉE au slug, pas seulement présente.
+    expect(corps, 'la valeur fournie doit être comparée au slug').toMatch(
+      /fournie\s*!==\s*slug/,
+    );
+    // ⚠ ET LES TROIS CONDITIONS RESTENT AILLEURS : l'option ne doit pas
+    // apparaître dans le bloc qui les évalue.
+    const bloc = SCRIPT.slice(
+      SCRIPT.indexOf('if (domaineDemande) {'),
+      SCRIPT.indexOf('if (domaineDemande) await confirmer'),
+    );
+    expect(bloc.length, 'le bloc des trois conditions doit être trouvé').toBeGreaterThan(50);
+    expect(
+      bloc.includes('--confirmation') || bloc.includes('confirmationFournie'),
+      'la confirmation ne doit pas intervenir dans l’évaluation des trois conditions',
+    ).toBe(false);
+  });
+
+  it('⭐ l’INVITE est donnée à readline — sinon elle ne s’affiche pas dans un conteneur', () => {
+    // 🔴 Constaté sur la démonstration le 12/10/2026 : l'invite était écrite par
+    // `process.stdout.write` PUIS lue par `rl.question('')`. readline redessine
+    // SA propre invite — vide —, et l'exploitant voyait une ligne nue.
+    const corps = SCRIPT.slice(
+      SCRIPT.indexOf('async function confirmer'),
+      SCRIPT.indexOf('async function principal'),
+    );
+    expect(
+      corps,
+      'l’invite doit être passée à `rl.question(...)`, pas écrite avant lui : ' +
+        'readline redessine la sienne et la nôtre disparaît.',
+    ).toMatch(/rl\.question\(`[^`]+`\)/);
+    expect(
+      corps,
+      'et une ligne EXPLICITE doit précéder l’invite, pour survivre au redessin',
+    ).toMatch(/Tapez le slug/);
+  });
+
   it('⭐ le RÉCAPITULATIF précède la confirmation, qui précède l’écriture', () => {
     const iRecap = SCRIPT.indexOf('ÉPARGNÉS (fichier déposé par quelqu');
-    const iConfirm = SCRIPT.indexOf('await confirmer(slug)');
+    const iConfirm = SCRIPT.indexOf('await confirmer(slug,');
     // ⚠ ON ANCRE SUR L'APPEL, PAS SUR LE CHEMIN. Ma première écriture
     // cherchait « /digital-copy` » et trouvait le COMMENTAIRE d'en-tête, en
     // position 340 — donc « une écriture précède la confirmation », sur un

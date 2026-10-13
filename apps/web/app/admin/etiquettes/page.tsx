@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+import { EtatVide } from '@/components/etat-vide';
 import { Etiquette } from '@/components/etiquette';
 import { Alert, Button } from '@/components/ui';
 import { ID_CONTENU } from '@/components/lien-evitement';
 import { api, ApiError } from '@/lib/api';
 import { LIBELLES } from '@/lib/libelles';
 import { useMyFunctions } from '@/lib/functions';
-import { adresseDuQr } from '@/lib/url-publique';
+import { adresseCourteDuQr, adresseCourteEstServie } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -52,8 +53,23 @@ interface NoticeAvecExemplaires {
   id: string;
   title: string;
   items: Exemplaire[];
-  /** ⚠ L'adresse canonique, ou `null` sans `APP_URL` : on retombe sur l'origine. */
-  publicUrl?: string | null;
+  /**
+   * ⚠⚠ L'ADRESSE COURTE — `shortUrl`, PAS `publicUrl`. Décision du 11 octobre
+   * 2026 : l'étiquette porte la forme COURTE (`/opac/<id>`), l'affiche et le
+   * bloc « Partager » portent la forme PÉRENNE. Motif mesuré dans
+   * `adresseCourteDuQr` : le QR d'étiquette est un carré FIXE de 13 mm, et
+   * chaque caractère d'adresse rétrécit ses modules.
+   *
+   * 🔴 ET CE CHAMP N'EST PAS ENCORE SERVI. Mesuré par le chemin normal :
+   * `GET /cataloging/records/:id` ne porte AUCUN des trois champs d'adressage.
+   * Le champ précédent — `publicUrl?: string | null` — était déclaré ici sans
+   * que la réponse l'ait jamais porté : le repli s'appliquait donc TOUJOURS, en
+   * silence, sur des QR qu'on colle dans des livres.
+   *
+   * ⚠ C'est pourquoi l'écran DIT l'adresse qu'il encode, et avertit quand elle
+   * vient du navigateur. Demandé au backend pour rc12 (`docs/passation.md`).
+   */
+  shortUrl?: string | null;
 }
 
 export default function AperçuEtiquettesPage() {
@@ -137,8 +153,16 @@ export default function AperçuEtiquettesPage() {
         <p className="mt-6 text-sm text-muted print:hidden">{T.chargement}</p>
       )}
 
+      {/*
+        ⭐ ÉTAT VIDE NEUTRE, et de la même nature que ceux de l'espace lecteur :
+        rien n'est coché, ce n'est pas une faute. Le ton `warning` rendait
+        `bg-ocre/10` — un rose qui accuse.
+      */}
       {notices && ids.length === 0 && (
-        <Alert tone="warning" className="mt-5 print:hidden">{T.aucuneSelection}</Alert>
+        <EtatVide
+          phrase={T.aucuneSelection}
+          actions={[{ libelle: T.aucuneSelectionAction, href: '/admin/catalogue' }]}
+        />
       )}
 
       {sansExemplaire.length > 0 && (
@@ -162,6 +186,26 @@ export default function AperçuEtiquettesPage() {
           <p className="mt-1 text-xs text-muted print:hidden">
             {T.colonnesEtQr(colonnes)}
           </p>
+          {/*
+            ⭐ L'ADRESSE QUE LES QR ENCODENT, DITE EN CLAIR — et l'avertissement
+            quand elle ne vient pas du catalogue.
+
+            ⚠ `print:hidden` : ce bloc ne doit pas manger une étiquette sur la
+            planche. Il s'adresse à la personne qui décide d'imprimer, pas au
+            livre.
+          */}
+          <p className="mt-3 break-all font-mono text-xs text-muted print:hidden">
+            {T.adresseDuQr}{' '}
+            {adresseCourteDuQr(etiquettes[0].notice.id, etiquettes[0].notice.shortUrl ?? null)}
+          </p>
+          {!etiquettes.every(({ notice }) => adresseCourteEstServie(notice.shortUrl)) && (
+            <p
+              role="status"
+              className="mt-1 max-w-prose rounded border border-ocre/40 bg-ocre/5 p-2 text-xs text-ocre print:hidden"
+            >
+              {T.adresseNonCanonique}
+            </p>
+          )}
           {/* ⚠ La planche est en MILLIMÈTRES, pas en colonnes CSS : une grille
               dont la largeur dépend de la fenêtre ferait varier la largeur de
               module, donc la décision d'abandon du QR, avec la taille du
@@ -177,7 +221,7 @@ export default function AperçuEtiquettesPage() {
                   cote={item.callNumber}
                   titre={notice.title}
                   etablissement={etablissement}
-                  urlNotice={adresseDuQr(notice.id, notice.publicUrl ?? null)}
+                  urlNotice={adresseCourteDuQr(notice.id, notice.shortUrl ?? null)}
                   colonnes={colonnes}
                 />
               </div>

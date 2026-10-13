@@ -7,11 +7,30 @@ import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getToken, getUser } from '@/lib/session';
 import { Alert, Badge, Button, Card } from '@/components/ui';
+import { CouvertureV3 } from '@/components/couverture-v3';
+import { EtatVide } from '@/components/etat-vide';
 import { Header } from '@/components/header';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
 interface CurrentLoan {
   checkoutId: string;
+  /**
+   * ⭐⭐ LES DEUX CLÉS DE LA v3, REQUISES depuis le 13 octobre 2026 — mesuré sur
+   * l'objet ENTIER : `current[0]` porte `checkoutId, recordId, title,
+   * coverTemplate, coverDomain, itemBarcode, dueDate, renewals, overdue,
+   * overdueDays`.
+   *
+   * ⭐ ELLES ÉTAIENT `?` UN JOUR, déclarées `en-attente` dans l'inventaire des
+   * surfaces avec le nom de la route manquante. Cette déclaration est devenue
+   * FAUSSE à l'arrivée du champ, le garde est tombé, et c'est ainsi que je l'ai
+   * su — pas par une relecture. « Une dette qui ne se rappelle pas d'elle-même
+   * n'est pas une dette, c'est un oubli en attente. »
+   *
+   * ⚠ Et REQUISES, pas `?` : un `?` qui survit laisse la vignette retomber sur
+   * `manuel`/`autre` en silence le jour où le champ repartirait.
+   */
+  coverTemplate: string;
+  coverDomain: string;
   recordId: string;
   title: string;
   itemBarcode: string;
@@ -22,6 +41,12 @@ interface CurrentLoan {
 }
 interface HistoryLoan {
   checkoutId: string;
+  /*
+   * ⚠ PAS DE CLÉS DE COUVERTURE ICI, et c'est mesuré : la table de
+   * l'HISTORIQUE n'affiche aucune vignette. Les déclarer serait « un champ
+   * déclaré par le front que personne ne montre » — le miroir du défaut que ce
+   * dépôt a payé sur `publicUrl`.
+   */
   recordId: string;
   title: string;
   itemBarcode: string;
@@ -141,11 +166,20 @@ export default function MyLoansPage() {
 
         {error && <Alert tone="error" className="mt-4">{error}</Alert>}
 
+        {/*
+          ⭐ ÉTAT VIDE NEUTRE, de la même nature que les deux de l'espace
+          lecteur : l'adhérent n'a pas fauté, il n'a pas encore de carte. Le ton
+          `warning` rendait `bg-ocre/10` — un rose qui accuse.
+
+          ⚠ La phrase DIT déjà la sortie (« adressez-vous à un bibliothécaire ») ;
+          le lien en ajoute une qu'on peut suivre tout de suite.
+        */}
         {data && !data.hasCard && (
-          <Alert tone="warning" className="mt-5">
-            Aucune carte de bibliothèque n’est associée à votre compte. Adressez-vous
-            à un bibliothécaire pour emprunter des documents.
-          </Alert>
+          <EtatVide
+            className="mt-5"
+            phrase={LIBELLES.mesPrets.sansCarte}
+            actions={[{ libelle: LIBELLES.etatsVides.parcourirCatalogue, href: '/opac' }]}
+          />
         )}
 
         {data && data.hasCard && (
@@ -172,6 +206,14 @@ export default function MyLoansPage() {
               ) : (
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full min-w-[640px] border-collapse text-sm">
+                        {/*
+                          ⚠ COLONNE SANS EN-TÊTE VISIBLE : la vignette DOUBLE le
+                          titre de sa ligne. Un en-tête « Couverture » serait annoncé
+                          pour une colonne qui n’apporte rien. Mais le `<th>` EXISTE :
+                          sans lui, les lecteurs d’écran décalent les en-têtes d’une
+                          colonne.
+                        */}
+                        <th className="w-14 py-2 pr-3" aria-hidden="true" />
                     <thead>
                       <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
                         <th className="py-2 pr-3">Titre</th>
@@ -184,12 +226,33 @@ export default function MyLoansPage() {
                     <tbody>
                       {data.current.map((l) => (
                         <tr key={l.checkoutId} className="border-b border-line/60">
-                          <td className="py-2 pr-3">
+                          {/*
+                            ⭐ VIGNETTE v3, 56×78 — rc13 l'inclut sur « Mes
+                            prêts ». Sous 80 px la v3 passe en MINIATURE :
+                            aucun texte, logo simplifié.
+
+                            ⚠ ELLE N'EST PAS SUR LE TABLEAU DES RÉSERVATIONS,
+                            plus bas : « les écrans circulation, holds et
+                            patrons restent en lien texte, par décision »
+                            (12 octobre 2026). Les réservations sont une vue de
+                            `holds` — si cette lecture est fausse, la vignette
+                            s'y ajoute en quatre lignes.
+                          */}
+                          <td className="py-2 pr-3 align-top">
+                            <CouvertureV3
+                              coverTemplate={l.coverTemplate}
+                              coverDomain={l.coverDomain}
+                              titre={l.title}
+                              largeur={56}
+                              className="rounded"
+                            />
+                          </td>
+                          <td className="py-2 pr-3 align-top">
                             <Link href={`/opac/${l.recordId}`} className="text-ocre underline">
                               {l.title}
                             </Link>
                           </td>
-                          <td className="py-2 pr-3 font-mono text-xs text-muted">{l.itemBarcode}</td>
+                          <td className="py-2 pr-3 align-top font-mono text-xs text-muted">{l.itemBarcode}</td>
                           <td className="py-2 pr-3 whitespace-nowrap">{fmt(l.dueDate)}</td>
                           <td className="py-2 pr-3">
                             {l.overdue ? (

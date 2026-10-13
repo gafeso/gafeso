@@ -54,14 +54,33 @@ const ANDROID =
 const IPHONE =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
-const svgDuQr = () => document.querySelector('svg[aria-hidden="true"]');
+/**
+ * ⭐⭐ LE QR N'EST PLUS `aria-hidden` — DÉCISION DU 12 OCTOBRE 2026.
+ *
+ * L'adresse en clair est retirée de l'affiche et du bloc « Partager » (le QR
+ * suffit à l'œil), donc elle doit vivre dans le NOM ACCESSIBLE du code. Sans
+ * cela, un lecteur d'écran annoncerait « image » et l'adresse serait
+ * inatteignable.
+ *
+ * ⚠ C'est pourquoi ce relevé cherche `role="img"` et non `aria-hidden` : les
+ * deux formes coexistent dans ce produit, et la COUVERTURE, elle, reste
+ * `aria-hidden` parce qu'elle double un texte déjà visible.
+ */
+const svgDuQr = () => document.querySelector('svg[role="img"]');
+/** Le nom accessible du QR — c'est désormais là que l'adresse est observable. */
+const adresseDuQr = () => svgDuQr()?.getAttribute('aria-label') ?? '';
 
 describe('le bloc « Partager »', () => {
-  it('rend un QR code et l’adresse EN CLAIR', async () => {
+  it('rend un QR code, et l’adresse vit dans son NOM ACCESSIBLE', async () => {
     render(<BlocPartage recordId={ID} publicUrl={null} />);
-    const url = await waitFor(() => screen.getByText(ATTENDUE));
-    expect(url).toBeTruthy();
-    expect(svgDuQr(), 'aucun QR rendu').toBeTruthy();
+    await waitFor(() => expect(svgDuQr(), 'aucun QR rendu').toBeTruthy());
+    expect(adresseDuQr()).toContain(ATTENDUE);
+    /*
+     * ⚠ TÉMOIN D'ABSENCE : l'adresse n'est PLUS dans le texte visible. Sans lui,
+     * un retour à l'affichage en clair passerait — et l'adresse serait annoncée
+     * DEUX fois par un lecteur d'écran.
+     */
+    expect(screen.queryByText(ATTENDUE)).toBeNull();
   });
 
   /**
@@ -69,18 +88,17 @@ describe('le bloc « Partager »', () => {
    * SVG et on relit la page : l'adresse doit RESTER. Aucune forme n'est
    * inspectée — c'est ce qui subsiste qui est compté.
    */
-  it('⚠ l’adresse SURVIT au retrait du QR — sinon elle n’existe que pour l’œil', async () => {
+  it('⚠ l’adresse est ATTEIGNABLE sans voir le QR — par son nom accessible', async () => {
     render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(svgDuQr()).toBeTruthy());
-    const attendue = ATTENDUE;
 
-    svgDuQr()!.remove();
-
-    expect(
-      (document.body.textContent ?? '').replace(/\s+/g, ' '),
-      '⚠ l’adresse n’est portée que par le QR, qui est aria-hidden : invisible ' +
-        'pour un lecteur d’écran, et invérifiable par un humain avant impression',
-    ).toContain(attendue);
+    /*
+     * ⭐ LA MESURE, et elle se fait par le RÔLE, comme un lecteur d'écran. Un
+     * `querySelector` dirait seulement qu'un attribut existe ; `getByRole`
+     * exige que le code soit annoncé comme une IMAGE PORTANT CE NOM.
+     */
+    const parSonNom = screen.getByRole('img', { name: new RegExp(ATTENDUE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) });
+    expect(parSonNom, '⚠ l’adresse n’est atteignable par aucun moyen : ni texte, ni nom accessible').toBeTruthy();
   });
 
   /**
@@ -101,7 +119,7 @@ describe('le bloc « Partager »', () => {
   it('⚠ un QR n’existe QUE si son adresse est affichée', async () => {
     render(<BlocPartage recordId={ID} publicUrl={null} />);
     await waitFor(() => expect(svgDuQr()).toBeTruthy());
-    expect(screen.getByText(ATTENDUE)).toBeTruthy();
+    expect(adresseDuQr()).toContain(ATTENDUE);
     // Et l'adresse n'est pas vide : un QR d'une chaîne vide est un faux qui se
     // scanne.
     expect(ATTENDUE).not.toMatch(/\/opac\/$/);
@@ -133,21 +151,30 @@ describe('⭐ l’adresse du QR : `publicUrl` d’ABORD, l’origine ENSUITE', (
    */
   it('quand l’API la sert, c’est ELLE que le QR encode — pas l’origine', async () => {
     render(<BlocPartage recordId={ID} publicUrl={CANONIQUE} />);
-    await waitFor(() => expect(screen.getByText(CANONIQUE)).toBeTruthy());
-    // Témoin d'ABSENCE : l'origine du navigateur n'apparaît PAS.
+    await waitFor(() => expect(svgDuQr()).toBeTruthy());
+    expect(adresseDuQr()).toContain(CANONIQUE);
+    /*
+     * ⚠ Témoin d'ABSENCE : l'origine du navigateur n'est encodée NULLE PART —
+     * ni dans le nom accessible, ni dans le texte. Sans lui, une adresse
+     * canonique qui PERDRAIT contre le repli passerait, et le QR imprimé
+     * porterait l'hôte depuis lequel on a imprimé.
+     */
+    expect(adresseDuQr()).not.toContain(ATTENDUE);
     expect(screen.queryByText(ATTENDUE)).toBeNull();
   });
 
   it('⚠ `null` retombe sur l’origine — seule adresse connue alors', async () => {
     render(<BlocPartage recordId={ID} publicUrl={null} />);
-    await waitFor(() => expect(screen.getByText(ATTENDUE)).toBeTruthy());
+    await waitFor(() => expect(svgDuQr()).toBeTruthy());
+    expect(adresseDuQr()).toContain(ATTENDUE);
   });
 
   it('⚠ une chaîne VIDE n’est pas une adresse — elle ne gagne pas contre le repli', async () => {
     // Un `publicUrl` vide est « défini » : sans le `trim()`, il passerait, et le
     // QR encoderait « /opac/<id> » sans hôte — un code valide menant nulle part.
     render(<BlocPartage recordId={ID} publicUrl="   " />);
-    await waitFor(() => expect(screen.getByText(ATTENDUE)).toBeTruthy());
+    await waitFor(() => expect(svgDuQr()).toBeTruthy());
+    expect(adresseDuQr()).toContain(ATTENDUE);
   });
 
   it('⚠ et le lien d’application transporte l’adresse CANONIQUE', async () => {
@@ -205,7 +232,7 @@ describe('le bouton « Ouvrir dans l’app » — Android SEULEMENT', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: T.ouvrirDansApp })).toBeTruthy());
     // Le QR, l'adresse et l'affiche : rien n'a été remplacé par le lien d'app.
     expect(svgDuQr()).toBeTruthy();
-    expect(screen.getByText(ATTENDUE)).toBeTruthy();
+    expect(adresseDuQr()).toContain(ATTENDUE);
     expect(screen.getByRole('link', { name: T.imprimer })).toBeTruthy();
     // Témoin de COMPTE : exactement DEUX liens, et le lien d'app n'en remplace
     // aucun — il s'ajoute.

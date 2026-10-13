@@ -492,6 +492,36 @@ export const LIBELLES = {
    * CLAUDE.md — une non-réponse écrite comme un fait — et elle ne dure 250 ms
    * qu'en local : sur le réseau d'un campus, elle se lit.
    */
+  /**
+   * ⭐⭐ LES ÉTATS VIDES — une phrase qui DIT, puis une SORTIE.
+   *
+   * ⚠ Aucun de ces textes ne nomme une erreur, et c'est la règle : un lecteur
+   * sans historique n'a rien fait de mal. Le rouge reste aux fautes.
+   */
+  mesPrets: {
+    /**
+     * ⚠ SORTI DU CODE le 12 octobre 2026, en rendant cet état vide neutre. Il
+     * était écrit dans l'écran — « s'applique au NEUF seulement », et un lot
+     * qui TOUCHE la ligne la sort.
+     */
+    sansCarte:
+      'Aucune carte de bibliothèque n’est associée à votre compte. Adressez-vous ' +
+      'à un bibliothécaire pour emprunter des documents.',
+  },
+
+  etatsVides: {
+    parcourirCatalogue: 'Parcourir le catalogue',
+    /**
+     * ⚠ L'ACTION DE L'ÉTAGÈRE HORS LIGNE, et elle ne mène pas à une page de
+     * téléchargement : elle mène à la page d'atterrissage de l'établissement,
+     * `/e/<slug>`, qui dit quoi installer. C'est la SEULE adresse du produit
+     * faite pour quelqu'un qui n'a pas encore l'application.
+     */
+    telechargerDepuisApp: 'Télécharger depuis l’app',
+    /** ⚠ La phrase qui explique le geste, demandée avec le QR. */
+    emporterAvecApp:
+      'Pour emporter un document et le lire sans réseau, utilisez l’application Gafeso.',
+  },
   commun: {
     /**
      * ⚠ CE QU'ON AFFICHE À LA PLACE DE « Chargement… » QUAND ÇA A ÉCHOUÉ.
@@ -817,6 +847,35 @@ export const LIBELLES = {
       'catalogue, lui, ne porte pas de QR code — les deux sorties ne sont pas ' +
       'interchangeables.',
     imprimer: 'Imprimer la planche',
+    /** ⚠ Un état vide donne une SORTIE — ici, aller chercher des notices. */
+    aucuneSelectionAction: 'Aller au catalogue',
+    /**
+     * ⭐⭐ L'ADRESSE DU QR, DITE EN CLAIR, et l'avertissement quand elle n'est
+     * pas celle de l'établissement.
+     *
+     * ⚠ Mesuré le 11 octobre 2026, par le chemin normal :
+     * `GET /cataloging/records/:id` ne sert ni `shortUrl` ni `publicUrl`. Le QR
+     * encode donc l'origine du NAVIGATEUR — `http://localhost:3000/...` si l'on
+     * imprime depuis un poste de développement. **Une étiquette se colle dans
+     * un livre : elle ne se reprend pas.**
+     *
+     * ⚠ Cet avertissement ne s'affiche QUE dans ce cas — « un avertissement ne
+     * se place que là où il détrompe ». Le jour où la route sert `shortUrl`, il
+     * disparaît de lui-même, et son test le vérifie dans les DEUX sens.
+     */
+    adresseDuQr: 'Adresse encodée dans les QR :',
+    /**
+     * ⚠ L'ÉTIQUETTE ACCESSIBLE DU QR, et elle n'est PAS un doublon : depuis le
+     * 12 octobre 2026 l'adresse n'est plus affichée sous le QR de l'affiche ni
+     * du bloc « Partager ». Sans elle, un lecteur d'écran annoncerait « image »
+     * et l'adresse serait inatteignable.
+     */
+    qrEtiquette: (adresse: string) => `Code QR vers ${adresse}`,
+    adresseNonCanonique:
+      'Cette adresse vient de CE navigateur, pas de votre établissement : le ' +
+      'catalogue ne la fournit pas encore pour les étiquettes. Une étiquette se ' +
+      'colle dans un livre et ne se reprend pas — vérifiez-la avant d’imprimer ' +
+      'une planche entière.',
     /**
      * ⚠ LES DEUX AUTRES PORTÉES NE SONT CONNUES QUE DU SERVEUR. « Par
      * localisation » et « nouveautés » désignent un ensemble que le front ne

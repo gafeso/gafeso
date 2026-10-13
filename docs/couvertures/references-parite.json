@@ -1,0 +1,203 @@
+{
+  "graine": "FNV-1a 32 bits du titre normalisé (trim, minuscules, espaces multiples réduits à un seul)",
+  "_avertissement": "gafeso-cover-spec-final.json écrit « SHA-256 » : c’est une erreur, tranchée le 12/10/2026. FNV-1a fait foi.",
+  "_derivation": {
+    "graine": "FNV-1a 32 bits, non signée, du titre normalisé",
+    "formules": {
+      "dx": "(g >>> 0) % 21 - 10",
+      "dy": "(g >>> 5) % 21 - 10",
+      "echelle": "0.92 + ((g >>> 10) % 17) / 100",
+      "rotation": "(g >>> 15) % 9 - 4",
+      "elements": "((g >>> 20) % 4) + 5",
+      "opacite": "(10 + (g >>> 24) % 10) / 100"
+    },
+    "_tranches": "Chaque paramètre tire ses PROPRES bits. Six modulos sur la même graine corréleraient les tirages : tous les titres de graine paire auraient la même rotation ET le même décalage, et les couvertures se ressembleraient par paquets.",
+    "_pasDeXorshift": "Aucun xorshift n’intervient : seulement des décalages de la graine FNV-1a.",
+    "_nonSignee": "La graine est traitée comme un entier 32 bits NON SIGNÉ. En Dart elle est masquée par & 0xFFFFFFFF, donc « >> » équivaut à « >>> ». En JavaScript, utiliser « >>> » : « >> » propagerait le bit de signe pour toute graine ≥ 2^31 et donnerait d’autres couvertures sur la moitié des titres."
+  },
+  "_comparaison": "Comparer les nombres NUMÉRIQUEMENT. JSON sérialise 0.10 en 0.1 : une égalité de chaînes échouerait là où les valeurs sont identiques.",
+  "_elements": "Le champ motif.elements est CALCULÉ mais NON APPLIQUÉ : les motifs livrés portent de 3 (manuel) à 54 (actes) éléments. « 5–8 » décrit comment les gabarits ont été dessinés, pas un réglage par titre. Le web doit faire pareil.",
+  "_cles": "Le champ « domaine » est une CLÉ du vocabulaire fermé du backend (COVER_DOMAINS), pas un libellé. Voir references-domaines.json.",
+  "titres": [
+    {
+      "titre": "Droit foncier rural et développement local",
+      "titreNormalise": "droit foncier rural et développement local",
+      "graine": 2393162507,
+      "graineHex": "0x8ea4c30b",
+      "type": "these",
+      "gabarit": "these",
+      "domaine": "droit",
+      "teinte": "#8A4A00",
+      "motif": {
+        "dx": -2,
+        "dy": 5,
+        "echelle": 1.06,
+        "rotation": 3,
+        "elements": 7,
+        "opacite": 0.12
+      }
+    },
+    {
+      "titre": "Épidémiologie de terrain au Burkina Faso",
+      "titreNormalise": "épidémiologie de terrain au burkina faso",
+      "graine": 4088667600,
+      "graineHex": "0xf3b41dd0",
+      "type": "memoire",
+      "gabarit": "memoire",
+      "domaine": "medecine",
+      "teinte": "#A3202E",
+      "motif": {
+        "dx": -7,
+        "dy": 6,
+        "echelle": 1.07,
+        "rotation": -4,
+        "elements": 8,
+        "opacite": 0.13
+      }
+    },
+    {
+      "titre": "Grammaire mooré-français",
+      "titreNormalise": "grammaire mooré-français",
+      "graine": 794287270,
+      "graineHex": "0x2f57dca6",
+      "type": "ouvrage",
+      "gabarit": "manuel",
+      "domaine": "langues",
+      "teinte": "#6A3D86",
+      "motif": {
+        "dx": -3,
+        "dy": -8,
+        "echelle": 1.04,
+        "rotation": -2,
+        "elements": 6,
+        "opacite": 0.17
+      }
+    },
+    {
+      "titre": "Gafeso — Guide d’utilisation",
+      "titreNormalise": "gafeso — guide d’utilisation",
+      "graine": 1212513670,
+      "graineHex": "0x48457d86",
+      "type": "guide",
+      "gabarit": "guide",
+      "domaine": "informatique",
+      "teinte": "#00616B",
+      "motif": {
+        "dx": -6,
+        "dy": 7,
+        "echelle": 1.03,
+        "rotation": -1,
+        "elements": 5,
+        "opacite": 0.12
+      }
+    },
+    {
+      "titre": "Textiles et motifs en Afrique de l’Ouest",
+      "titreNormalise": "textiles et motifs en afrique de l’ouest",
+      "graine": 3740610818,
+      "graineHex": "0xdef53102",
+      "type": "actes",
+      "gabarit": "actes",
+      "domaine": "arts",
+      "teinte": "#2E3A8C",
+      "motif": {
+        "dx": 4,
+        "dy": -7,
+        "echelle": 1.06,
+        "rotation": 3,
+        "elements": 8,
+        "opacite": 0.12
+      }
+    },
+    {
+      "titre": "HISTOIRE   DU   SAHEL",
+      "titreNormalise": "histoire du sahel",
+      "graine": 63497302,
+      "graineHex": "0x03c8e456",
+      "type": "publication",
+      "gabarit": "article",
+      "domaine": "histoire",
+      "teinte": "#3A6B16",
+      "motif": {
+        "dx": -9,
+        "dy": -10,
+        "echelle": 1.02,
+        "rotation": -2,
+        "elements": 5,
+        "opacite": 0.13
+      }
+    },
+    {
+      "titre": "  L’économie informelle d’Ouagadougou  ",
+      "titreNormalise": "l’économie informelle d’ouagadougou",
+      "graine": 346513967,
+      "graineHex": "0x14a7622f",
+      "type": "ouvrage",
+      "gabarit": "manuel",
+      "domaine": "economie",
+      "teinte": "#3D4A54",
+      "motif": {
+        "dx": -8,
+        "dy": 6,
+        "echelle": 0.99,
+        "rotation": 4,
+        "elements": 7,
+        "opacite": 0.1
+      }
+    },
+    {
+      "titre": "Phénoménologie, Éthique et Liberté : Noël Çaglar",
+      "titreNormalise": "phénoménologie, éthique et liberté : noël çaglar",
+      "graine": 105314555,
+      "graineHex": "0x0646f8fb",
+      "type": "these",
+      "gabarit": "these",
+      "domaine": "philosophie",
+      "teinte": "#154D87",
+      "motif": {
+        "dx": 7,
+        "dy": -9,
+        "echelle": 1.05,
+        "rotation": -4,
+        "elements": 5,
+        "opacite": 0.16
+      }
+    },
+    {
+      "titre": "Algorithmique 2 — structures de données (2e édition)",
+      "titreNormalise": "algorithmique 2 — structures de données (2e édition)",
+      "graine": 3180706585,
+      "graineHex": "0xbd95bb19",
+      "type": "ouvrage",
+      "gabarit": "manuel",
+      "domaine": "informatique",
+      "teinte": "#00616B",
+      "motif": {
+        "dx": -3,
+        "dy": -4,
+        "echelle": 0.95,
+        "rotation": -2,
+        "elements": 6,
+        "opacite": 0.19
+      }
+    },
+    {
+      "titre": "Contribution à l’étude des sols ferrugineux tropicaux lessivés du plateau central burkinabè et de leurs aptitudes culturales sous pluviométrie déficitaire",
+      "titreNormalise": "contribution à l’étude des sols ferrugineux tropicaux lessivés du plateau central burkinabè et de leurs aptitudes culturales sous pluviométrie déficitaire",
+      "graine": 1473797009,
+      "graineHex": "0x57d85b91",
+      "type": "these",
+      "gabarit": "these",
+      "domaine": "sciences",
+      "teinte": "#1E5A3C",
+      "motif": {
+        "dx": 10,
+        "dy": -4,
+        "echelle": 0.92,
+        "rotation": -1,
+        "elements": 6,
+        "opacite": 0.17
+      }
+    }
+  ]
+}

@@ -13,7 +13,9 @@ import { PDFDocument } from 'pdf-lib';
 import * as QRCode from 'qrcode';
 import { describe, expect, it } from 'vitest';
 
-const CORPUS = join(__dirname, 'corpus-demonstration');
+// ⚠ Déplacé le 12/10/2026 sous `scripts/dev/` : l'image de production ne copie
+// pas `src/`, et le script d'exploitation plantait en ENOENT dans le conteneur.
+const CORPUS = join(__dirname, '..', '..', '..', '..', 'scripts', 'dev', 'corpus-demonstration');
 const RACINE = join(__dirname, '../../../..');
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

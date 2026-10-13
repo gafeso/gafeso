@@ -1,0 +1,25 @@
+{
+  "_origine": "Les fichiers SOURCES sont ceux de gafeso-mobile/assets/fonts/, pris le 12 octobre 2026. Les .woff2 de ce dossier en sont DÉRIVÉS (wawoff2, compression sans perte de glyphes ; les octets du fichier diffèrent, woff2 réempaquetant les tables).",
+  "_pourquoi_les_sha256": "Une fixture porte sa PROVENANCE. Le sha256 de la source est la seule chose qui permette de vérifier, plus tard, que le woff2 servi vient bien de la fonte du mobile — et pas d’un téléchargement approchant.",
+  "_parite": "Ce sont EXACTEMENT les fichiers du mobile : c’est la condition de la parité de rendu.",
+  "polices": {
+    "Poppins-Bold": {
+      "sourceTtf": "Poppins-Bold.ttf",
+      "sha256Source": "983676516167748b74de6f4771fb384c664fd913acb8b471122ecacf5da5ea6c",
+      "octetsSource": 155996,
+      "woff2": "Poppins-Bold.woff2",
+      "sha256Woff2": "eea0ca7c05cc5e893e9dbd497384ba4d7131e301195ebaeb716a62dd2bd18bc2",
+      "octetsWoff2": 51012,
+      "axes": "AUCUN — fonte STATIQUE, déjà en graisse 700. Mesuré : table fvar absente."
+    },
+    "SourceSans3-Variable": {
+      "sourceTtf": "SourceSans3-Variable.ttf",
+      "sha256Source": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9",
+      "octetsSource": 646340,
+      "woff2": "SourceSans3-Variable.woff2",
+      "sha256Woff2": "125c226ee175acc3b148470f0aef7f865e23bf02b2ef307061b7b10553654165",
+      "octetsWoff2": 170296,
+      "axes": "wght 200–900, défaut 200. Mesuré dans la table fvar."
+    }
+  }
+}

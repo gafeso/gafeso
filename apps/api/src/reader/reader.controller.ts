@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { champsDeCouverture } from '../opac/couverture';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
@@ -238,18 +239,29 @@ export class ReaderController {
     const db = this.db(tenant);
     const lignes = await this.usage.miennes(db, user.sub);
     // Le TITRE vient du catalogue : une liste d'identifiants n'est pas une liste.
+    // ⚠ `recordType` et `category` EN PLUS DU TITRE : ils ne s'affichent pas,
+    // ils composent la COUVERTURE (voir `champsDeCouverture`). Un historique
+    // sans couverture est une liste de titres nus, sur l'écran même où le
+    // lecteur cherche un document qu'il a DÉJÀ ouvert.
     const titres = await db.biblioRecord.findMany({
       where: { id: { in: [...new Set(lignes.map((l) => l.recordId))] } },
-      select: { id: true, title: true },
+      select: { id: true, title: true, recordType: true, category: true },
     });
-    const parId = new Map(titres.map((t) => [t.id, t.title]));
+    const parId = new Map(titres.map((t) => [t.id, t]));
     return {
-      consultations: lignes.map((l) => ({
-        recordId: l.recordId,
-        titre: parId.get(l.recordId) ?? null,
-        nature: l.kind,
-        quand: l.occurredAt,
-      })),
+      consultations: lignes.map((l) => {
+        const notice = parId.get(l.recordId);
+        return {
+          recordId: l.recordId,
+          titre: notice?.title ?? null,
+          nature: l.kind,
+          quand: l.occurredAt,
+          // ⭐ LA MÊME FONCTION que la fiche et la recherche. Une notice purgée
+          // rend les replis (`manuel` / `autre`), jamais `null` : un client qui
+          // compose une couverture n'a aucune branche à écrire.
+          ...champsDeCouverture(notice ?? {}),
+        };
+      }),
       // ⚠ DIT PLUTÔT QUE DEVINÉ : sans cette ligne, un étudiant dont l'historique
       // s'arrête à 12 mois croirait que le produit a perdu ses données.
       retentionMois: RETENTION_NOMINATIVE_MOIS,
@@ -291,6 +303,10 @@ export class ReaderController {
         id: true,
         title: true,
         category: true,
+        // ⚠ `recordType` ne s'affiche pas : il choisit le GABARIT de la
+        // couverture. Sans lui, toute l'étagère hors-ligne porterait le repli
+        // `manuel` — y compris les thèses.
+        recordType: true,
         publishYear: true,
         // ⚠ L'auteur vient du CONTRIBUTEUR principal, `author` n'étant qu'un
         // repli — c'est la même règle que `/offline/my-documents`, et deux
@@ -318,6 +334,11 @@ export class ReaderController {
           annee: n?.publishYear ?? null,
           appareilId: b.deviceId,
           expireLe: b.expiresAt,
+          // ⭐ LA MÊME FONCTION que la fiche, la recherche et les
+          // consultations. `domaine` ci-dessus est la catégorie BRUTE, à
+          // afficher ; `coverDomain` est la clé RÉSOLUE, qui choisit la teinte.
+          // Les confondre donnerait deux couleurs au même domaine.
+          ...champsDeCouverture(n ?? {}),
         };
       }),
     };

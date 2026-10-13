@@ -31,10 +31,134 @@ jobs:
           # ne nomme jamais la cause.
           #
           # ⚠ Mesuré le 22/09/2026 : la suite web passe sur un clone COMPLET du
-          # dépôt public (101 fichiers, 1 022 cas) et échoue sur un `--depth 1`.
-          # La CI ne lance aujourd'hui que les tests API, donc elle est verte —
-          # mais y ajouter les tests web est un geste évident, et il tomberait
-          # sur un piège qui n'a rien à voir avec ce qu'on aurait changé.
+          # dépôt public et échoue sur un `--depth 1`.
+          #
+          # ⭐ 12/10/2026 — CE COMMENTAIRE DISAIT « la CI ne lance aujourd'hui que
+          # les tests API, donc elle est verte ; y ajouter les tests web est un
+          # geste évident, et il tomberait sur ce piège ». Le geste est fait : la
+          # suite web tourne ci-dessous. Cette ligne n'est donc plus une
+          # précaution contre un piège hypothétique — **elle est la condition
+          # pour que l'étape « Tests web » passe**. La retirer fait tomber des
+          # tests d'écran, avec un message qui ne nomme jamais la cause.
+          fetch-depth: 0
+
+      - name: Installer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # ⚠ REDONDANTE DEPUIS LE 12/10/2026, et conservée exprès. Le `postinstall`
+      # de la racine assure déjà le client au `npm ci` ci-dessus. Cette étape
+      # reste pour deux raisons : elle DIT la dépendance à qui lit le fichier, et
+      # elle tient si le `postinstall` disparaît un jour. Elle coûte 1,4 s.
+      - name: Générer le client Prisma
+        run: npm run db:generate
+
+      - name: Build (API + web)
+        run: npm run build
+
+      # Suite de tests de l'API : volontairement isolée — Prisma est mocké et AUCUNE base,
+      # AUCUN service externe ni fichier .env n'est requis. Les suites qui exigent l'infra
+      # (e2e offline-licensing, vecteur croisé, parité moteurs de recherche) sont gardées
+      # derrière des variables d'environnement (OFFLINE_E2E, SEARCH_PARITY) et donc ignorées ici.
+      - name: Tests API
+        run: npm run test -w @gafeso/api
+
+      # ⭐ SUITE DU FRONT — ajoutée le 12/10/2026 pour qu'un test web cassé dans
+      # le PUBLIC se voie. Jusque-là, la CI ne jugeait que l'API : un auto-
+      # hébergeur qui lançait `npm test` pouvait tomber sur un rouge que personne
+      # chez nous n'avait vu.
+      #
+      # ⚠ APRÈS `db:generate`, et ce n'est pas un ordre arbitraire : des tests du
+      # front lisent le catalogue de fonctions d'`apps/api` en traversant la
+      # frontière des espaces de travail, et `tsc --noEmit` — câblé dans le
+      # script `test` du web — a besoin des types Prisma pour compiler ce qu'il
+      # touche. Mesuré sur un clone frais : sans la génération, la suite sort en 2
+      # sur des erreurs qui n'ont rien à voir avec le front.
+      #
+      # ⚠ ET ELLE DÉPEND DE `fetch-depth: 0` ci-dessus. Voir son commentaire : des
+      # tests datent les écrans par `git log --diff-filter=A`.
+      - name: Tests web
+        run: npm run test -w @gafeso/web
+
+      # ⭐⭐ LES CONTRÔLES DU CROCHET, REJOUÉS ICI — LE MÊME SCRIPT.
+      #
+      # 🔴 POURQUOI CE JOB EXISTE, et c'est une correction structurelle demandée
+      # le 12 octobre 2026 après que j'ai utilisé `git commit --no-verify` sur
+      # onze commits de la même journée.
+      #
+      # Avant : les contrôles de contenu (secrets, .env, clés, marqueurs de
+      # conflit) ne vivaient QUE dans le corps du crochet `pre-commit`, posé par
+      # `installer-crochets.sh` dans `.git/hooks/`, qui n'est pas versionné.
+      # Deux conséquences :
+      #
+      #   · `--no-verify` les sautait et RIEN en aval ne les rejouait ;
+      #   · un crochet NON INSTALLÉ était indiscernable d'un crochet contourné —
+      #     et aucune autre session, aucun clone frais, aucune CI ne les lançait.
+      #
+      # > ⭐ Un garde qui ne vit que dans `.git/hooks/` protège UN clone. Son
+      # > vert n'est pas une mesure : c'est l'absence de mesure.
+      #
+      # ⚠ `--tout` et non `--plage` : ce job existe pour rattraper ce qu'un
+      # contournement a laissé passer, y compris il y a trois commits. Une plage
+      # ne verrait que le dernier push — c'est-à-dire exactement ce que le
+      # contournement a déjà franchi. Coût mesuré : 1 049 fichiers, moins de
+      # deux secondes.
+      - name: Contrôles de contenu (le même script que le crochet pre-commit)
+        run: ./scripts/controles-de-contenu.sh --tout
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # ⭐⭐ LES GARDES VIVANTS — `test:base`, contre une PILE RÉELLE
+  #
+  # 🔴 POURQUOI UN JOB À PART, ET POURQUOI IL EXISTE
+  #
+  # `npm test` ne lance PAS les gardes vivants : trois d'entre eux interrogent le
+  # SERVEUR PostgreSQL plutôt que le code, et ils sont gatés `PG_LIVE=1`. Jusqu'au
+  # 13 octobre 2026, leur SEUL point de passage était le crochet de pré-publication
+  # — c'est-à-dire la machine d'un développeur. Sous la règle « aucune étiquette sur
+  # un commit dont la CI n'est pas verte », il fallait qu'ils tournent ici.
+  #
+  # ⚠ CE QUE LA MESURE A MONTRÉ, et qui a décidé la forme :
+  #
+  #   · sur une base VIDE : 3 gardes sur 13 passent, 10 échouent — ils exigent une
+  #     ÉCOLE provisionnée, et le tamis le DIT (« sinon il ne mesure rien ») ;
+  #   · l'API ne démarre PAS avec Postgres seul : elle connecte MinIO au démarrage ;
+  #   · lancés en PARALLÈLE contre une pile minimale, ils interfèrent — chacun sème
+  #     et nettoie dans la même base. D'où `--no-file-parallelism` ;
+  #   · un garde exige DEUX écoles (« une violation semée sur une seule ne doit pas
+  #     pouvoir passer ») ;
+  #   · un autre compare le compte du MOTEUR à celui de la base — il faut donc
+  #     Meilisearch joignable depuis le lanceur, pas seulement depuis l'API.
+  #
+  # ⭐ ET LA LOGIQUE VIT DANS UN SCRIPT VERSIONNÉ, pas ici. Même raison que les
+  # contrôles de contenu : ce que la CI lance, je dois pouvoir le lancer sur ma
+  # machine. Des étapes écrites dans un `ci.yml` n'ont pour vérification que leur
+  # première exécution — et sous la nouvelle règle, un job invérifiable bloquerait
+  # l'étiquetage. Le script a été mesuré VERT localement avant d'être câblé ici :
+  # 193 fichiers, 1 881 cas, code 0.
+  #
+  # ⚠ CE QUE CE JOB NE COUVRE PAS, et il le DIT en sortie : le TAMIS
+  # (`fonds-conforme-en-base`). Il relit un FONDS à travers les règles du produit,
+  # et ses dettes sont NOMINATIVES — `{ horizon: 6040, zinda: 369 }` nomme les
+  # écoles de la base de développement et leurs comptes exacts. Une CI a un autre
+  # fonds : le tamis y mesurerait autre chose. Son point de passage reste le
+  # crochet de pré-publication.
+  # ══════════════════════════════════════════════════════════════════════════
+  gardes-vivants:
+    name: Gardes vivants (test:base sur une pile réelle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+        with:
+          # ⚠ HISTORIQUE COMPLET : `version-du-depot.sh` lit les étiquettes, et le
+          # Dockerfile REFUSE de construire sans version. Un `--depth 1` le ferait
+          # échouer sur un message qui n'accuse pas le clone.
           fetch-depth: 0
 
       - name: Installer Node.js 20
@@ -49,12 +173,8 @@ jobs:
       - name: Générer le client Prisma
         run: npm run db:generate
 
-      - name: Build (API + web)
-        run: npm run build
-
-      # Suite de tests de l'API : volontairement isolée — Prisma est mocké et AUCUNE base,
-      # AUCUN service externe ni fichier .env n'est requis. Les suites qui exigent l'infra
-      # (e2e offline-licensing, vecteur croisé, parité moteurs de recherche) sont gardées
-      # derrière des variables d'environnement (OFFLINE_E2E, SEARCH_PARITY) et donc ignorées ici.
-      - name: Tests API
-        run: npm run test -w @gafeso/api
+      # ⚠ `--build` n'est passé QUE par la CI. Sur la machine de développement,
+      # deux sessions partagent `dist/`, et construire ferait tomber le serveur de
+      # l'autre — « ne pas écrire dans un état qu'un autre processus possède ».
+      - name: Gardes vivants contre une pile montée par le compose de production
+        run: ./scripts/gardes-vivants-en-ci.sh --build
