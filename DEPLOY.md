@@ -321,6 +321,82 @@ Ce qui ne change **jamais**, quel que soit le cas :
 > document) n'est PAS un identifiant produit : c'est le domaine de
 > l'**établissement**. Il ne change pas non plus.
 
+## 🔴 STOCKAGE — l'image officielle de MinIO n'est plus téléchargeable
+
+**L'image `minio/minio` n'est plus téléchargeable anonymement depuis Docker
+Hub. Une installation NEUVE doit attendre la version qui passe à Garage, ou
+utiliser `bitnamilegacy/minio` épinglé par digest — image d'ARCHIVE, sans
+correctifs de sécurité.**
+
+⚠ Les instances DÉJÀ déployées continuent de fonctionner : elles tournent sur
+l'image présente localement. Rien ne presse pour elles, et rien ne doit être
+redémarré dans l'urgence.
+
+Mesuré le 13 octobre 2026, avec ses deux témoins — une image publique
+quelconque se télécharge, et un dépôt INVENTÉ rend exactement le même refus :
+
+```
+docker pull minio/minio:RELEASE.2024-10-13T13-34-11Z
+→ pull access denied for minio/minio, repository does not exist
+```
+
+⚠ **Épingler l'empreinte ne sauve rien, et c'est le point à retenir.** Le refus
+porte sur le DÉPÔT, pas sur l'étiquette : la même commande par digest
+(`minio/minio@sha256:…`) rend le même refus. Un digest ne vaut que si le dépôt
+sert encore quelque chose. Aucun miroir public interrogé ne le sert
+(`mirror.gcr.io` répond 404, `quay.io` et `ghcr.io` refusent l'accès anonyme).
+
+⚠ Et le refus ne dit PAS pourquoi : sur Docker Hub, un dépôt retiré, un dépôt
+rendu privé et un dépôt qui n'a jamais existé rendent le même message. Nous
+savons seulement qu'il n'est plus téléchargeable anonymement.
+
+### Le dépannage, si vous devez installer MAINTENANT
+
+`bitnamilegacy/minio:2024.10.13` sert les mêmes octets de MinIO — vérifié dans
+les deux images, pas déduit du nom : même
+`commit-id=d10bb7e1b667c2df72c394ef1fa52ab4a6802d0f` que l'image officielle de
+la même date. Nos onze appels S3 réels y passent tous.
+
+Trois retouches sont nécessaires, et elles sont mesurées :
+
+| Dans le service `minio` | Pourquoi |
+|---|---|
+| `image: bitnamilegacy/minio@sha256:…` | épinglez par DIGEST, relevé au moment de l'épingler — un tag mobile ne suffit plus |
+| `command: []` | l'entrypoint de cette image lance le serveur LUI-MÊME ; la commande `server /data` écrirait dans un chemin que l'utilisateur ne possède pas |
+| `user: "1001"` et volume sur `/bitnami/minio/data` | cette image tourne sans privilèges, et son répertoire de données n'est pas `/data` |
+
+Le `healthcheck` reste inchangé : cette image porte `mc`, et `mc ready local`
+y répond.
+
+⚠ **Ce n'est pas une solution durable.** `bitnamilegacy` est le dépôt
+d'ARCHIVE de son éditeur : aucune mise à jour, aucun correctif de sécurité, et
+il peut fermer comme l'autre a fermé. La pile de CI de ce dépôt l'utilise déjà
+(voir `scripts/gardes-vivants-en-ci.sh`) ; le compose de PRODUCTION, lui, est
+resté inchangé exprès.
+
+### La cible
+
+**Garage** (AGPL-3.0, comme Gafeso). Mesuré sur nos appels réels : 32 Mo
+d'image, 21 Mo de mémoire au repos, et nos URL signées fonctionnent. Deux
+différences d'architecture à connaître :
+
+- il n'implémente pas `PutBucketPolicy` : la lecture publique des couvertures
+  passe par son point d'entrée *web*, où le bucket est choisi par le NOM
+  D'HÔTE. Le troisième domaine que cette page exige déjà pour les couvertures
+  s'y prête directement ;
+- un bucket créé par l'API S3 n'a qu'un alias local à la clé : l'administration
+  hors API demande un alias global.
+
+La bascule n'aura lieu qu'après une répétition complète sur pile jetable
+(initialisation scriptée, migration des objets vérifiée un par un, charge
+réaliste, sauvegarde et restauration prouvées).
+
+⚠ **SeaweedFS a été mesuré et écarté** : ses URL signées sont refusées — avec
+ou sans remplacement d'en-tête, trois formes essayées, trois fois HTTP 403. Or
+l'URL signée est tout notre chemin de lecture en ligne et de téléchargement
+mobile.
+
+
 ## Application mobile — le domaine de stockage doit être public
 
 L'application Android télécharge les documents hors-ligne par une **URL signée

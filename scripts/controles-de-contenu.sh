@@ -23,9 +23,31 @@
 #   controles-de-contenu.sh --plage <base>       # ce qui a changé depuis <base> (CI de PR)
 #   controles-de-contenu.sh --tout               # TOUT l'arbre suivi (CI de main)
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
 
 ROUGE=$'\033[0;31m'; ORANGE=$'\033[0;33m'; GRIS=$'\033[0;90m'; VERT=$'\033[0;32m'; FIN=$'\033[0m'
+
+# ⚠ LA RACINE SE MESURE AVANT D'Y ALLER, et `cd ""` NE SUFFIT PAS À LE DIRE.
+#
+# Trouvé le 13 octobre 2026 en posant un témoin pour un avertissement SC2164.
+# ⚠ (Et la ligne précédente ne COMMENCE pas par le nom de l'outil : un
+# commentaire qui débute ainsi est une DIRECTIVE pour lui, et il a rendu deux
+# erreurs de syntaxe sur ma prose repliée. Un instrument qui lit les
+# commentaires comme du code, une fois de plus.)
+# Sa correction évidente — `cd "$(git rev-parse …)" || exit` — ne
+# protège de RIEN ici : hors d'un dépôt, `git rev-parse` échoue et rend une
+# chaîne VIDE, et `cd ""` RÉUSSIT en bash. La branche d'échec n'est jamais
+# prise.
+#
+# ⭐ Et le témoin a trouvé mieux que l'avertissement : lancé hors d'un dépôt, ce
+# contrôle sortait en 0 en disant « rien n'a été mesuré ». Il le DISAIT, et son
+# code de sortie disait le contraire — or c'est le code que le crochet et la CI
+# lisent. Un garde vert sur une population vide est exactement ce que ce dépôt
+# passe son temps à débusquer.
+RACINE=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -z "$RACINE" ] || ! cd "$RACINE"; then
+  printf '%s✗%s hors d\u2019un dépôt git : ce contrôle n\u2019a RIEN mesuré.\n' "$ROUGE" "$FIN"
+  exit 1
+fi
 REFUS=0
 refuse() { printf '%s✗%s %s\n' "$ROUGE" "$FIN" "$1"; REFUS=1; }
 detail() { printf '   %s%s%s\n' "$GRIS" "$1" "$FIN"; }
@@ -46,8 +68,23 @@ esac
 # est ce que ce dépôt passe son temps à débusquer.
 NB=$(printf '%s' "$FICHIERS" | grep -c . || true)
 if [ "$NB" = 0 ]; then
-  printf '%s⚠%s aucun fichier à examiner (mode %s) — rien n’a été mesuré.\n' "$ORANGE" "$FIN" "$MODE"
-  exit 0
+  # ⚠ ET LE VIDE N'A PAS LE MÊME SENS SELON LE MODE — c'est la distinction qui
+  # manquait, et elle décide du code de sortie :
+  #   --index : rien d'indexé est NORMAL (un commit de fusion, un amend vide).
+  #   --tout / --plage : la population ne PEUT pas être vide dans un vrai dépôt.
+  #     Un vide y signifie que l'instrument s'est trompé d'arbre ou de base —
+  #     donc un REFUS, jamais un avertissement qu'on lira peut-être.
+  case "$MODE" in
+    --index)
+      printf '%s⚠%s rien d\u2019indexé — ce contrôle n\u2019a rien mesuré (normal pour un commit vide).\n' \
+        "$ORANGE" "$FIN"
+      exit 0 ;;
+    *)
+      printf '%s✗%s population VIDE en mode %s : impossible dans un vrai dépôt.\n' "$ROUGE" "$FIN" "$MODE"
+      printf '   %sce contrôle n\u2019a RIEN mesuré — vérifiez l\u2019arbre et la base avant de croire un vert.%s\n' \
+        "$GRIS" "$FIN"
+      exit 1 ;;
+  esac
 fi
 printf '%s…%s %s fichier(s) examiné(s) — mode %s\n' "$GRIS" "$FIN" "$NB" "$MODE"
 
@@ -120,7 +157,58 @@ while IFS= read -r f; do
   fi
 done <<< "$FICHIERS"
 
-# ══ 6 · Compte de fichiers — ce qui a attrapé ce qu'aucun scanner ne voyait ═══
+# ══ 6 · Accents graves dans un heredoc NON QUOTÉ ═════════════════════════════
+#
+# 🔴 TROUVÉ PAR LA CI PUBLIQUE, le 13 octobre 2026, dans
+# `gardes-vivants-en-ci.sh` : son journal portait
+#     compte-filtre-exact-en-base.spec.ts: command not found
+# Un nom de fichier EXÉCUTÉ. La cause : un COMMENTAIRE écrit à la façon
+# Markdown, avec des accents graves autour du nom, à l'intérieur d'un
+# `cat > … <<YML` non quoté. Le heredoc doit rester non quoté — il expanse un
+# numéro de port — et le shell y évalue donc les accents graves, commentaire
+# compris.
+#
+# ⭐ CE QUI REND LE CAS DIGNE D'UN GARDE plutôt que d'une leçon : rien ne le
+# signale. `bash -n` passe, le script s'exécute, le YAML produit est correct, et
+# la substitution échoue sur stderr au milieu de cent lignes de compose. Il n'y
+# a ni diff, ni test rouge, ni avertissement — seulement une ligne perdue dans
+# un journal que personne ne lit tant que tout va bien.
+#
+# ⚠ Et la tolérance est NOMMÉE : ce fichier-ci et les fichiers de leçons CITENT
+# le motif pour l'expliquer. Un garde qui crie sur le texte qui le documente se
+# fait désactiver.
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.sh) ;;
+    *) continue ;;
+  esac
+  case "$f" in
+    scripts/controles-de-contenu.sh) continue ;;
+  esac
+  if [ "$MODE" = --index ]; then SRC=$(git show ":$f" 2>/dev/null || true)
+  else SRC=$(cat -- "$f" 2>/dev/null || true); fi
+  [ -z "$SRC" ] && continue
+  FAUTIFS=$(printf '%s\n' "$SRC" | awk '
+    # un heredoc NON quoté : << ou <<- suivi d un mot nu en fin de ligne
+    !dans && /<<-?[A-Za-z_][A-Za-z_0-9]*[[:space:]]*$/ && $0 !~ /<<-?['"'"'"]/ {
+      n = $0; sub(/.*<<-?/, "", n); gsub(/[[:space:]]/, "", n)
+      dans = 1; fin = n; next
+    }
+    dans {
+      ligne = $0; gsub(/[[:space:]]/, "", ligne)
+      if (ligne == fin) { dans = 0; next }
+      if (index($0, "`") > 0) printf "%d:%s\n", NR, substr($0, 1, 90)
+    }')
+  if [ -n "$FAUTIFS" ]; then
+    refuse "Accent grave dans un heredoc NON QUOTÉ : $f"
+    printf '%s\n' "$FAUTIFS" | while read -r l; do detail "$l"; done
+    detail "Le shell y évalue les accents graves, COMMENTAIRE COMPRIS."
+    detail "Deux issues : des chevrons « » dans le texte, ou un délimiteur quoté si rien n'a besoin d'être expansé."
+  fi
+done <<< "$FICHIERS"
+
+# ══ 7 · Compte de fichiers — ce qui a attrapé ce qu'aucun scanner ne voyait ═══
 if [ "$MODE" = --index ] && [ "$NB" -gt 30 ]; then
   printf '%s⚠%s %s fichiers dans ce commit — justifiez-les avant de valider.\n' "$ORANGE" "$FIN" "$NB"
 fi

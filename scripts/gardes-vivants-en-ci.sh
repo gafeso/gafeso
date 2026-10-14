@@ -37,7 +37,7 @@
 #   ./scripts/gardes-vivants-en-ci.sh            # réutilise l'image existante
 #   ./scripts/gardes-vivants-en-ci.sh --build    # la construit (la CI)
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)" || { echo "impossible d'atteindre la racine du dépôt"; exit 1; }
 
 PROJET=gafeso-ci-gardes-vivants
 COMPOSE=docker/docker-compose.prod.yml
@@ -115,13 +115,47 @@ services:
   db:
     ports:
       - "$PORT_DB:5432"
-  # ⚠ MEILISEARCH AUSSI : `compte-filtre-exact-en-base.spec.ts` compare le compte
+  # ⚠ MEILISEARCH AUSSI : « compte-filtre-exact-en-base.spec.ts » compare le compte
   # du MOTEUR à celui de la base, école par école. Sans accès au moteur il
   # refuse — « ce garde ne mesure RIEN » — et il a raison : c'est l'accord entre
   # les deux qu'il mesure, pas l'un des deux.
+  # ⚠⚠ ET LES GUILLEMETS SONT DES CHEVRONS, PAS DES ACCENTS GRAVES. Ce heredoc
+  # est NON QUOTÉ — il doit l'être, il expanse $PORT_DB — donc le shell y évalue
+  # les accents graves, COMMENTAIRE COMPRIS. La CI publique a rendu
+  # « compte-filtre-exact-en-base.spec.ts: command not found » : mon habitude
+  # d'écrire les noms de fichiers à la façon Markdown avait fabriqué une
+  # substitution de commande. Un commentaire n'est pas un commentaire pour le
+  # shell quand il est dans un heredoc.
   meilisearch:
     ports:
       - "$PORT_MEILI:7700"
+  # ⚠⚠ MINIO — L IMAGE OFFICIELLE N EST PLUS TÉLÉCHARGEABLE, ET C EST MESURÉ
+  #
+  # Le 13 octobre 2026, la CI publique a échoué sur :
+  #   pull access denied for minio/minio, repository does not exist
+  # Mesuré ensuite avec un témoin POSITIF (alpine se télécharge) et un témoin
+  # NÉGATIF (un dépôt inventé rend le MÊME 401) : ni le tag, ni le DIGEST, ni
+  # aucun miroir public ne la servent. Épingler l empreinte ne sauve donc rien
+  # — le refus porte sur le DÉPÔT, pas sur l étiquette.
+  #
+  # Ce qui sert encore les MÊMES OCTETS : le namespace d archive de Broadcom.
+  # Mesuré, pas supposé — cette image rend
+  # commit-id=d10bb7e1b667c2df72c394ef1fa52ab4a6802d0f, exactement celui de
+  # notre image de production, et nos 11 appels S3 réels y passent 11/11.
+  #
+  # ⚠ CECI NE VAUT QUE POUR LA PILE DE CI. Le compose de PRODUCTION reste
+  # INCHANGÉ : une image d archive ne reçoit aucun correctif de sécurité, et la
+  # cible de la V1 est Garage. Voir DEPLOY.md, section stockage.
+  minio:
+    image: bitnamilegacy/minio@sha256:faf554135d50ff8b382f79df7795e080726cb2d6f4ce7f056d733a6437546f6a
+    # ⚠ L entrypoint de cette image lance le serveur LUI-MÊME sur
+    # /bitnami/minio/data. La commande de production (server /data) doit donc
+    # être EFFACÉE, sinon elle écrirait dans un chemin que l utilisateur 1001
+    # ne possède pas.
+    command: []
+    user: "1001"
+    volumes:
+      - minio_data:/bitnami/minio/data
 YML
 
 # =========================================================================
@@ -199,12 +233,53 @@ else
   exit 1
 fi
 
+# =========================================================================
+# ⭐ LA CAUSE EN CLAIR — le compose n'accuse jamais le bon service
+#
+# 🔴 MESURÉ DEUX FOIS, et les deux fois le message ne nommait pas la cause :
+#   · « dependency failed to start: container … is unhealthy » quand
+#     MINIO_ROOT_USER faisait deux caractères (MinIO en exige trois, et il ne
+#     le dit que dans SON journal) ;
+#   · « Process completed with exit code 1 » dans la CI publique, quand
+#     l'image de MinIO a cessé d'être téléchargeable — le refus du registre
+#     était dans le journal du démarrage, pas dans le verdict.
+#
+# ⭐ Un compose qui échoue désigne le service qu'il ATTENDAIT, jamais celui qui
+# a refusé de démarrer. Ce qui nomme la cause est le JOURNAL du conteneur en
+# échec — et personne ne va le chercher dans une CI dont on ne peut pas lire
+# les journaux sans authentification.
+cause_en_clair() {
+  printf '\n  %s── CAUSE EN CLAIR : l état de chaque service, puis le journal des fautifs%s\n' "$GRIS" "$FIN"
+  # ⚠ On imprime l'état de TOUS les services, y compris les sains : un service
+  # ABSENT de la liste est une information que « unhealthy » ne donne pas.
+  dc ps -a --format '      {{.Service}}\t{{.State}}\t{{.Status}}' 2>/dev/null \
+    || dc ps -a 2>/dev/null | sed 's/^/      /'
+  local svc etat
+  for svc in $(dc config --services 2>/dev/null); do
+    etat=$(dc ps -a --status=running --services 2>/dev/null | grep -Fx "$svc" || true)
+    [ -n "$etat" ] && continue
+    printf '\n      %s▸ %s — journal (20 dernières lignes)%s\n' "$ORANGE" "$svc" "$FIN"
+    dc logs --no-color --tail=20 "$svc" 2>&1 | sed 's/^/        /' \
+      || printf '        (aucun journal : le conteneur n a jamais démarré)\n'
+  done
+  # ⚠ ET LE REFUS DU REGISTRE N'EST PAS DANS UN JOURNAL DE CONTENEUR : il est
+  # dans la sortie du `up`, parce qu'aucun conteneur n'a existé. C'est le cas
+  # qui nous a coûté une CI rouge illisible.
+  if grep -qiE 'pull access denied|not found: manifest|repository does not exist|authorization failed' \
+       "$BAC/up.log" 2>/dev/null; then
+    printf '\n      %s▸ UNE IMAGE N A PAS PU ÊTRE TÉLÉCHARGÉE — ce n est pas un défaut du produit%s\n' "$ROUGE" "$FIN"
+    grep -iE 'pull access denied|not found: manifest|repository does not exist|authorization failed' \
+      "$BAC/up.log" | head -4 | sed 's/^/        /'
+  fi
+}
+
 titre "② la pile monte par le compose de PRODUCTION"
 ARGS=(up -d api)
 [ "$CONSTRUIRE" = 1 ] && ARGS=(up -d --build api)
 if ! dc "${ARGS[@]}" >"$BAC/up.log" 2>&1; then
   rouge "le démarrage a échoué"
   tail -20 "$BAC/up.log" | sed 's/^/      /'
+  cause_en_clair
   exit 1
 fi
 etat=""
@@ -213,7 +288,7 @@ for _ in $(seq 1 90); do
   [ "$etat" = healthy ] && break
   sleep 2
 done
-[ "$etat" = healthy ] && vert "conteneur api SAIN" || { rouge "api jamais sain (« $etat »)"; dc logs --no-color api 2>/dev/null | tail -20 | sed 's/^/      /'; exit 1; }
+[ "$etat" = healthy ] && vert "conteneur api SAIN" || { rouge "api jamais sain (« $etat »)"; cause_en_clair; exit 1; }
 
 titre "③ une école, provisionnée PAR LES ROUTES DU PRODUIT"
 # ⚠ Jamais par du SQL à la main : sinon on éprouve son propre DDL, pas le produit.

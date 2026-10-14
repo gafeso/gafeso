@@ -509,6 +509,31 @@ export const LIBELLES = {
       'à un bibliothécaire pour emprunter des documents.',
   },
 
+  /**
+   * ⭐⭐ L'ÉCRAN D'ACCUEIL DE L'ADMINISTRATION — et ce texte répare un défaut
+   * qui pouvait EFFACER la page d'accueil d'une école.
+   *
+   * L'écran rendait son formulaire dès le premier rendu, alimenté par
+   * `EMPTY_CONTENT`. Un administrateur arrivé sur une connexion lente voyait
+   * donc des champs VIDES — « Nom complet » à `""`, aucune diapositive — et
+   * « Enregistrer » actif. Un clic trop tôt écrivait ces vides par-dessus sa
+   * configuration.
+   *
+   * ⚠ C'est « une non-réponse écrite comme un FAIT », dans sa forme la plus
+   * chère : le faux n'est pas affiché, il est ENREGISTRÉ.
+   */
+  accueilAdmin: {
+    chargement: 'Chargement de la configuration…',
+    /**
+     * ⚠ ELLE DIT POURQUOI LE FORMULAIRE N'EST PAS LÀ. Sans elle, un écran qui
+     * n'affiche qu'un titre se lit comme une page cassée — et quelqu'un
+     * rechargerait, ou s'en irait.
+     */
+    chargementMotif:
+      'Les champs s’afficheront une fois la configuration reçue : un formulaire ' +
+      'vide, enregistré trop tôt, effacerait votre page d’accueil.',
+  },
+
   etatsVides: {
     parcourirCatalogue: 'Parcourir le catalogue',
     /**

@@ -94,3 +94,32 @@ cas du circuit de dépôt tranché, et une réindexation au déploiement. Alors
 `COVER_TEMPLATES` est entièrement atteint, et le compte exact de
 `couverture.spec.ts` (« quatre gabarits servis ») convoque quelqu'un ici pour
 l'actualiser.
+
+---
+
+## V1.1 — Guide illustré de l'interface
+
+**Décidé le 14 octobre 2026**, en tranchant le relevé de rétention de la
+publication.
+
+`docs/captures/` reste RETENU : ce sont des captures de notre base de
+développement, prises pour des recettes, et elles portent les noms et les états
+de notre fonds de démonstration. Les publier serait publier des données qui ne
+sont pas destinées au dehors.
+
+**Ce qui est prévu à la place** : un guide illustré, écrit POUR le dehors, dont
+les images sont prises exprès — sur un fonds dont chaque nom est manifestement
+d'exemple, et sans aucun compte réel à l'écran.
+
+⚠ **Et la contrainte qui décide de sa forme** : une capture d'écran AFFIRME, au
+présent, l'état qu'elle montre. Un guide qui montre « 480 notices » ou « trois
+prêts en retard » périme au premier geste sur cet état — et personne ne date une
+image dans une documentation. Les captures du guide montreront donc des
+STRUCTURES (un écran, une barre, un refus), jamais des contenus datés.
+
+| | |
+|---|---|
+| ce qui est mesuré | 27 captures internes aujourd'hui, toutes liées à une recette datée |
+| la forme attendue | un fonds d'illustration dédié, des captures de structure, une commande qui les reprend |
+| ⚠ la forme FAUTIVE | republier les captures internes « en les triant ». Le tri porterait sur ce qu'on y voit, alors que le défaut est ce qu'elles AFFIRMENT — et une image triée reste une image datée |
+

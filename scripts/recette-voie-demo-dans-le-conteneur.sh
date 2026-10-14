@@ -27,7 +27,7 @@
 #
 # Usage : ./scripts/recette-voie-demo-dans-le-conteneur.sh
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || { echo "racine du depot introuvable : rien n a ete mesure" >&2; exit 1; }
 
 PROJET=gafeso-recette-voie-demo
 COMPOSE=docker/docker-compose.prod.yml

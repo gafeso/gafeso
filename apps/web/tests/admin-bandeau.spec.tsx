@@ -42,16 +42,52 @@ function contenu(identite: Record<string, unknown>) {
 
 function brancher(identite: Record<string, unknown> = {}) {
   ouvrirSession();
+  // ⚠ LE TÉMOIN EST POSÉ PAR LA DOUBLURE : c'est ce qui rend l'attente
+  // dépendante de la RÉPONSE. Un appelant qui fixe `fullName` lui-même passe sa
+  // valeur à `attendreEcran`.
+  const avecTemoin = 'fullName' in identite ? identite : { ...identite, fullName: TEMOIN_NOM };
   vi.stubGlobal('fetch', vi.fn((e: RequestInfo | URL) => {
     const url = String(e);
     const corps = url.includes('/auth/me/functions')
       ? { functions: ['etablissement.apparence'] }
-      : contenu(identite);
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(corps) } as Response);
+      : contenu(avecTemoin);
+    // ⚠ REPRODUCTION : 200 ms, comme un coureur de CI chargé.
+    return new Promise<Response>((r) =>
+      setTimeout(() => r({ ok: true, json: () => Promise.resolve(corps) } as Response), 200),
+    );
   }));
 }
 
-const attendreEcran = () => screen.findByText(T.titre);
+/**
+ * ⭐⭐ ON ATTEND UNE DONNÉE DE LA RÉPONSE, JAMAIS UN ÉLÉMENT STATIQUE.
+ *
+ * ## 🔴 CE QUE CET AUXILIAIRE FAISAIT, et ce que la CI a montré
+ *
+ * Il attendait `findByText(T.titre)` — le titre, présent dès le PREMIER rendu.
+ * Il résolvait donc avant que le `fetch` ne réponde, et les six cas qui lisent
+ * des valeurs lisaient un écran VIDE.
+ *
+ * ⚠ Sur nos machines, la doublure résolvait dans le même tour de boucle : les
+ * douze cas passaient. Le coureur de la CI est plus lent, et c'est tout — le
+ * DOM capturé là-bas montrait `value=""` partout et aucune diapositive.
+ *
+ * > ⭐ **Un test qui attend un élément présent au premier rendu n'attend rien.**
+ * > C'est « le signal d'ATTENTE d'un test ne doit jamais être indépendant de ce
+ * > qu'il mesure », pris par l'autre bout : ici le signal est indépendant de la
+ * > réponse, donc il ne signale pas son arrivée.
+ *
+ * ## ⭐ CE QU'IL ATTEND MAINTENANT
+ *
+ * `findByDisplayValue` d'une valeur que SEULE la doublure peut produire. Tant
+ * que la réponse n'est pas arrivée, cette valeur n'existe nulle part — et
+ * depuis le correctif du produit, le formulaire lui-même n'existe pas encore.
+ *
+ * ⚠ La valeur est passée par l'appelant quand il remplace l'identité, sinon le
+ * défaut `TEMOIN_NOM` sert : une chaîne qu'aucun rendu initial ne porte.
+ */
+const TEMOIN_NOM = 'Université témoin de chargement';
+
+const attendreEcran = (valeur: string = TEMOIN_NOM) => screen.findByDisplayValue(valeur);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -203,5 +239,117 @@ describe('valeurs par défaut du produit', () => {
     for (const texte of Object.values(LIBELLES.defauts)) {
       expect(texte, texte).not.toMatch(/\d/);
     }
+  });
+});
+
+/**
+ * ⭐⭐ AUCUN FORMULAIRE MODIFIABLE AVANT LES DONNÉES — et c'est un défaut de
+ * PRODUIT, pas de test.
+ *
+ * ## 🔴 CE QU'IL POUVAIT COÛTER
+ *
+ * L'écran rendait son formulaire dès le premier rendu, alimenté par
+ * `EMPTY_CONTENT` : « Nom complet » à `""`, aucune diapositive, et
+ * « Enregistrer » ACTIF. Un administrateur sur une connexion lente pouvait
+ * donc écrire ces vides par-dessus la configuration de son école.
+ *
+ * > ⚠ **Le faux n'était pas seulement affiché : il était ENREGISTRABLE.** C'est
+ * > « une non-réponse écrite comme un fait » dans sa forme la plus chère — un
+ * > zéro affiché se corrige au rechargement, une page d'accueil effacée ne se
+ * > retrouve pas.
+ *
+ * ## ⚠ ET C'EST LA CI QUI L'A TROUVÉ, pas une relecture
+ *
+ * Son coureur est plus lent que nos machines : six cas lisaient l'écran avant
+ * la réponse, et le DOM capturé là-bas montrait `value=""` partout. Le test
+ * était faux ET le produit l'était — et c'est le produit qui coûtait.
+ */
+describe('⭐⭐ pendant le chargement, rien n’est enregistrable', () => {
+  /** Une doublure qu'on résout À LA MAIN : c'est le seul moyen d'observer l'attente. */
+  function brancherEnAttente(identite: Record<string, unknown> = {}) {
+    ouvrirSession();
+    let resoudre: (() => void) | null = null;
+    const pret = new Promise<void>((r) => {
+      resoudre = r;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (e: RequestInfo | URL) => {
+        const url = String(e);
+        if (url.includes('/auth/me/functions')) {
+          return { ok: true, json: async () => ({ functions: ['etablissement.apparence'] }) } as Response;
+        }
+        await pret;
+        return {
+          ok: true,
+          json: async () => contenu({ fullName: TEMOIN_NOM, ...identite }),
+        } as Response;
+      }),
+    );
+    return () => resoudre?.();
+  }
+
+  it('⭐ réponse retardée : aucun « Enregistrer », aucun champ modifiable', async () => {
+    const livrer = brancherEnAttente();
+    render(<AccueilAdminPage />);
+
+    /*
+     * ⚠ ON ATTEND UNE ANCRE QUI DOIT ÊTRE LÀ avant d'affirmer une absence. Une
+     * assertion d'absence posée trop tôt passe toujours — « il faut d'abord
+     * attendre quelque chose qui, lui, DOIT y être ».
+     */
+    await screen.findByText(LIBELLES.accueilAdmin.chargement);
+
+    /*
+     * ⚠ `queryAllByRole` ET NON `queryByRole` : le formulaire chargé porte DEUX
+     * « Enregistrer », en haut et en bas — il est long.
+     *
+     * ⭐ Et cette duplication-là est LÉGITIME, contrairement aux deux
+     * « Annuler » qu'un test a refusé de départager en septembre : les deux
+     * boutons soumettent le MÊME formulaire, donc un lecteur d'écran qui entend
+     * « Enregistrer » deux fois n'a aucun choix à faire. Ce qui est ambigu,
+     * c'est deux noms identiques pour deux ACTIONS différentes.
+     */
+    expect(
+      screen.queryAllByRole('button', { name: /enregistrer/i }),
+      '⚠ « Enregistrer » est présent avant les données : un clic écraserait la ' +
+        'page d’accueil avec des vides',
+    ).toHaveLength(0);
+    /*
+     * ⚠ AUCUN CHAMP, et on le compte sur le DOM entier : un champ désactivé
+     * serait déjà mieux, mais un champ VIDE se lit comme une valeur — et c'est
+     * le faux qu'on évite.
+     */
+    expect(document.querySelectorAll('input, textarea, select')).toHaveLength(0);
+    // ⚠ Et l'écran DIT pourquoi : un titre seul se lirait comme une page cassée.
+    expect(screen.getByText(LIBELLES.accueilAdmin.chargementMotif)).toBeInTheDocument();
+
+    /* ── puis les données arrivent ── */
+    livrer();
+    await screen.findByDisplayValue(TEMOIN_NOM);
+    const enregistrer = screen.getAllByRole('button', { name: /enregistrer/i });
+    expect(enregistrer.length, 'le formulaire long en porte deux').toBeGreaterThan(0);
+    for (const b of enregistrer) expect(b).toBeEnabled();
+    expect(document.querySelectorAll('input, textarea, select').length).toBeGreaterThan(5);
+  });
+
+  /**
+   * ⚠ ET UN ÉCHEC DE CHARGEMENT NE BLOQUE PAS SUR « Chargement… ». Sans ce cas,
+   * la correction remplacerait un formulaire dangereux par une attente sans
+   * fin — « une prudence qui annule sa propre raison d'être ».
+   */
+  it('⚠ un échec de chargement AFFICHE l’erreur, il n’attend pas indéfiniment', async () => {
+    ouvrirSession();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (e: RequestInfo | URL) =>
+        String(e).includes('/auth/me/functions')
+          ? ({ ok: true, json: async () => ({ functions: ['etablissement.apparence'] }) } as Response)
+          : ({ ok: false, status: 500, json: async () => ({ message: 'Panne' }) } as Response),
+      ),
+    );
+    render(<AccueilAdminPage />);
+    await screen.findByText(/Panne|Chargement impossible/i);
+    expect(screen.queryByText(LIBELLES.accueilAdmin.chargement)).toBeNull();
   });
 });

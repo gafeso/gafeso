@@ -1,0 +1,73 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION SHELLCHECK — chaque exception porte SA RAISON
+#
+# Posé le 13 octobre 2026, après que la CI publique a trouvé un nom de fichier
+# EXÉCUTÉ dans un commentaire — des accents graves à l'intérieur d'un heredoc
+# non quoté. shellcheck ne signalait pas ce cas-là ; il en signalait 150 autres.
+#
+# ⚠ LA RÈGLE DE CE FICHIER : on ne désactive un code qu'après avoir MESURÉ ce
+# qu'il désigne chez nous, et le motif s'écrit ici. Une désactivation sans motif
+# est la façon élégante de ne pas corriger — et un détecteur qu'on fait taire
+# pour le cas qui lui ressemble le plus est un détecteur désactivé.
+#
+# Les codes RÉELS ont été corrigés, pas désactivés :
+#   SC2164  cinq `cd` sans garde. Pour un GARDE, un `cd` raté fait mesurer le
+#           mauvais arbre — c'est-à-dire passer à vide. Corrigés, et le témoin a
+#           trouvé mieux que l'avertissement : `cd ""` RÉUSSIT en bash, donc le
+#           `|| exit` évident ne protège de rien ; et hors d'un dépôt,
+#           `controles-de-contenu.sh` sortait en 0 en disant « rien n'a été
+#           mesuré ». La racine se mesure maintenant avant d'y aller, et une
+#           population vide est un REFUS en --tout/--plage.
+#   SC2034  une couleur `VERT` définie et jamais employée : retirée.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# SC2015 — « A && B || C n'est pas un si-alors-sinon » (120 occurrences)
+#
+# Notre idiome est `[ condition ] && vert "…" || rouge "…"`, où `vert` et
+# `rouge` sont des enveloppes de `printf`. Le risque que SC2015 décrit est réel
+# en général : si `vert` échouait, `rouge` s'exécuterait aussi.
+#
+# ⭐ MESURÉ CHEZ NOUS, et c'est la DIRECTION de la panne qui décide : un `printf`
+# qui échoue (tuyau fermé) ferait sortir un FAUX ROUGE, jamais un faux vert. Un
+# garde qui crie à tort se fait remarquer tout de suite ; un garde qui se taît à
+# tort ne se remarque jamais. L'idiome échoue donc du bon côté.
+#
+# ⚠ Et il ne vaut QUE pour des enveloppes d'affichage. Le jour où la partie
+# gauche porte un effet — une écriture, un appel réseau, un `docker` —, cette
+# désactivation cesse d'être justifiée : on écrit alors un vrai `if`.
+disable=SC2015
+
+# SC2016 — « les expressions ne s'expansent pas en apostrophes » (8)
+# Toutes dans `publier-instantane.sh`, et toutes VOULUES : ce sont des motifs
+# d'expression régulière et des chaînes de format `printf` qui doivent arriver
+# littéralement au programme appelé. Les expanser serait le défaut.
+disable=SC2016
+
+# SC2034 — « variable inutilisée » (2 restantes)
+# `APRES_FUSION` et `liste` sont passées PAR NOM à une fonction qui les relit
+# par référence (`controler APRES_FUSION "$PUB"`). shellcheck ne suit pas les
+# références de nom — c'est « un garde qui lit la source ne suit pas les
+# variables », appliqué à shellcheck lui-même.
+disable=SC2034
+
+# SC2329 — « fonction jamais invoquée » (4)
+# Les quatre sont des `nettoyer` appelées par `trap nettoyer EXIT`. Vérifié un
+# par un : chacune a bien son trap dans le même fichier.
+disable=SC2329
+
+# SC1112 — « ceci est une apostrophe Unicode » (4)
+# Du FRANÇAIS dans des messages destinés à l'utilisateur : « n'a », « d'un ».
+# L'apostrophe typographique U+2019 ne termine pas une chaîne — elle est
+# littérale. Nos textes visibles sont en français, c'est une règle du projet.
+disable=SC1112
+
+# SC1090 / SC1091 — « source non constant / non suivi » (3)
+# Un `.` sur un fichier d'environnement engendré à l'exécution (`mktemp`) et sur
+# `.env`, qui n'est pas dans le dépôt. shellcheck ne peut pas les suivre, et
+# c'est le but : ces fichiers n'existent pas au moment de l'analyse.
+disable=SC1090,SC1091
+
+# SC2001 — « voyez si ${var//x/y} suffit » (3)
+# Trois `sed` sur des substitutions à expression régulière que l'expansion de
+# paramètre ne sait pas faire (classes de caractères). Style, pas correction.
+disable=SC2001

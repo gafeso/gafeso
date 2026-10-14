@@ -156,6 +156,19 @@ export default function AdminAccueilPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * ⭐⭐ `false` = PAS ENCORE SU, et c'est distinct de « chargé et vide ».
+   *
+   * Sans cet état, l'écran rendait son formulaire dès le premier rendu, alimenté
+   * par `EMPTY_CONTENT` : champs vides, « Enregistrer » ACTIF. Un administrateur
+   * sur une connexion lente pouvait donc écraser sa page d'accueil avec des
+   * vides — le faux n'était pas seulement affiché, il était ENREGISTRÉ.
+   *
+   * ⚠ Trouvé par la CI, dont le coureur est plus lent que nos machines : six
+   * cas de `admin-bandeau.spec.tsx` lisaient l'écran AVANT la réponse. Le test
+   * était faux ET le produit l'était — et c'est le produit qui coûtait.
+   */
+  const [chargee, setChargee] = useState(false);
   // `number` = index de la diapositive en cours d'envoi.
   const [uploading, setUploading] = useState<'logo' | 'hero' | number | null>(null);
 
@@ -172,6 +185,7 @@ export default function AdminAccueilPage() {
         setTokens({ ...DEFAULT_TOKENS, ...data.themeTokens });
         setLattice(data.latticeEnabled);
       })
+      .then(() => setChargee(true))
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Chargement impossible.'));
   }, []);
 
@@ -249,6 +263,27 @@ export default function AdminAccueilPage() {
         Vous n’avez pas la permission de modifier l’apparence de l’établissement
             (fonction «&nbsp;etablissement.apparence&nbsp;»).
       </Alert>
+    );
+  }
+
+  /*
+   * ⭐⭐ AUCUN FORMULAIRE AVANT LES DONNÉES. Le titre reste — la page doit se
+   * nommer — mais il n'y a NI champ modifiable NI bouton « Enregistrer », donc
+   * rien à enregistrer trop tôt.
+   *
+   * ⚠ Et l'erreur de chargement garde sa priorité : quand `error` est posé, on
+   * tombe dans le rendu ordinaire, qui l'affiche. Un écran bloqué sur
+   * « Chargement… » après un échec serait une attente sans fin.
+   */
+  if (!chargee && !error) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="font-serif text-2xl font-bold">Page d’accueil</h1>
+        <p className="text-sm text-muted">{LIBELLES.accueilAdmin.chargement}</p>
+        <p className="max-w-prose text-xs text-muted">
+          {LIBELLES.accueilAdmin.chargementMotif}
+        </p>
+      </div>
     );
   }
 
