@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -41,6 +41,34 @@ import { describe, expect, it } from 'vitest';
 const RACINE = join(__dirname, '..', '..', '..', '..');
 const git = (...a: string[]) =>
   execFileSync('git', a, { cwd: RACINE, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+
+const PUBLIEUR = join(RACINE, 'scripts', 'publier-instantane.sh');
+
+/**
+ * ⚠ CE GARDE N'EST PAS MESURABLE DANS LE DÉPÔT PUBLIC, et il le DIT.
+ *
+ * 🔴 Il EXÉCUTE `publier-instantane.sh` pour lire la liste des fichiers qui
+ * sortent — à la valeur réelle, jamais recopiée. Or ce script est RETENU : il
+ * porte `SORTANT` et les interdictions, et le publier reviendrait à publier nos
+ * décisions de publication.
+ *
+ * Résultat, mesuré sur la CI publique du 15 octobre 2026 :
+ *     Error: spawnSync ./scripts/publier-instantane.sh ENOENT
+ * La CI publique est devenue ROUGE sur un test qui ne pouvait pas tourner
+ * là-bas.
+ *
+ * ⭐ ET C'EST, MOT POUR MOT, LA FAUTE QUE LA LEÇON DU 18 SEPTEMBRE DÉCRIT :
+ * « le garde écrit ce matin pour attraper cette famille portait la faute : il
+ * lisait le script de publication, qui n'est pas publié ». Connaître la règle
+ * n'empêche pas de commettre la faute.
+ *
+ * ⚠ TROIS ISSUES EXISTENT, et la leçon les ordonne : publier la source — ici
+ * impossible —, emporter le test avec elle, ou DÉGRADER EN LE DISANT. On prend
+ * la troisième : ce garde mesure NOS décisions de publication, qui n'ont aucun
+ * sens pour qui clone. Il ne passe donc pas en silence — il refuse de prétendre
+ * avoir mesuré.
+ */
+const MESURABLE = existsSync(PUBLIEUR);
 
 /** Les fichiers qui SORTENT — lus à la VALEUR RÉELLE, jamais recopiés. */
 function publies(): Set<string> {
@@ -87,7 +115,9 @@ const DECLARES: { depuis: string; vers: string; motif: string }[] = [
   },
 ];
 
-describe('⚠ L’OBLIGATION : un fichier publié ne renvoie à rien de retenu', () => {
+describe.skipIf(!MESURABLE)(
+  '⚠ L’OBLIGATION : un fichier publié ne renvoie à rien de retenu',
+  () => {
   const PUB = publies();
   const documents = [...PUB].filter((f) => f.endsWith('.md')).sort();
   const lus: string[] = [];
@@ -178,5 +208,22 @@ describe('⚠ L’OBLIGATION : un fichier publié ne renvoie à rien de retenu',
       'Déclaration(s) qui ne correspondent plus à rien : le renvoi a été retiré, ' +
         'ou le fichier visé est sorti. Retirez la ligne.',
     ).toEqual([]);
+  });
+  },
+);
+
+/**
+ * ⚠ ET LE CAS NON MESURABLE SE DIT, il ne se tait pas. Sans cette ligne,
+ * l'absence du publieur rendrait le fichier VERT sur zéro cas — « une suite
+ * verte sur une population vide », exactement ce que ce dépôt refuse.
+ */
+describe.runIf(!MESURABLE)('ce garde hors du dépôt interne', () => {
+  it('⚠ NON MESURABLE ICI : le publieur est retenu, donc la liste est inconnue', () => {
+    expect(MESURABLE, 'ce cas ne doit tourner que si le publieur est ABSENT').toBe(false);
+    console.warn(
+      '\n\u24d8 renvois-vers-un-retenu : NON MESURABLE dans ce clone.\n' +
+        '  Ce garde exécute scripts/publier-instantane.sh, qui est RETENU de la\n' +
+        '  publication. Il mesure nos décisions de publication — sans objet ici.\n',
+    );
   });
 });

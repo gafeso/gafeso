@@ -340,14 +340,17 @@ describe('formulaires chargés — obligation déclarée', () => {
 
 
   /*
-   * ⚠ UNE DETTE PLUS FINE, et elle est nommée plutôt que tue : l'épreuve de
-   * `collections/[id]` porte le cas RETARDÉ, pas le cas d'ÉCHEC.
+   * ⭐ LA DETTE DU 14 OCTOBRE EST SOLDÉE — l'épreuve de `collections/[id]` porte
+   * désormais SES DEUX CAS, le retardé et l'échec.
    *
-   * Écrit avec un second cas, un `beforeEach` et des `findBy*`, ce fichier ne
-   * rendait PAS LA MAIN — dix minutes, aucun message. Trois causes soupçonnées,
-   * trois démenties par la mesure. La forme livrée est celle qui TOURNE ; le cas
-   * d'échec viendra quand on saura pourquoi l'autre bloquait, plutôt que d'être
-   * livré en version qui suspend la suite de tout le monde.
+   * Ce qui bloquait n'était ni l'écran, ni `vi.mock`, ni le découpage : c'était
+   * `beforeEach(() => api.mockReset())` combiné à une doublure dont la promesse
+   * ne se règle JAMAIS. Bisecté jusqu'à douze lignes, sans Next ni module
+   * doublé — et un `afterEach` échoue proprement là où un `beforeEach` suspend.
+   *
+   * `epreuves-sans-crochet-effaceur.spec.ts` tient la propriété pour toutes les
+   * épreuves, pas pour celle-ci : le blocage ne nomme AUCUN cas, donc une règle
+   * écrite ne protégerait personne.
    */
 
 

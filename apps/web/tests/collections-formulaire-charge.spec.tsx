@@ -9,6 +9,7 @@ vi.mock('@/lib/api', async () => {
 vi.mock('@/lib/session', () => ({ getToken: () => 'jeton-de-test' }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'c1' }) }));
 
+import { ApiError } from '@/lib/api';
 import CollectionDetailPage from '@/app/admin/collections/[id]/page';
 
 /**
@@ -68,6 +69,32 @@ const soumissibles = () =>
     .length;
 
 describe('/admin/collections/[id] — épreuve par l’effet', () => {
+  /*
+   * ⭐⭐ LA CAUSE DU BLOCAGE EST TROUVÉE — et ce n'était ni l'écran, ni
+   * `vi.mock`, ni mon découpage. Bisecté le 15 octobre 2026 jusqu'à DOUZE
+   * lignes, sans Next et sans module doublé :
+   *
+   * | crochet | promesse rendue par la doublure | résultat |
+   * |---|---|---|
+   * | `beforeEach(mockClear)` | RÉSOLUE | passe, 1 s |
+   * | `beforeEach(mockClear)` | ÉTERNELLE | 🔴 **le worker ne rend jamais la main** |
+   * | aucun crochet | éternelle | passe, 2 s |
+   * | `afterEach(mockClear)` | éternelle | échoue proprement, code 1 |
+   *
+   * ⚠ `mockReset` se comporte comme `mockClear` : ce sont les deux méthodes qui
+   * EFFACENT les résultats enregistrés. Référencer la doublure, lire
+   * `mock.calls`, ou poser l'implémentation dans le crochet ne bloquent PAS.
+   *
+   * ⭐ LA RÈGLE POUR CE DÉPÔT : une épreuve par l'effet laisse des promesses NON
+   * RÉGLÉES — c'est son principe même. Elle ne doit donc pas effacer sa doublure
+   * dans un `beforeEach`. Ce fichier n'en a aucun, et c'est pour ça.
+   *
+   * ⚠ Et pourquoi j'ai cherché une heure du mauvais côté : le blocage ne nomme
+   * aucun cas. Trois causes ont été soupçonnées et démenties — une ancre sur un
+   * titre inexistant, un « drainage » en `afterEach`, puis `mockReset` seul.
+   * Aucune n'était la bonne, parce que je cherchais dans ce que je venais
+   * d'écrire plutôt qu'en RÉDUISANT jusqu'à la plus petite forme qui bloque.
+   */
   it('⚠ rien n’est soumissible tant que les RÈGLES EXISTANTES ne sont pas là', async () => {
     const { resoudre, connus } = brancherEnAttente();
     render(<CollectionDetailPage />);
@@ -95,5 +122,18 @@ describe('/admin/collections/[id] — épreuve par l’effet', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(document.body.textContent ?? '').toContain('Thèses sous embargo');
     expect(soumissibles()).toBeGreaterThan(0);
+  });
+
+  /*
+   * ⭐ LE CAS D'ÉCHEC, remis en place — il était en dette depuis le 14 octobre
+   * parce que la forme qui le portait bloquait. Elle bloquait à cause du
+   * `beforeEach` ci-dessus, pas à cause de lui.
+   */
+  it('⚠ ÉCHEC : l’erreur est dite, et rien ne reste soumissible', async () => {
+    api.mockImplementation(() => Promise.reject(new ApiError(500, 'réseau')));
+    render(<CollectionDetailPage />);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(soumissibles(), 'un formulaire soumissible derrière une erreur').toBe(0);
+    expect(document.body.textContent ?? '').not.toContain('Thèses sous embargo');
   });
 });
