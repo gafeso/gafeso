@@ -181,7 +181,7 @@ contexte de build, et c'est à vous de juger (voir `.dockerignore`).
 
 ## ⚠ Redis a été retiré — ce que ça demande au PROCHAIN déploiement
 
-*12 septembre 2026, backlog n°7.* Le service `redis` ne figure plus ni dans
+*12 septembre 2026.* Le service `redis` ne figure plus ni dans
 `docker/docker-compose.yml` ni dans `docker/docker-compose.prod.yml` : aucun
 code applicatif ne s'y connectait depuis le début (ni `ioredis` ni `bullmq`), et
 un service provisionné, sauvegardé et surveillé que personne n'appelle est une
@@ -204,7 +204,7 @@ retiré à la main une fois le conteneur parti et l'absence vérifiée
 
 ## ⚠ Avant d'ajouter un `ports:` à la pile de production
 
-*Écrit le 12 septembre 2026, backlog n°20.*
+*Écrit le 12 septembre 2026.*
 
 Sur la machine de développement, la pile de production (`gafeso-prod-*`) et la
 pile de développement (`bibliocloud-*`) tournent **côte à côte**. La seule chose
@@ -321,6 +321,60 @@ Ce qui ne change **jamais**, quel que soit le cas :
 > document) n'est PAS un identifiant produit : c'est le domaine de
 > l'**établissement**. Il ne change pas non plus.
 
+## ⭐ MESURER LA BASE D'UNE INSTANCE EN SERVICE — la forme qui marche
+
+**Toute lecture de la base de production se fait ainsi, et pas autrement :**
+
+```bash
+docker exec -i gafeso-prod-db-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+BEGIN READ ONLY;
+SELECT count(*) FROM "tenant_<slug>".biblio_records;
+ROLLBACK;
+SQL
+```
+
+⚠ **DEUX DÉTAILS, ET LES DEUX SONT LA RAISON D'ÊTRE DE CETTE SECTION.**
+
+**① `sh -c '…'` avec des APOSTROPHES, et les variables DEDANS.** La forme
+naïve ne marche pas :
+
+```bash
+docker exec -i gafeso-prod-db-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" …
+```
+
+Votre shell développe `$POSTGRES_USER` **avant** que docker ne voie la
+commande — et il est vide sur l'hôte, puisque la variable vit dans le
+conteneur. Mesuré :
+
+```
+psql: error: FATAL:  role "root" does not exist
+```
+
+Le message n'accuse rien de juste : il parle d'un rôle « root » que personne
+n'a demandé, parce que psql, privé d'utilisateur, a pris celui du système.
+⚠ *Cette forme fautive a été donnée par l'auteur de ce document à l'exploitant
+le 14 octobre 2026. Elle a coûté un aller-retour, et la leçon est générale :
+**une commande qu'on remet à quelqu'un d'autre ne doit rien attendre de SON
+environnement.** Entre les apostrophes, la variable est résolue par le shell du
+conteneur, qui la porte par construction.*
+
+**② `BEGIN READ ONLY` … `ROLLBACK`, et ce n'est pas une ceinture et des
+bretelles.** « Je n'ai mis que des `SELECT` » est une promesse sur ce qu'on a
+écrit ; une transaction en lecture seule est un REFUS du serveur. Mesuré :
+
+```
+ERROR:  cannot execute CREATE TABLE in a read-only transaction
+```
+
+⭐ La différence compte le jour où quelqu'un reprend la commande pour « juste
+ajouter une ligne » : la promesse ne retient personne, le refus oui. C'est la
+forme que ce dépôt préfère partout — un garde sur le chemin du geste plutôt
+qu'une règle écrite.
+
+⚠ Et le `ROLLBACK` final n'est pas décoratif : sans lui la transaction reste
+ouverte sur un `psql` interactif, et une transaction ouverte retient des
+verrous sur une base en service.
+
 ## 🔴 STOCKAGE — l'image officielle de MinIO n'est plus téléchargeable
 
 **L'image `minio/minio` n'est plus téléchargeable anonymement depuis Docker
@@ -374,6 +428,292 @@ il peut fermer comme l'autre a fermé. La pile de CI de ce dépôt l'utilise dé
 (voir `scripts/gardes-vivants-en-ci.sh`) ; le compose de PRODUCTION, lui, est
 resté inchangé exprès.
 
+### Migration de MinIO vers Garage — pour une instance EXISTANTE
+
+⚠ **Rien n'est supprimé.** Le volume MinIO reste intact après la bascule : c'est
+LUI, le retour arrière. Un script de migration qui efface la source supprime en
+même temps la seule chose qui permet de revenir.
+
+**① Engendrez de NOUVEAUX identifiants S3.** Votre mot de passe MinIO actuel ne
+respecte presque sûrement pas la forme que Garage impose — mesuré : la clé est
+« GK » + 24 hexadécimaux, le secret EXACTEMENT 64 hexadécimaux.
+
+```bash
+printf 'MINIO_ROOT_USER=GK%s\n' "$(openssl rand -hex 12)"
+printf 'MINIO_ROOT_PASSWORD=%s\n' "$(openssl rand -hex 32)"
+printf 'GARAGE_RPC_SECRET=%s\n'   "$(openssl rand -hex 32)"
+printf 'GARAGE_ADMIN_TOKEN=%s\n'  "$(openssl rand -hex 32)"
+```
+
+**② ARRÊTEZ les écritures.** Les services qui écrivent sont `api` et `web` :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml stop api web
+```
+
+⚠ Le script le VÉRIFIE et refuse si l'API répond encore. Une copie prise pendant
+qu'on écrit est une copie dont on ne sait rien.
+
+**③ Montez Garage seul**, pour que son initialisation pose les buckets :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d garage garage-init
+```
+
+**④ Vérifiez SANS rien basculer.** Cette forme ne touche ni les objets ni la
+configuration — elle compare, et elle refuse si un seul objet diffère :
+
+```bash
+MINIO_SOURCE_URL=http://127.0.0.1:9000 \
+MINIO_SOURCE_KEY=<ancienne clé MinIO> MINIO_SOURCE_SECRET=<ancien secret> \
+GARAGE_S3_URL=http://127.0.0.1:3900 \
+GARAGE_KEY=<nouvelle clé> GARAGE_SECRET=<nouveau secret> \
+STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
+node scripts/migration-minio-vers-garage.mjs --verifier-seulement
+```
+
+**⑤ Migrez.** Mêmes variables, plus `API_HEALTH_URL` pour que le script puisse
+vérifier que les écritures sont bien arrêtées :
+
+```bash
+… API_HEALTH_URL=https://$API_DOMAIN/health \
+node scripts/migration-minio-vers-garage.mjs --migrer --confirmation=$STORAGE_DOMAIN
+```
+
+Il copie, puis vérifie **chaque objet** : clé, taille et somme SHA-256, dans les
+deux sens — rien en trop, rien en moins. Un compte égal ne prouve rien.
+
+**⑥ Le RETOUR ARRIÈRE**, et il est éprouvé :
+
+```bash
+cp .env.prod.avant-garage .env.prod
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+```
+
+Le volume MinIO porte encore tous les objets. La répétition complète de cette
+procédure, retour arrière compris, est rejouable :
+`./scripts/recette/migration-garage-repetition.sh`.
+
+⚠ **Ce que la répétition ne prouve pas** : elle migre un MinIO qu'elle a semé
+elle-même. Sur vos données réelles, faites d'abord le ④ — il compare sans rien
+écrire.
+
+### 🔴 LA BASCULE DE LA DÉMONSTRATION — procédure complète, rc14
+
+**Décidée le 15 octobre 2026. Chaque étape porte son RÉSULTAT ATTENDU, et un
+point d'arrêt explicite : si une vérification ne rend pas ce qui est écrit,
+ARRÊTEZ-VOUS et ne passez pas à la suivante.**
+
+⚠ **Rien n'est supprimé par cette procédure.** Le volume MinIO reste intact du
+début à la fin : c'est lui, le retour arrière de l'étape ⑧.
+
+⚠ **ET LES DONNÉES EXPORTÉES NE VONT PAS DANS LE DÉPÔT**, même dans un dossier
+ignoré — un dossier du dépôt est à portée de `git add -A`. Toutes les commandes
+ci-dessous écrivent dans `~/sauvegardes-gafeso/`, hors du dépôt.
+
+```bash
+mkdir -p ~/sauvegardes-gafeso && cd ~/sauvegardes-gafeso
+JOUR=$(date +%F)
+```
+
+---
+
+#### ① LES NOUVEAUX IDENTIFIANTS — leur FORME n'est pas libre
+
+Garage impose « GK » + 24 hexadécimaux à la clé, et EXACTEMENT 64
+hexadécimaux au secret (mesuré : 48 hex, 32 hex et base64 de 32 octets sont
+refusés). Votre mot de passe MinIO actuel ne respecte presque sûrement pas cette
+forme.
+
+```bash
+printf 'MINIO_ROOT_USER=GK%s\n'   "$(openssl rand -hex 12)"
+printf 'MINIO_ROOT_PASSWORD=%s\n' "$(openssl rand -hex 32)"
+printf 'GARAGE_RPC_SECRET=%s\n'   "$(openssl rand -hex 32)"
+printf 'GARAGE_ADMIN_TOKEN=%s\n'  "$(openssl rand -hex 32)"
+```
+
+**Attendu** : quatre lignes. Reportez-les dans `.env.prod` — mais gardez les
+ANCIENNES valeurs de côté : l'étape ⑤ en a besoin pour lire la source.
+
+⛔ **POINT D'ARRÊT** : si `MINIO_ROOT_USER` ne correspond pas à
+`^GK[0-9a-f]{24}$`, l'initialisation refusera en le disant. Vérifiez avant.
+
+---
+
+#### ② LA SAUVEGARDE — base ET volume, et elle se VÉRIFIE
+
+```bash
+docker exec -i gafeso-prod-db-1 sh -c 'pg_dumpall -U "$POSTGRES_USER" --clean --if-exists' \
+  | gzip > ~/sauvegardes-gafeso/base-$JOUR.sql.gz
+zcat ~/sauvegardes-gafeso/base-$JOUR.sql.gz | grep -c '^CREATE DATABASE'
+zcat ~/sauvegardes-gafeso/base-$JOUR.sql.gz | grep -c '^COPY '
+```
+
+**Attendu** : au moins `1` base et plusieurs dizaines de `COPY`.
+⚠ `--clean --if-exists` n'est pas décoratif : sans lui, un `pg_dumpall` rejoué
+sur un cluster existant ÉCHOUE en silence et **AJOUTE** des lignes aux tables
+sans contrainte. Mesuré le 6 octobre.
+
+```bash
+docker run --rm -v gafeso-prod_minio_data:/v:ro -v ~/sauvegardes-gafeso:/s alpine:3.20 \
+  tar czf /s/minio-$JOUR.tar.gz -C /v .
+docker run --rm -i alpine:3.20 tar tzf - < ~/sauvegardes-gafeso/minio-$JOUR.tar.gz | wc -l
+```
+
+**Attendu** : plusieurs centaines d'entrées. ⚠ Une archive se vérifie en la
+**LISANT**, jamais à sa taille : une archive de 4 ko se restaure parfaitement et
+ne contient rien.
+⚠ Vérifiez le nom du volume d'abord : `docker volume ls | grep minio`.
+
+⛔ **POINT D'ARRÊT** : si `tar tzf` échoue ou rend moins de 100 entrées,
+n'allez pas plus loin. Sans sauvegarde lisible, il n'y a pas de retour arrière.
+
+---
+
+#### ③ ARRÊTER LES ÉCRITURES
+
+```bash
+cd ~/gafeso   # le dépôt cloné
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml stop api web
+curl -sS -o /dev/null -w '%{http_code}\n' https://$API_DOMAIN/health
+```
+
+**Attendu** : `000` ou une erreur de connexion — l'API ne répond plus.
+⚠ Le script de migration le VÉRIFIE et refuse si l'API répond encore : une copie
+prise pendant qu'on écrit est une copie dont on ne sait rien.
+
+---
+
+#### ④ MONTER GARAGE SEUL, pour qu'il pose ses buckets
+
+```bash
+eval "$(scripts/version-du-depot.sh --exporter)" || exit 1
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --build garage garage-init
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml logs garage-init
+```
+
+**Attendu**, quatre lignes dans l'ordre :
+```
+layout : applique (zone dc1, … Go)
+cle GK… : importee (secret NON affiche)
+bucket « digital-copies » : cree
+bucket « <votre domaine de stockage> » : acces web ouvert (lecture anonyme)
+```
+
+⛔ **POINT D'ARRÊT** : si vous lisez `REFUS`, l'initialisation vous dit
+laquelle des deux formes de clé est en cause. Corrigez `.env.prod` et relancez —
+elle est idempotente, une seconde exécution ne crée rien de plus.
+
+---
+
+#### ⑤ VÉRIFIER SANS RIEN BASCULER
+
+Cette forme ne touche NI les objets NI la configuration. Elle compare, et elle
+refuse si un seul objet diffère.
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d minio 2>/dev/null || true
+MINIO_SOURCE_URL=http://127.0.0.1:9000 \
+MINIO_SOURCE_KEY=<ANCIENNE clé> MINIO_SOURCE_SECRET=<ANCIEN secret> \
+GARAGE_S3_URL=http://127.0.0.1:3900 \
+GARAGE_KEY=<nouvelle clé> GARAGE_SECRET=<nouveau secret> \
+STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
+node scripts/migration-minio-vers-garage.mjs --verifier-seulement
+```
+
+**Attendu** : le compte des objets à la source, puis un REFUS qui NOMME les
+manquants — c'est normal, rien n'a encore été copié. Le chiffre qui compte est
+« N objet(s) a la source ».
+
+⛔ **POINT D'ARRÊT** : si le compte à la source est **0**, la source n'est pas
+lue (mauvaise clé, mauvais port). Migrer alors « réussirait » sur zéro objet.
+
+---
+
+#### ⑥ MIGRER
+
+Mêmes variables, plus `API_HEALTH_URL` pour que le script puisse vérifier
+l'arrêt des écritures :
+
+```bash
+… API_HEALTH_URL=https://$API_DOMAIN/health \
+node scripts/migration-minio-vers-garage.mjs --migrer --confirmation=$STORAGE_DOMAIN
+```
+
+**Attendu** :
+```
+ecritures arretees : … ne repond pas
+digital-copies -> digital-copies : N objet(s) a la source
+covers -> <domaine> : M objet(s) a la source
+verifies cle+taille+SHA-256 : N+M ; ecarts : 0
+copies : N+M
+configuration sauvegardee : .env.prod.avant-garage (0600)
+```
+
+⛔ **POINT D'ARRÊT** : si `ecarts` n'est pas **0**, le script s'arrête de
+lui-même et n'a RIEN basculé. Ne forcez pas — lisez les écarts nommés.
+
+*Mesuré sur une copie des données réelles de la démonstration : 179 objets,
+179 vérifiés au SHA-256, 0 écart, 5 secondes.*
+
+---
+
+#### ⑦ DÉMARRER ET CONTRÔLER
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+curl -sS https://$API_DOMAIN/health
+```
+
+**Attendu** : `{"status":"ok","version":"v1.0.0-rc14","commit":"…"}`.
+⚠ Si vous lisez `"version":"non étiquetée"`, l'étape ④ a été faite sans
+`eval "$(scripts/version-du-depot.sh --exporter)"`.
+
+⭐ **ET SI LA MIGRATION N'AVAIT PAS EU LIEU, L'API REFUSERAIT DE DÉMARRER** :
+elle compte les documents numériques en base et les objets dans le bucket, et
+s'arrête en nommant le nombre. Un `docker compose ps` montrerait `api` en échec,
+pas une API qui sert un catalogue dont chaque fiche promet un fichier
+introuvable.
+
+Les trois contrôles qui comptent, dans l'ordre :
+
+```bash
+# 1. une couverture, en lecture ANONYME (c'est le chemin du navigateur)
+curl -sS -o /dev/null -w '%{http_code}\n' https://$STORAGE_DOMAIN/<une clé de couverture>
+# 2. un document, par la fiche publique puis le bouton de lecture
+#    (attendu : le PDF s'affiche ; le lecteur ne télécharge rien)
+# 3. le compte des documents, en LECTURE SEULE
+docker exec -i gafeso-prod-db-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+BEGIN READ ONLY;
+SELECT count(*) FROM "tenant_<slug>".digital_copies;
+ROLLBACK;
+SQL
+```
+
+**Attendu** : `200` pour la couverture, le PDF visible, et le même compte
+qu'avant la bascule.
+
+---
+
+#### ⑧ LE RETOUR ARRIÈRE, si l'un des contrôles échoue
+
+```bash
+cp .env.prod.avant-garage .env.prod
+eval "$(scripts/version-du-depot.sh --exporter)" || exit 1
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+curl -sS https://$API_DOMAIN/health
+```
+
+**Attendu** : l'API répond, et les documents se lisent de nouveau — **le volume
+MinIO porte encore tous les objets**, la migration n'y a rien touché.
+
+⚠ `git checkout` du compose n'est PAS le retour arrière : le compose de rc14
+EST sur Garage. Ce qui se défait, c'est la CONFIGURATION — et c'est pourquoi le
+script la sauvegarde avant de la changer.
+
+*La procédure entière, retour arrière compris, est rejouable sur pile jetable :
+`./scripts/recette/migration-garage-repetition.sh`.*
+
 ### La cible
 
 **Garage** (AGPL-3.0, comme Gafeso). Mesuré sur nos appels réels : 32 Mo
@@ -387,9 +727,29 @@ différences d'architecture à connaître :
 - un bucket créé par l'API S3 n'a qu'un alias local à la clé : l'administration
   hors API demande un alias global.
 
-La bascule n'aura lieu qu'après une répétition complète sur pile jetable
-(initialisation scriptée, migration des objets vérifiée un par un, charge
-réaliste, sauvegarde et restauration prouvées).
+La bascule n'aura lieu qu'après une répétition complète sur pile jetable. Elle
+est écrite, elle est REJOUABLE, et elle est dans ce dépôt :
+
+```bash
+./scripts/recette/garage-repetition.sh
+```
+
+Elle monte un Garage et un MinIO jetables sur des ports qu'elle vérifie libres,
+puis mesure : l'image épinglée par digest, une initialisation entièrement
+scriptée, la migration des objets vérifiée un par un (clé, taille, somme
+SHA-256), un PDF de 50 Mo téléversé et relu par URL signée sous une limite de
+4 Go, et une sauvegarde dont la restauration est prouvée en détruisant pour de
+vrai. Elle démonte tout en sortant.
+
+⚠ Deux résultats qu'elle a produits et qui vous concernent directement :
+
+- **on ne sauvegarde pas Garage « depuis le conteneur »** : son image ne
+  contient ni `sh`, ni `tar`, ni busybox. Il faut un conteneur auxiliaire qui
+  monte les volumes en lecture seule ;
+- **la lecture publique des couvertures se fait par le NOM D'HÔTE**, donc le
+  domaine des couvertures porte le nom du bucket, et l'application doit cesser
+  de répéter le bucket dans le chemin — c'est ce que fait
+  `STORAGE_PUBLIC_BUCKET_IN_PATH=false`, dont le défaut reste la forme MinIO.
 
 ⚠ **SeaweedFS a été mesuré et écarté** : ses URL signées sont refusées — avec
 ou sans remplacement d'en-tête, trois formes essayées, trois fois HTTP 403. Or

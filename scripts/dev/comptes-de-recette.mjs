@@ -262,6 +262,7 @@ async function principal() {
       // ⚠ L'ordre compte quand même : un bail exige un document `ready`, donc
       // ⑥ vient APRÈS ⑤.
       await doterLaLectrice(ctx, db);
+      await rattacherLaFicheDAuteur(db, ctx);
     } finally {
       await db.$disconnect();
     }
@@ -810,6 +811,89 @@ async function doterLEtudiante(db, slug, ctx) {
  * `OfflineLicense` par Prisma produirait exactement ce que le tamis traque : un
  * état que le produit n'aurait pas accepté de créer.
  */
+/**
+ * ⭐ RATTACHE LE COMPTE BIBLIOTHÉCAIRE À UNE FICHE D'AUTEUR, pour que
+ * « Mes encadrements » soit recettable À L'ÉCRAN.
+ *
+ * ⚠ ET LE RATTACHEMENT PASSE PAR LA ROUTE DU PRODUIT, pas par une écriture
+ * directe. `PATCH /authors/:id/compte` existe — gardée par `catalogue.gerer` —
+ * et c'est elle qui rend « Mes encadrements » calculable.
+ *
+ * 🔴 MON PREMIER JET ÉCRIVAIT EN BASE, avec un commentaire affirmant que « le
+ * produit n'a toujours aucun chemin pour rattacher une fiche ». C'était FAUX :
+ * la route a été livrée, et `authors.service.ts` écrit ce champ. J'écrivais une
+ * affirmation sur du code que je n'avais pas relu — exactement la famille que
+ * ce dépôt traque, et la troisième fois de la journée.
+ *
+ * ⚠ La dette d'origine, elle, était réelle : le 12 septembre 2026,
+ * `Author.userId` existait au schéma, dans la migration et dans le client, et
+ * RIEN ne l'écrivait. L'écran répondait « votre compte n'est relié à aucune
+ * fiche » à tout le monde, pour toujours. Elle est soldée ; ce script n'avait
+ * donc rien à contourner, seulement une route à appeler.
+ *
+ * ⚠ ET ON CHOISIT UNE FICHE QUI A DIRIGÉ QUELQUE CHOSE. Rattacher une fiche
+ * sans encadrement donnerait un écran VIDE — correct, et qui ne démontre rien.
+ * C'est la même exigence que la classe ET son inscription : un état à moitié
+ * posé s'affiche comme un défaut.
+ */
+async function rattacherLaFicheDAuteur(db, ctx) {
+  const compte = await db.user.findFirst({
+    where: { email: COMPTES.find((c) => c.role === 'LIBRARIAN').email },
+    select: { id: true, email: true },
+  });
+  if (!compte) {
+    avert('compte bibliothécaire introuvable : rien à rattacher');
+    return;
+  }
+
+  const deja = await db.author.findFirst({
+    where: { userId: compte.id },
+    select: { id: true, displayName: true },
+  });
+  if (deja) {
+    info(`fiche d'auteur déjà rattachée : « ${deja.displayName} »`);
+    return;
+  }
+
+  /**
+   * ⚠ LA FICHE DOIT AVOIR DIRIGÉ, sinon l'écran est vide. On cherche donc une
+   * fiche qui apparaît comme DIRECTEUR dans les contributions — et le rôle
+   * exact est lu du vocabulaire, pas recopié.
+   */
+  const contribution = await db.recordContributor.findFirst({
+    where: { role: { contains: 'DIRECTEUR' } },
+    select: { authorId: true, role: true },
+  });
+  if (!contribution?.authorId) {
+    avert(
+      "aucune contribution de direction dans ce fonds : « Mes encadrements » " +
+        'resterait vide même rattaché — rien à faire ici.',
+    );
+    return;
+  }
+
+  // ⚠ PAR LA ROUTE, et avec une session de BIBLIOTHÉCAIRE : si le droit
+  // manquait, le refus serait une information — pas quelque chose à contourner
+  // en écrivant derrière.
+  const session = await seConnecter(ctx, COMPTES.find((c) => c.role === 'ADMIN').email);
+  await appeler(ctx, session, 'PATCH', `/authors/${contribution.authorId}/compte`, {
+    userId: compte.id,
+  });
+  const fiche = await db.author.findUnique({
+    where: { id: contribution.authorId },
+    select: { displayName: true },
+  });
+  // ⚠ ON RECOMPTE CE QUE L'ÉCRAN COMPTERA, au lieu d'annoncer le rattachement :
+  // « la trace de succès qui précède l'acte » a coûté assez cher ici.
+  const encadres = await db.recordContributor.count({
+    where: { authorId: contribution.authorId, role: { contains: 'DIRECTEUR' } },
+  });
+  ok(
+    `fiche « ${fiche?.displayName} » rattachée à ${compte.email} — ` +
+      `${encadres} encadrement(s) visibles à l'écran`,
+  );
+}
+
 async function doterLaLectrice(ctx, db) {
   const etu = COMPTES.find((c) => c.etudiant);
 

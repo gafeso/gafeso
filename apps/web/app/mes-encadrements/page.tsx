@@ -22,6 +22,7 @@ import { getToken } from '@/lib/session';
 import { useMyFunctions } from '@/lib/functions';
 import { LIBELLES } from '@/lib/libelles';
 import { Alert, Badge, Button, Card } from '@/components/ui';
+import { CouvertureV3 } from '@/components/couverture-v3';
 import { Header } from '@/components/header';
 import { ID_CONTENU, LienDEvitement } from '@/components/lien-evitement';
 
@@ -50,6 +51,16 @@ interface Encadrement {
   annee: number | null;
   etudiant: string | null;
   universiteDeSoutenance: string | null;
+  /**
+   * ⭐⭐ LES DEUX CLÉS DE LA v3, REQUISES — servies par
+   * `EncadrementsService` (`coverTemplate: CoverTemplate`,
+   * `coverDomain: CoverDomain`), et typées LÀ-BAS plutôt que dérivées ici.
+   *
+   * ⚠ REQUISES et non optionnelles : un `?` laisserait une route qui cesse de
+   * les servir repeindre en silence toutes les vignettes en « autre ».
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 
 interface MesEncadrements {
@@ -163,6 +174,15 @@ export default function MesEncadrementsPage() {
                 <table className="w-full min-w-[44rem] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-line text-left text-xs uppercase text-muted">
+                      {/*
+                        ⚠ UNE COLONNE SANS INTITULÉ VISIBLE : la vignette est
+                        décorative et porte `aria-hidden`, donc un en-tête la
+                        nommerait pour un lecteur d'écran alors qu'elle ne dit
+                        rien de plus que le titre d'à côté. C'est la borne
+                        écrite dans CLAUDE.md — un `aria-label` qui DOUBLE un
+                        texte déjà visible reste dans le code.
+                      */}
+                      <th scope="col" className="py-2 pr-3" />
                       <th scope="col" className="py-2 pr-3">{T.colonneAnnee}</th>
                       <th scope="col" className="py-2 pr-3">{T.colonneEtudiant}</th>
                       <th scope="col" className="py-2 pr-3">{T.colonneTitre}</th>
@@ -173,6 +193,16 @@ export default function MesEncadrementsPage() {
                   <tbody>
                     {donnees.encadrements.map((e) => (
                       <tr key={e.recordId} className="border-b border-line/60 align-top">
+                        <td className="py-2 pr-3">
+                          {/* 56 px : mode MINIATURE de la v3 (seuil 80). */}
+                          <CouvertureV3
+                            coverTemplate={e.coverTemplate}
+                            coverDomain={e.coverDomain}
+                            titre={e.titre}
+                            largeur={56}
+                            className="rounded"
+                          />
+                        </td>
                         <td className="py-2 pr-3 tabular-nums">{e.annee ?? T.nonRenseigne}</td>
                         <td className="py-2 pr-3">{e.etudiant ?? T.nonRenseigne}</td>
                         <td className="py-2 pr-3 font-medium text-ink">

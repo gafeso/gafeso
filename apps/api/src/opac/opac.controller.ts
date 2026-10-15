@@ -25,6 +25,7 @@ import { JwtPayload } from '../auth/jwt.strategy';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { tokenFromCookieHeader } from '../auth/session-cookie';
 import { AuthzService } from '../auth/authz.service';
+import { reponseDeScan, type NiveauDeScan } from './scan-par-niveau';
 import { FONCTIONS } from '../auth/functions';
 import { AccessControlService } from '../access-control/access-control.service';
 import { AuthorsService } from '../authors/authors.service';
@@ -304,12 +305,78 @@ export class OpacController {
           'l’étiquette, pas le code-barres.',
       );
     }
-    return this.opac.recordDetail(
-      this.prisma.forTenant(resolved.slug),
-      lu.recordId,
-      this.isMember(resolved.slug, authorization, cookie),
-      resolved.slug,
-    );
+    const db = this.prisma.forTenant(resolved.slug);
+    const membre = this.isMember(resolved.slug, authorization, cookie);
+    const record = await this.opac.recordDetail(db, lu.recordId, membre, resolved.slug);
+
+    /**
+     * ⭐ LE NIVEAU SE RÉSOUT EN BASE, PAS DANS LE JETON.
+     *
+     * `circulation.faire` est la fonction du guichet : c'est elle qui distingue
+     * un bibliothécaire d'un étudiant, et elle est relue à CHAQUE requête par
+     * `AuthzService`. Lire le rôle du JWT ferait survivre un droit révoqué
+     * jusqu'à l'expiration du jeton — et ce qui est en jeu ici est le nom d'un
+     * emprunteur.
+     *
+     * ⚠ Un jeton illisible ou d'une autre école donne `visiteur`, jamais une
+     * erreur : un QR se scanne sans être connecté, c'est son usage normal.
+     */
+    const sujet = this.sujetDuJeton(resolved.slug, authorization, cookie);
+    let niveau: NiveauDeScan = 'visiteur';
+    if (sujet) {
+      niveau = (await this.authz.hasFunction(db, sujet, FONCTIONS.CIRCULATION_FAIRE))
+        ? 'bibliothecaire'
+        : 'etudiant';
+    }
+
+    const exemplaires = await this.opac.exemplairesPourLeScan(db, lu.recordId);
+    /**
+     * ⚠ LA LECTURE EN LIGNE SE DEMANDE AU CONTRÔLE D'ACCÈS, jamais au niveau.
+     * Un étudiant de la mauvaise classe est `etudiant` et n'a PAS le droit de
+     * lire : confondre les deux rendrait une action qui échoue au clic.
+     */
+    let lectureEnLigne = false;
+    if (sujet) {
+      // ⚠ `document.lire` est la lecture LIBRE du personnel : pas de contexte à
+      // construire, et surtout pas d'embargo à contourner — c'est la même
+      // distinction que la route de lecture en ligne fait déjà.
+      if (await this.authz.hasFunction(db, sujet, FONCTIONS.DOCUMENT_LIRE)) {
+        lectureEnLigne = true;
+      } else {
+        const ctx = await this.accessControl.buildStudentContext(resolved, db, sujet);
+        const etat = await this.accessControl.getRecordAccessStatus(db, ctx, lu.recordId);
+        lectureEnLigne = etat.granted;
+      }
+    }
+
+    return reponseDeScan({
+      niveau,
+      record,
+      exemplaires,
+      exemplaire: exemplaires[0] ?? null,
+      lectureEnLigne,
+      maintenant: new Date(),
+    });
+  }
+
+  /**
+   * Le sujet du jeton, ou `null`. Même lecture que `isMember`, mais elle REND
+   * l'identifiant : sans lui on ne peut pas interroger les fonctions en base.
+   */
+  private sujetDuJeton(
+    tenantSlug: string,
+    authorization?: string,
+    cookie?: string,
+  ): string | null {
+    const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
+    const token = bearer ?? tokenFromCookieHeader(cookie);
+    if (!token) return null;
+    try {
+      const payload = this.jwt.verify(token) as { tenant?: string; sub?: string };
+      return payload.tenant === tenantSlug && payload.sub ? payload.sub : null;
+    } catch {
+      return null;
+    }
   }
 
   @Get('resoudre/:identifiant')

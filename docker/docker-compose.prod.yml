@@ -61,26 +61,130 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── MinIO : stockage objet (fichiers numériques, couvertures) ──
-  # Le bucket "covers" est public (couvertures d'ouvrages) : Caddy le
-  # publie sur un sous-domaine dédié (voir Caddyfile + MINIO_PUBLIC_URL
-  # dans .env.prod). Le bucket "digital-copies" reste interne — l'accès
-  # passe toujours par une URL signée temporaire délivrée par l'API.
-  minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+  # ── Garage : stockage objet S3 (fichiers numériques, couvertures) ──
+  #
+  # 🔴 POURQUOI PLUS MinIO : son image officielle n'est plus téléchargeable
+  # anonymement depuis Docker Hub — mesuré le 13 octobre 2026 avec ses deux
+  # témoins (une image publique quelconque se télécharge ; un dépôt inventé rend
+  # le MÊME refus). Ni le tag, ni le DIGEST, ni aucun miroir public ne la
+  # servent : le refus porte sur le DÉPÔT, donc épingler l'empreinte ne sauve
+  # rien. Une installation NEUVE ne pouvait plus démarrer.
+  #
+  # Garage est AGPL-3.0 comme Gafeso, pèse 32 Mo d'image et 21 Mo de mémoire au
+  # repos. Sa répétition complète est dans ce dépôt et REJOUABLE :
+  # `scripts/recette/garage-repetition.sh` — six points mesurés, dont la
+  # migration vérifiée objet par objet et une restauration prouvée.
+  #
+  # ⚠ DEUX DIFFÉRENCES D'ARCHITECTURE, mesurées, qui expliquent ce bloc :
+  #   · Garage n'implémente PAS `PutBucketPolicy` : la lecture publique des
+  #     couvertures passe par son point d'entrée WEB, où le bucket est choisi
+  #     par le NOM D'HÔTE. Le bucket public porte donc ${STORAGE_DOMAIN} pour
+  #     nom, et l'application cesse de répéter le bucket dans le chemin
+  #     (STORAGE_PUBLIC_BUCKET_IN_PATH=false).
+  #   · son image ne contient NI sh, NI tar, NI busybox : on n'y exécute rien.
+  #     L'initialisation passe par son API d'ADMINISTRATION, et une sauvegarde
+  #     se prend par un conteneur AUXILIAIRE qui monte les volumes.
+  garage:
+    image: dxflrs/garage@sha256:58e68794286868230708803e50495bfe7d1d1c7b696e0c2dee99b03c524fc960
     restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requis (16 caractères minimum)}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET requis (32 octets hex)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN requis (32 octets hex)}
     volumes:
-      - minio_data:/data
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    # ⚠ AUCUN PORT PUBLIÉ : ni S3, ni web, ni administration. Tout passe par
+    # Caddy, et l'API d'administration ne sort JAMAIS du réseau du compose.
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # ⚠ `/health` de l'API d'administration, SANS jeton : il est ouvert
+      # exprès pour cet usage. Et l'image n'a pas de shell, donc la sonde est
+      # le binaire lui-même.
+      test: ["CMD", "/garage", "status"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # ── Initialisation de Garage : UNE FOIS, et sans aucun geste manuel ──
+  #
+  # ⭐ Elle est IDEMPOTENTE, et c'est mesuré en la lançant DEUX FOIS : même
+  # nombre de buckets et de clés après. `restart: "no"` suffit donc — un
+  # redémarrage du compose la rejoue sans rien casser.
+  #
+  # ⚠ Elle emploie l'image de l'API parce que celle de Garage ne peut rien
+  # exécuter. Elle ne demande PAS la base : elle ne parle qu'à l'API
+  # d'administration de Garage.
+  garage-init:
+    # ⭐ LE MÊME BUILD QUE L'API, et non une image à TÉLÉCHARGER.
+    #
+    # 🔴 MESURÉ : avec `image: gafeso-api:local`, le compose a tenté de la
+    # TIRER d'un registre et a rendu « pull access denied for gafeso-api,
+    # repository does not exist ». L'image est construite ici, elle n'existe
+    # dans aucun registre — et c'est `cause_en_clair` qui l'a nommé, sinon je
+    # lisais « le démarrage a échoué » et rien d'autre.
+    #
+    # ⚠ Compose construit l'image UNE FOIS et la partage entre les deux
+    # services qui déclarent le même build : il n'y a pas de construction en
+    # double.
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      # LA VERSION QUI TOURNE — posée par `eval "$(scripts/version-du-depot.sh --exporter)"`
+      # AVANT le build. Absente, le Dockerfile rend « non étiquetée », qui est la
+      # réponse honnête — jamais un numéro plausible.
+      # ⚠ La web n'en reçoit PAS : elle lit `GET /health`. Deux sources pour une
+      # même valeur s'accordent PAR COÏNCIDENCE jusqu'au jour où l'une bouge.
+      args:
+        # 🔴 PLUS AUCUN DÉFAUT ICI, ET C'EST LE POINT.
+        #
+        # `${GAFESO_VERSION:-non étiquetée}` substituait une réponse HONNÊTE à
+        # une version ABSENTE — donc un `up -d --build` lancé sans
+        # `eval "$(scripts/version-du-depot.sh --exporter)"` produisait une image
+        # qui répond « non étiquetée / inconnu », SANS AUCUN AVERTISSEMENT.
+        # Constaté au déploiement de rc7 sur la démonstration, 9 octobre 2026.
+        #
+        # ⚠ Le défaut était défendable en soi — « dire la vérité plutôt qu'un
+        # numéro plausible ». Il était faux à CET endroit : il rendait l'oubli
+        # indiscernable du choix. Sans lui, la variable arrive VIDE et l'image
+        # REFUSE de se construire en disant quoi lancer.
+        GAFESO_VERSION: ${GAFESO_VERSION}
+        GAFESO_COMMIT: ${GAFESO_COMMIT}
+    restart: "no"
+    depends_on:
+      garage:
+        condition: service_healthy
+    environment:
+      # ⚠ LES DEUX SECRETS QU'ELLE EMPLOIE, ET EUX SEULS : ce sont les
+      # identifiants S3 qu'elle IMPORTE dans Garage. Elle ne reçoit ni le mot
+      # de passe de la base, ni la clé de l'index, ni la KEK des documents —
+      # elle n'en a aucun usage, et un conteneur qui porte un secret qu'il ne
+      # peut pas employer est un secret de plus à voler.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      GARAGE_ADMIN_URL: http://garage:3903
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      STORAGE_PUBLIC_DOMAIN: ${STORAGE_DOMAIN}
+      GARAGE_KEY_NAME: gafeso
+    # ⭐ LE POINT D'ENTRÉE DE L'IMAGE EST CONTOURNÉ, ET C'EST MESURÉ.
+    #
+    # Il fait DEUX choses qu'une initialisation de stockage ne doit pas faire :
+    #   ① il exige les CINQ secrets de production — mesuré, il a refusé ce
+    #      service en les nommant un par un. Or l'initialisation ne parle qu'à
+    #      l'API d'administration de Garage : lui donner le mot de passe de la
+    #      base et la KEK des documents serait l'inverse du moindre privilège ;
+    #   ② 🔴 il applique `prisma migrate deploy`. Une initialisation de
+    #      STOCKAGE qui migre la base au passage est un effet de bord que
+    #      personne n'a demandé — et il arriverait AVANT que l'API démarre.
+    #
+    # ⚠ Ce n'est donc pas un garde qu'on relâche : c'est un point d'entrée
+    # écrit pour l'API, employé par un service qui n'est pas l'API. Le garde
+    # des secrets continue de s'appliquer à `api`, qui est son objet.
+    entrypoint: ["node"]
+    # ⚠ SANS « node » : l'entrypoint ci-dessus EST node. Les deux ensemble
+    # lanceraient `node node scripts/…`.
+    command: ["scripts/lib/garage-initialiser.mjs"]
+
 
   # ── API NestJS ──
   # Le point d'entrée de l'image (docker-entrypoint.sh) applique les
@@ -112,11 +216,23 @@ services:
         GAFESO_COMMIT: ${GAFESO_COMMIT}
     restart: unless-stopped
     depends_on:
+      # ⭐ ET L'INITIALISATION DOIT AVOIR TERMINÉ, pas seulement démarré.
+      #
+      # 🔴 MESURÉ en montant la pile : sans cette ligne, `up -d api` ne lance
+      # PAS `garage-init` — il n'est la dépendance de personne. L'API démarrait
+      # sur un Garage sans bucket et sortait sur « AccessDenied » suivi de vingt
+      # lignes de SDK, qui n'accusent rien.
+      #
+      # ⚠ `service_completed_successfully` et non `service_started` : un
+      # initialiseur qui a COMMENCÉ n'a pas fini de poser les buckets, et l'API
+      # les cherche dès son premier souffle.
+      garage-init:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -133,8 +249,8 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY requis (24 caractères aléatoires minimum)}
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
+      MINIO_ENDPOINT: garage
+      MINIO_PORT: 3900
       MINIO_USE_SSL: "false"
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -142,6 +258,16 @@ services:
       # — sans elle, les URLs de couverture générées pointeraient vers le nom
       # interne "minio", injoignable depuis le navigateur.
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:?MINIO_PUBLIC_URL requis (ex. https://storage.bibliotheque.gafeso.exemple)}
+      # ⚠ AVEC GARAGE, LE BUCKET N'EST PAS DANS LE CHEMIN : son point d'entrée
+      # web choisit le bucket par le NOM D'HÔTE, et le bucket public porte
+      # ${STORAGE_DOMAIN} pour nom. Répéter « covers » dans le chemin donnerait
+      # un 404 — mesuré sur une pile jetable.
+      STORAGE_PUBLIC_BUCKET_IN_PATH: "false"
+      # ⚠ ET SON NOM N'EST PLUS « covers » : le bucket public porte le DOMAINE,
+      # parce que le point d'entrée web de Garage choisit le bucket par le nom
+      # d'hôte. Mesuré : avec « covers » câblé en dur, l'API créait un bucket
+      # parasite et ne trouvait pas celui de l'initialisation.
+      STORAGE_PUBLIC_BUCKET: ${STORAGE_DOMAIN}
       # SMTP réel — voir DEPLOY.md « Configurer le SMTP réel ». Laissé vide
       # par défaut : l'app démarre quand même et journalise les emails au
       # lieu de les envoyer (mode dégradé explicite, jamais un crash).
@@ -239,7 +365,7 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     ports:
       # Ports HÔTE surchargeables (défauts 80/443 pour un vrai déploiement).
@@ -266,6 +392,7 @@ services:
 volumes:
   db_data:
   meili_data:
-  minio_data:
+  garage_meta:
+  garage_data:
   caddy_data:
   caddy_config:

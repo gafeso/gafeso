@@ -98,9 +98,15 @@ export default function ReglesDeCirculationPage() {
     }
   }, []);
 
+  /*
+   * ⚠ ON N'APPELLE QUE SI LE DROIT EST LÀ. Mesuré par l'épreuve : l'effet
+   * partait quelles que soient les fonctions, donc une personne sans
+   * `etablissement.regles` provoquait un 403 que NOUS avions déclenché.
+   */
+  const peutRegler = functions?.includes('etablissement.regles');
   useEffect(() => {
-    void charger();
-  }, [charger]);
+    if (peutRegler) void charger();
+  }, [peutRegler, charger]);
 
   function editer(r: Regle) {
     setEditionId(r.id);
@@ -167,7 +173,7 @@ export default function ReglesDeCirculationPage() {
 
   // ⚠ Un refus n'est pas une attente : sans ce garde, l'adresse tapée sans la
   // fonction laisserait la table sur « Chargement… » indéfiniment.
-  if (functions && !functions.includes('etablissement.regles')) {
+  if (functions && !peutRegler) {
     return <Alert tone="error">{LIBELLES.refusDeDroit.reglesDeCirculation}</Alert>;
   }
 
@@ -328,7 +334,13 @@ export default function ReglesDeCirculationPage() {
             />
           </label>
           <div className="col-span-2 flex gap-2 md:col-span-3">
-            <Button type="submit" disabled={enCours}>
+            {/*
+              ⚠ ET PAS AVANT DE SAVOIR CE QUI EXISTE. La table est vide tant que
+              `regles` est `null` : enregistrer à cet instant fait créer une
+              règle pour un couple qui en a peut-être déjà une — « le vide qui
+              invite à agir », où le geste, lui, existera.
+            */}
+            <Button type="submit" disabled={enCours || regles === null}>
               {T.enregistrer}
             </Button>
             {editionId && (

@@ -90,20 +90,19 @@ const EXCEPTIONS: ReadonlyArray<{
     nature: 'sans-session',
     motif: 'atteint par un lien à usage unique, avant toute session.',
   },
-  {
-    route: '/mentions-legales',
-    nature: 'coque-propre',
-    motif:
-      '⚠ DETTE RECONNUE, pas un choix : ces pages n’ont aucune navigation, et leur ' +
-      'public EST le dehors (le pied de page y mène, un QR peut y mener). Rapporté ' +
-      'le 12 octobre 2026 ; elles restent déclarées ici pour que le manque soit une ' +
-      'dette nommée plutôt qu’un oubli.',
-  },
-  {
-    route: '/confidentialite',
-    nature: 'coque-propre',
-    motif: 'même dette que /mentions-legales, même date.',
-  },
+  /*
+   * ⭐ LA DETTE DU 12 OCTOBRE EST SOLDÉE, et c'est CE TEST qui l'a dit.
+   *
+   * `/mentions-legales` et `/confidentialite` étaient déclarées « coque-propre »
+   * avec le motif « DETTE RECONNUE : ces pages n'ont aucune navigation, et leur
+   * public EST le dehors ». Elles portent désormais en-tête et pied communs
+   * (`app/mentions-legales/layout.tsx`), donc l'exception est devenue FAUSSE —
+   * et le garde l'a refusée au premier `npm test`.
+   *
+   * C'est la moitié qu'on oublie d'écrire : une dette qui ne se rappelle qu'en
+   * s'aggravant laisserait passer sa propre résolution. Celle-ci s'est effacée
+   * toute seule, en convoquant quelqu'un.
+   */
 ];
 
 /** Tous les `page.tsx`, en route, hors administration et hors guichet. */
@@ -204,15 +203,19 @@ describe('⭐⭐ la coque de l’espace lecteur — couverte, ou déclarée avec
      * vérification que personne ne fera. Le test l'a refusé tout de suite.
      */
     expect(routes().length).toBe(21);
+    /*
+     * ⚠ SIX, ET NON HUIT : `/mentions-legales` et `/confidentialite` ont quitté
+     * cette liste le 15 octobre 2026 — elles portent désormais la coque commune.
+     * Le compte ÉLÉMENT PAR ÉLÉMENT l'a dit ; un compte de LONGUEUR serait resté
+     * juste en échangeant deux entrées contre deux autres.
+     */
     expect([...declarees].sort()).toEqual([
       '/',
       '/affiche/[id]',
-      '/confidentialite',
       '/definir-mot-de-passe',
       '/e/[slug]',
       '/inscription',
       '/login',
-      '/mentions-legales',
     ]);
   });
 });

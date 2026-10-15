@@ -30,7 +30,7 @@
 | **Service de droit** | `AccessControlService.getRecordAccessStatus(ctx, recordId)` **pur métier**, aucun couplage HTTP (`access-control.service.ts:281`) ; repli personnel `authz.hasFunction(db, sub, 'document.lire')` (`authz.service.ts:34`) ; `buildStudentContext` assemble `ctx` (`:305`) | **Réutilisé tel quel** par `offline-licensing` pour décider l'émission. Aucun refactor. |
 | **Presigned MinIO** | `StorageService.putObject` écrit le **buffer clair** (`storage.service.ts:150`) ; `getSignedDownloadUrl` sert le clair, TTL 5 min lecture / 15 min DL (`:177`) ; check de droit AVANT dans `OpacService.getReadUrl` (`opac.service.ts:158`) | Ingestion produit **en plus** un **blob chiffré AEAD 16 Ko + xref-validé** (2e objet MinIO). Le lecteur en ligne (pdf.js) garde le clair via URL signée ; **l'offline télécharge le blob chiffré**. |
 | **TenantMiddleware** | Résolution **par domaine** (`tenant.middleware.ts:19`), `@CurrentTenant()` → `req.tenant`, puis `prisma.forTenant(slug)` (schema-per-tenant via `?schema=`, `prisma.service.ts:53`) | **Généraliser** pour clients API-directs (mobile) : accepter `X-Tenant` (ou le claim JWT `tenant`) en repli quand le domaine ne résout pas — validé contre le claim. *Petit changement, chemin sensible.* |
-| **Refresh token** | **INEXISTANT** (JWT HS256 autoporteur, TTL `JWT_EXPIRES_IN=1d`, aucune rotation/révocation). Révocation « temps réel » = fonctions re-résolues en base à chaque requête | **Hors périmètre → brief #2.** Le cœur offline ne s'appuie pas dessus : révocation via `GET /offline/licenses/:id/status` (re-check en ligne) + `expires` du bail. |
+| **Refresh token** | **INEXISTANT** (JWT HS256 autoporteur, TTL `JWT_EXPIRES_IN=1d`, aucune rotation/révocation). Révocation « temps réel » = fonctions re-résolues en base à chaque requête | **Hors périmètre → phase suivante.** Le cœur offline ne s'appuie pas dessus : révocation via `GET /offline/licenses/:id/status` (re-check en ligne) + `expires` du bail. |
 | **Endpoint « mes docs numériques autorisés »** | **ABSENT.** Existe `/collections/me` (collections, pas les notices à PDF) (`access-control.controller.ts:68`) | **À créer** : `GET /offline/my-documents` = `getVisibleCollections(ctx)` ∩ `BiblioRecord` ayant une `digitalCopy`. |
 | **Modèle Prisma fichiers/droits** | `DigitalCopy` (tenant, 1:1 notice, `objectKey`, bucket `digital-copies`, **clair**) (`schema.prisma:604`) ; **aucun `Device`/`License`** | Ajouter `Device` + `OfflineLicense` (**PAR-TENANT**), étendre `DigitalCopy` (pointeur blob chiffré + marqueur xref). |
 
@@ -102,7 +102,7 @@
 2. **Endpoint « mes docs numériques autorisés » ?** ❌ **N'existe pas.** À créer
    (`GET /offline/my-documents`), source = `getVisibleCollections(ctx)` ∩ notices avec `digitalCopy`.
 3. **Refresh token ?** ❌ **Absent** (aucune rotation/révocation ; session JWT 1 j autoporteur).
-   **Recommandation : ne pas bloquer le brief #1** — le déport en **brief #2**. La révocation offline
+   **Recommandation : ne pas bloquer la PREMIÈRE phase** — le déport en phase SUIVANTE. La révocation offline
    passe par `status` en ligne + `expires`, pas par l'invalidation JWT.
 4. **TTL bail 14 j ?** OK comme défaut, **configurable par tenant** — bon emplacement : modèle global
    `TenantSettings` (public). **À confirmer** (14 j convient ?).
@@ -119,7 +119,7 @@
 1. **Résolution tenant mobile** (alerte §0.3) : je généralise `TenantMiddleware` pour accepter
    `X-Tenant` (repli, validé contre le claim JWT) ? — **recommandé**.
 2. **Crypto** : Ed25519 (signature) + RSA-2048-OAEP Keystore (wrap CEK) + AEAD 16 Ko ? — recommandé.
-3. **Refresh token** : déporté en brief #2 (recommandé) ?
+3. **Refresh token** : déporté en phase suivante (recommandé) ?
 4. **TTL 14 j** confirmé (ou autre) ?
 5. **Clair + blob chiffré coexistent** (online garde le clair, offline le chiffré) — OK ? (alternative :
    chiffré-seul, mais casserait le lecteur pdf.js en ligne).

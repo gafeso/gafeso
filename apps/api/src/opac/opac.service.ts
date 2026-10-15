@@ -264,6 +264,52 @@ export class OpacService {
    * `zinda.localhost`, et une étiquette imprimée depuis l'un se scanne depuis
    * l'autre. Ne comparer qu'au principal refuserait les siennes propres.
    */
+  /**
+   * Les exemplaires d'une notice, tels que le SCAN en a besoin.
+   *
+   * ⚠ Elle rend le prêt EN COURS avec le nom de l'emprunteur — et c'est pour
+   * cela qu'elle ne sert QU'AU scan, dont le composeur décide ensuite ce qui
+   * part selon le niveau. Une méthode qui rendrait ces champs à tout appelant
+   * les ferait fuir par le premier qui l'emploie sans y penser.
+   *
+   * ⚠ ET LE NOM VIENT DE LA FICHE D'ADHÉRENT, pas du compte lié : un adhérent
+   * sans compte porte quand même son nom, et c'est le défaut corrigé le
+   * 16 septembre — « — » affiché là où la fiche portait le nom.
+   */
+  async exemplairesPourLeScan(db: TenantDb, recordId: string) {
+    const items = await db.item.findMany({
+      where: { recordId },
+      orderBy: { barcode: 'asc' },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        location: true,
+        callNumber: true,
+        checkouts: {
+          where: { returnDate: null },
+          orderBy: { checkoutDate: 'desc' },
+          take: 1,
+          select: { dueDate: true, patron: { select: { firstName: true, lastName: true } } },
+        },
+      },
+    });
+    return items.map((i) => {
+      const pret = i.checkouts[0];
+      const nom = pret?.patron
+        ? [pret.patron.lastName, pret.patron.firstName].filter(Boolean).join(', ') || null
+        : null;
+      return {
+        id: i.id,
+        codeBarre: i.barcode,
+        statut: i.status as string,
+        emplacement: i.location,
+        cote: i.callNumber,
+        pret: pret ? { echeance: pret.dueDate, emprunteur: nom } : null,
+      };
+    });
+  }
+
   async hotesDeLEcole(slug: string): Promise<string[]> {
     return this.cacheHotes.valeur(slug, async () => {
       const t = await this.prisma.tenant.findUnique({

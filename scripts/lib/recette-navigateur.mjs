@@ -66,13 +66,31 @@
  */
 export function hoteAutorise(url) {
   const HOTES_AUTORISES = ['localhost', '127.0.0.1', '[::1]', '::1'];
+  // ⚠ ET LE SUFFIXE « .localhost », sans quoi ce garde refuse le produit tel
+  // qu'il FONCTIONNE : Gafeso résout l'école par l'en-tête Host, donc toute
+  // recette d'un écran de tenant passe par « zinda.localhost ». La liste
+  // ci-dessus portait sur le NOM ; la propriété défendue est une ADRESSE.
+  //
+  // Le suffixe est sûr PAR SPÉCIFICATION, pas par confiance : la RFC 6761
+  // réserve le domaine de premier niveau « localhost », interdit sa délégation
+  // dans le DNS public et impose sa résolution en boucle locale. Un nom qui
+  // s'y termine ne peut donc pas sortir de la machine — mesuré ici :
+  // « zinda.localhost » → 127.0.0.1 et ::1, aucune entrée dans /etc/hosts.
+  //
+  // ⚠ CE QUI N'A PAS ÉTÉ FERMÉ, et pourquoi : un /etc/hosts hostile pourrait
+  // faire pointer « x.localhost » ailleurs. Le fermer demanderait de RÉSOUDRE
+  // le nom — donc de toucher au réseau, donc de perdre la pureté que le
+  // commentaire d'en-tête annonce et de mettre ce témoin derrière une porte
+  // qui ne s'ouvre pas toujours. Qui peut écrire /etc/hosts possède déjà la
+  // machine ; la borne est déclarée plutôt que tue.
+  const localeParSuffixe = (h) => h === 'localhost' || h.endsWith('.localhost');
   let hote;
   try {
     hote = new URL(url).hostname;
   } catch {
     return { autorise: false, raison: `URL illisible : ${url}` };
   }
-  if (!HOTES_AUTORISES.includes(hote)) {
+  if (!HOTES_AUTORISES.includes(hote) && !localeParSuffixe(hote)) {
     return {
       autorise: false,
       raison:
@@ -80,7 +98,7 @@ export function hoteAutorise(url) {
         `  Ce script SE CONNECTE avec un mot de passe et CAPTURE des écrans : pointé\n` +
         `  ailleurs que sur un développement local, il enverrait un secret à une\n` +
         `  instance qui n’est pas la nôtre et photographierait les données d’un client.\n` +
-        `  Hôtes autorisés : ${HOTES_AUTORISES.join(', ')}.`,
+        `  Hôtes autorisés : ${HOTES_AUTORISES.join(', ')}, ou tout nom en « .localhost ».`,
     };
   }
   return { autorise: true, raison: null };
@@ -110,6 +128,19 @@ export function autotesterHote(journal = console.log) {
     ['http://localhost.evil.test', false],
     ['http://127.0.0.1.evil.test', false],
     ['https://10.0.0.5', false],
+    // ⚠ LE CAS DU PRODUIT : l'école se résout par le Host, donc la recette
+    // d'un écran de tenant n'a pas d'autre forme que celle-ci.
+    ['http://zinda.localhost:3000', true],
+    ['http://horizon.localhost:3000', true],
+    // ⚠ CELUI QUI FAIT PEUR ET QUI DOIT PASSER. Il a l'air d'une attaque, et
+    // il n'en est pas une : « .localhost » n'est pas délégable, ce nom résout
+    // en boucle locale, aucun secret ne quitte la machine. Écrit ici pour que
+    // personne ne « corrige » le garde en croyant fermer un trou.
+    ['https://demo.gafeso.org.localhost', true],
+    // ⚠ Et sa jumelle, qui ne doit PAS passer : le suffixe n'est pas « contient ».
+    ['https://demo.gafeso.org.localhost.evil.test', false],
+    ['http://notlocalhost', false],
+    ['http://localhost.gafeso.org', false],
     ['pas une url', false],
   ];
   let rate = 0;

@@ -133,6 +133,37 @@ interface Surface {
 
 const SURFACES: Surface[] = [
   {
+    ecran: 'app/opac/auteurs/[id]/fiche-auteur.tsx',
+    generation: 'v3',
+    compose: true,
+    typeDans: 'app/opac/auteurs/[id]/fiche-auteur.tsx',
+    type: 'Work',
+    champ: 'coverDomain',
+    categorie: 'requis',
+    motif:
+      'MESURÉ le 15 octobre 2026 sur l’objet ENTIER servi par ' +
+      '`GET /opac/authors/:id` : chaque œuvre porte `coverDomain, coverTemplate, ' +
+      'recordId, recordType, title, year`. La fiche publique d’un auteur est une ' +
+      'page de DÉCOUVERTE — on y arrive sans savoir ce que la personne a écrit — ' +
+      'donc la vignette y fait plus que décorer : elle distingue les domaines ' +
+      'd’un coup d’œil dans une liste qui n’a ni auteur ni éditeur à afficher.',
+  },
+  {
+    ecran: 'app/mes-encadrements/page.tsx',
+    generation: 'v3',
+    compose: true,
+    typeDans: 'app/mes-encadrements/page.tsx',
+    type: 'Encadrement',
+    champ: 'coverDomain',
+    categorie: 'requis',
+    motif:
+      '`EncadrementsService` type les deux clés LÀ-BAS (`coverTemplate: ' +
+      'CoverTemplate`, `coverDomain: CoverDomain`) et les sert ; on ne les dérive ' +
+      'donc pas ici. ⚠ La colonne n’a pas d’intitulé visible : la vignette porte ' +
+      '`aria-hidden` et ne dit rien de plus que le titre d’à côté — un en-tête la ' +
+      'ferait annoncer deux fois à un lecteur d’écran.',
+  },
+  {
     ecran: 'app/affiche/[id]/page.tsx',
     generation: 'v3',
     compose: true,
@@ -289,7 +320,7 @@ describe('l’inventaire des surfaces', () => {
      * quand `GET /reader/consultations` a servi les deux clés. Le compte a
      * CONVOQUÉ — c'est ainsi qu'on l'a su, et non par une relecture.
      */
-    expect(SURFACES).toHaveLength(7);
+    expect(SURFACES).toHaveLength(9);
     for (const s of SURFACES) {
       expect(s.motif.length, `motif trop court pour ${s.ecran}`).toBeGreaterThan(60);
     }
@@ -303,7 +334,7 @@ describe('l’inventaire des surfaces', () => {
      * la route a servi les clés. SIXIÈME convocation de ce compte en trois
      * jours — une par surface neuve, et jamais par une relecture.
      */
-    expect(SURFACES.filter((s) => s.compose)).toHaveLength(7);
+    expect(SURFACES.filter((s) => s.compose)).toHaveLength(9);
   });
 
   it('une surface BRANCHÉE importe le composant, et reçoit `category` À COUP SÛR', () => {

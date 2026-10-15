@@ -208,7 +208,103 @@ while IFS= read -r f; do
   fi
 done <<< "$FICHIERS"
 
-# ══ 7 · Compte de fichiers — ce qui a attrapé ce qu'aucun scanner ne voyait ═══
+# ══ 7 · Archives et gros fichiers ═════════════════════════════════════════════
+#
+# 🔴 LE 15 OCTOBRE 2026, UN `git add -A` DE MA MAIN A COMMITÉ UNE ARCHIVE DE
+# 7,9 Mo DU VOLUME MinIO DE L'INSTANCE DE DÉMONSTRATION — des données de
+# production. Elle n'est pas partie : le crochet de pré-PUBLICATION a refusé le
+# push, pour une tout autre raison, et ce hasard est la seule chose qui l'a
+# arrêtée.
+#
+# ⚠ ET LE PRE-COMMIT NE L'AVAIT PAS VUE. C'est le moment qui compte : une fois
+# l'objet dans l'historique local, il reste lisible à qui a son SHA même après
+# `--amend` — le reflog le donne. Il a fallu `reflog expire` + `gc --prune` pour
+# le faire disparaître, et c'est une manœuvre qu'on ne veut pas répéter.
+#
+# ⭐ LE REFUS EST DONC POSÉ ICI, sur le chemin du geste : un motif qui s'est
+# produit une fois en silence se barre, il ne s'explique pas.
+#
+# ⚠ DEUX CRITÈRES, et ils ne se recouvrent pas : une archive de 2 ko est
+# refusée pour ce qu'elle EST (un conteneur dont on ne voit pas le contenu), et
+# un fichier de 6 Mo pour ce qu'il PÈSE (personne ne relit 6 Mo dans un diff).
+ARCHIVES_TOLEREES=(
+  # ⚠ Chaque entrée porte son MOTIF. Une tolérance sans raison écrite est la
+  # façon élégante de désactiver ce garde.
+  #   <chemin>  # <pourquoi il a le droit d'être là>
+  'apps/api/test/cross-vector/build.sh'  # pas une archive : le nom finit par .sh
+)
+GROS_TOLERES=(
+  'docs/BiblioCloud - Manuel d’utilisation.pdf'  # 338 ko, sous le seuil — ici pour mémoire
+)
+MAX_OCTETS=$((5 * 1024 * 1024))
+
+est_tolere() {
+  local f=$1 t
+  for t in "${ARCHIVES_TOLEREES[@]}" "${GROS_TOLERES[@]}"; do [ "$f" = "$t" ] && return 0; done
+  return 1
+}
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  est_tolere "$f" && continue
+  case "$f" in
+    *.tar|*.tar.gz|*.tgz|*.tar.bz2|*.tar.xz|*.zip|*.dump|*.bak)
+      refuse "Archive ou vidage de base dans ce commit : $f"
+      detail 'Les données réelles ne vont JAMAIS dans un dossier du dépôt, même ignoré.'
+      detail 'Déposez-les HORS du dépôt (ex. ~/recette-garage/) et passez le chemin'
+      detail "en variable d'environnement."
+      detail 'Si ce fichier est légitime : ajoutez-le à ARCHIVES_TOLEREES AVEC SON MOTIF.'
+      continue ;;
+  esac
+  # ⚠ `.sql` NE SE JUGE PAS PAR SON EXTENSION, et mon premier jet s'est trompé :
+  # il refusait les QUARANTE-DEUX migrations Prisma du dépôt, qui DOIVENT être
+  # versionnées. Un détecteur qui signale du code correct se fait désactiver, et
+  # il ne sert plus le jour où il a raison.
+  #
+  # ⭐ Ce qui distingue un VIDAGE d'une migration n'est pas le suffixe : c'est
+  # l'EMPLACEMENT (les migrations vivent dans trois dossiers connus) et la
+  # TAILLE (mesurée : la plus grosse migration du dépôt fait 16 ko ; un vidage
+  # fait des mégaoctets). Deux filets indépendants, et un vidage déposé DANS
+  # `migrations/` serait pris par le second.
+  case "$f" in
+    apps/api/prisma/migrations/*.sql|scripts/migrations/*.sql|scripts/correctifs/*.sql|scripts/*.sql) ;;
+    *.sql)
+      refuse "Fichier .sql hors des dossiers de migration : $f"
+      detail 'Les .sql légitimes vivent dans apps/api/prisma/migrations/,'
+      detail 'scripts/migrations/, scripts/correctifs/ ou scripts/.'
+      detail "Ailleurs, c'est probablement un VIDAGE de base — et un vidage ne"
+      detail 'va jamais dans le dépôt.'
+      continue ;;
+  esac
+  # ⚠ LA TAILLE SE LIT DANS L'INDEX en mode --index, pas sur le disque : c'est
+  # ce qui PARTIRAIT qu'on juge. Un fichier réduit après `git add` passerait
+  # sinon pour petit.
+  if [ "$MODE" = --index ]; then
+    TAILLE=$(git cat-file -s "$(git rev-parse ":$f" 2>/dev/null)" 2>/dev/null || echo 0)
+  else
+    TAILLE=$(wc -c < "$f" 2>/dev/null || echo 0)
+  fi
+  # ⚠ UN `.sql` DE PLUS D'UN MÉGAOCTET EST UN VIDAGE, où qu'il soit. Le seuil
+  # vient d'une mesure : la plus grosse migration du dépôt fait 16 ko, donc un
+  # mégaoctet laisse soixante fois la marge et ne peut pas accuser une migration.
+  case "$f" in
+    *.sql)
+      if [ "${TAILLE:-0}" -gt $((1024 * 1024)) ]; then
+        refuse "Fichier .sql de $((TAILLE / 1024)) ko : $f"
+        detail 'La plus grosse migration de ce dépôt fait 16 ko. Au-delà du'
+        detail "mégaoctet, c'est un VIDAGE de base — il ne va pas dans le dépôt."
+        continue
+      fi ;;
+  esac
+  if [ "${TAILLE:-0}" -gt "$MAX_OCTETS" ]; then
+    refuse "Fichier de $((TAILLE / 1024 / 1024)) Mo : $f"
+    detail "Au-delà de 5 Mo, personne ne relit le contenu dans un diff — et un"
+    detail "objet entré dans l'historique y reste lisible même après --amend."
+    detail 'Si ce fichier est légitime : ajoutez-le à GROS_TOLERES AVEC SON MOTIF.'
+  fi
+done <<< "$FICHIERS"
+
+# ══ 8 · Compte de fichiers — ce qui a attrapé ce qu'aucun scanner ne voyait ═══
 if [ "$MODE" = --index ] && [ "$NB" -gt 30 ]; then
   printf '%s⚠%s %s fichiers dans ce commit — justifiez-les avant de valider.\n' "$ORANGE" "$FIN" "$NB"
 fi

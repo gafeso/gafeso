@@ -155,10 +155,16 @@ export default function ComptesPage() {
     }
   }, []);
 
+  /*
+   * ⚠ MESURÉ PAR L'ÉPREUVE : l'effet des RÔLES assignables garde déjà
+   * `comptes.gerer` ; celui-ci ne gardait rien. Deux effets dans le même écran,
+   * deux disciplines — « la faute est dans l'écart entre deux sites, jamais
+   * dans l'un d'eux », et c'est pour ça qu'une relecture ne la voit pas.
+   */
   useEffect(() => {
-    void load(status, q, numeroPage);
+    if (canManageAccounts) void load(status, q, numeroPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, numeroPage]);
+  }, [canManageAccounts, status, numeroPage]);
 
   /**
    * ⚠ CHANGER D'ONGLET OU CHERCHER REVIENT À LA PREMIÈRE PAGE. Sans ça, passer

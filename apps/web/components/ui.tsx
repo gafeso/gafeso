@@ -1,9 +1,33 @@
 // Petits composants UI maison (esprit shadcn/ui, sans dépendance).
 import { ButtonHTMLAttributes, ComponentPropsWithoutRef, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef } from 'react';
 
+/**
+ * ⭐ `type="button"` PAR DÉFAUT, et ce n'est pas une préférence.
+ *
+ * En HTML, un `<button>` sans `type` vaut `submit`. Tout `<Button onClick=…>`
+ * posé un jour à l'intérieur d'un `<form>` soumet donc le formulaire EN PLUS
+ * de faire ce qu'on lui demande — et rien ne le signale : la page se
+ * réenregistre, ou se recharge, et le clic a l'air d'avoir « mal marché ».
+ *
+ * ⚠ Mesuré avant de changer ce défaut, parce qu'il pouvait casser les boutons
+ * qui comptent sur la soumission implicite :
+ *
+ * | | |
+ * |---|---|
+ * | `type=` posé explicitement | 76 — inchangés |
+ * | `onClick` sans `type` | 134 — c'est eux que ce défaut protège |
+ * | ⚠ soumission IMPLICITE | **0** |
+ *
+ * Les trois candidats du relevé n'en étaient pas : un `<Button>` dans un
+ * `<Link>`, un bouton désactivé, et un COMMENTAIRE que mon scanner lisait comme
+ * du code. Celui qui doit soumettre l'écrit — et les deux écrans migrés vers
+ * `FormulaireCharge` comptent précisément les `type === 'submit'`, donc ils le
+ * verraient disparaître.
+ */
 export function Button({
   className = '',
   variant = 'primary',
+  type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' }) {
   const base =
@@ -12,7 +36,7 @@ export function Button({
     primary: 'bg-ink text-white hover:bg-ink/90',
     ghost: 'bg-transparent text-ink hover:bg-line/60',
   };
-  return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
+  return <button type={type} className={`${base} ${variants[variant]} ${className}`} {...props} />;
 }
 
 export function Input({

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeObjectKey, rewriteToPublicOrigin } from './storage.service';
+import {
+  bucketPublicDansLeChemin,
+  normalizeObjectKey,
+  rewriteToPublicOrigin,
+  urlPubliqueDeCouverture,
+} from './storage.service';
 
 describe('rewriteToPublicOrigin', () => {
   it('remplace le schéma/hôte/port interne par l’hôte public, en HTTPS', () => {
@@ -91,5 +96,40 @@ describe('normalizeObjectKey', () => {
         'digital-copies/digital-copies/rec-1/fichier.pdf',
       ),
     ).toBe('digital-copies/rec-1/fichier.pdf');
+  });
+});
+
+/**
+ * ⭐ LES DEUX FORMES DE L'ADRESSE PUBLIQUE D'UNE COUVERTURE.
+ *
+ * Posées pour la cible Garage, dont le point d'entrée web choisit le bucket par
+ * le NOM D'HÔTE : le chemin ne doit alors PAS répéter le bucket.
+ *
+ * ⚠ Les deux cas sont là, et c'est le sujet : un test sur la seule forme neuve
+ * laisserait la bascule du défaut passer en silence — or c'est le défaut que la
+ * production emploie.
+ */
+describe('adresse publique d’une couverture', () => {
+  const BASE = 'https://couvertures.exemple.test';
+  const url = (drapeau?: string) =>
+    urlPubliqueDeCouverture(BASE, 'covers', 'a/b.jpg', bucketPublicDansLeChemin(drapeau));
+
+  it('par DÉFAUT, le bucket est DANS le chemin — la forme de MinIO, celle de la production', () => {
+    expect(url(undefined)).toBe(`${BASE}/covers/a/b.jpg`);
+    expect(url('true')).toBe(`${BASE}/covers/a/b.jpg`);
+  });
+
+  it('à false, le bucket QUITTE le chemin — la forme de Garage, choisi par l’hôte', () => {
+    expect(url('false')).toBe(`${BASE}/a/b.jpg`);
+  });
+
+  it('⚠ seule la valeur « false » bascule : une faute de frappe garde le défaut', () => {
+    // Sans ce cas, un drapeau qui basculerait sur toute valeur non vide ferait
+    // qu'un « False » ou un « non » change l'adresse de TOUTES les couvertures
+    // — sans rien casser, donc sans que personne le voie.
+    for (const v of ['False', 'FALSE', 'non', '0', '', ' false']) {
+      expect(bucketPublicDansLeChemin(v), `« ${v} » ne doit pas basculer`).toBe(true);
+    }
+    expect(bucketPublicDansLeChemin('false')).toBe(false);
   });
 });

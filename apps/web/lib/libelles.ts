@@ -523,7 +523,6 @@ export const LIBELLES = {
    * chère : le faux n'est pas affiché, il est ENREGISTRÉ.
    */
   accueilAdmin: {
-    chargement: 'Chargement de la configuration…',
     /**
      * ⚠ ELLE DIT POURQUOI LE FORMULAIRE N'EST PAS LÀ. Sans elle, un écran qui
      * n'affiche qu'un titre se lit comme une page cassée — et quelqu'un
@@ -532,6 +531,22 @@ export const LIBELLES = {
     chargementMotif:
       'Les champs s’afficheront une fois la configuration reçue : un formulaire ' +
       'vide, enregistré trop tôt, effacerait votre page d’accueil.',
+  },
+
+  /**
+   * ⚠ LES TEXTES PARTAGÉS DU FORMULAIRE CHARGÉ. Le MOTIF, lui, n'est PAS ici :
+   * il est propre à chaque écran, parce que le risque l'est — effacer une page
+   * d'accueil et écraser les couleurs d'une école ne se disent pas pareil, et un
+   * motif générique n'apprendrait rien à personne.
+   */
+  formulaireCharge: {
+    chargement: 'Chargement…',
+    /**
+     * ⚠ ELLE NE DIT PAS « réessayez plus tard » : un recours sans destinataire
+     * ni geste est une attente, pas une sortie.
+     */
+    echec: 'Les données n’ont pas pu être chargées.',
+    reessayer: 'Réessayer',
   },
 
   etatsVides: {
@@ -949,6 +964,33 @@ export const LIBELLES = {
       'lecture dépend ensuite de votre classe et de votre abonnement.',
     /** La pastille de filtre actif, pour pouvoir le retirer. */
     pastille: 'Lecture en ligne',
+  },
+
+  /** Le pied de page commun aux écrans publics et à l'espace lecteur. */
+  /** La page rendue par tout `notFound()` qui n'a pas de 404 plus proche. */
+  introuvable: {
+    titre: 'Cette page n’existe pas',
+    /**
+     * ⚠ ELLE NE DIT PAS « vous vous êtes trompé ». Une page légale retirée, un
+     * lien ancien, une notice dépubliée mènent ici sans faute du lecteur — et
+     * accuser quelqu'un d'une erreur qu'il n'a pas commise le fait partir.
+     */
+    explication:
+      'L’adresse demandée ne correspond à rien sur cette bibliothèque. Elle a ' +
+      'peut-être changé, ou le document n’est plus publié.',
+    retour: 'Aller au catalogue',
+  },
+
+  piedCommun: {
+    /**
+     * ⚠ LE NOM DU REPÈRE, annoncé et jamais affiché : plusieurs `<nav>` sur une
+     * même page doivent se distinguer, sinon un lecteur d'écran annonce trois
+     * fois « navigation ». Il est donc à traduire, comme « Image 2 sur 3 ».
+     */
+    repere: 'Pied de page',
+    /** Repli quand l'API n'a pas dit le nom — jamais un nom inventé. */
+    etablissement: 'Bibliothèque',
+    catalogue: 'Catalogue',
   },
 
   pagesLegales: {
@@ -2563,6 +2605,14 @@ export const LIBELLES = {
 
   /** L'identité de l'établissement — écran né de la scission de /admin/parametres. */
   etablissement: {
+    /**
+     * ⚠ IL DIT CE QU'UN ENREGISTREMENT TROP TÔT COÛTERAIT. Un motif générique
+     * n'apprendrait rien : ici le risque est d'écrire des couleurs que personne
+     * n'a choisies par-dessus celles de l'école.
+     */
+    motifChargement:
+      'Les champs s’afficheront une fois les réglages reçus : enregistrer avant ' +
+      'remplacerait les couleurs de votre école par des valeurs par défaut.',
     chargementImpossible: 'Chargement impossible.',
     enregistrementImpossible: 'Enregistrement impossible.',
     /**

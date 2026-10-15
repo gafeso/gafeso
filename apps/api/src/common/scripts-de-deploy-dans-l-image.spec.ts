@@ -104,12 +104,20 @@ describe('🔴 les scripts de DEPLOY.md trouvent ce qu’ils lisent, DANS l’im
   it('⚠ TÉMOIN : les deux fichiers sont lus, et le relevé voit des scripts', () => {
     expect(DEPLOY.length, 'DEPLOY.md').toBeGreaterThan(5000);
     expect(DOCKERFILE.length, 'le Dockerfile').toBeGreaterThan(2000);
-    // ⚠ TÉMOIN DE COMPTE : cinq scripts aujourd'hui. Un de plus demain convoque
-    // quelqu'un ici — c'est le moment où l'on sait ce qu'il lit.
+    // ⚠ TÉMOIN DE COMPTE : SIX scripts depuis le 14 octobre 2026. Un de plus
+    // demain convoque quelqu'un ici — c'est le moment où l'on sait ce qu'il lit.
+    //
+    // ⭐ 5 → 6 : `scripts/migration-minio-vers-garage.mjs`, que DEPLOY.md nomme
+    // désormais dans la procédure de bascule vers Garage. Et la convocation a
+    // servi : elle m'a fait VÉRIFIER que l'image le porte (`COPY scripts
+    // ./scripts`, ligne 140 du Dockerfile) au lieu de le supposer. C'est
+    // exactement le défaut du 16 septembre — quatre scripts nommés par
+    // DEPLOY.md et absents du conteneur, parce qu'un script absent du dépôt
+    // cloné est un script absent de l'image.
     expect(
       scriptsAppelés().length,
       'DEPLOY.md doit nommer les scripts d’exploitation',
-    ).toBe(5);
+    ).toBe(6);
     expect(copiesDuRunner().length, 'le runner doit copier quelque chose').toBeGreaterThan(5);
   });
 

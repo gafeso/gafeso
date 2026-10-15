@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { refuserSiLeStockageEstVide } from './storage/refus-au-demarrage';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { refusDesSecrets } from './common/secrets-de-production';
@@ -46,6 +47,16 @@ async function bootstrap() {
   const isProduction = config.get<string>('NODE_ENV') === 'production';
 
   assertProductionSecrets(config);
+
+  /**
+   * ⭐ LE STOCKAGE EST-IL COHÉRENT AVEC LA BASE ? — refus mécanique.
+   *
+   * ⚠ APRÈS les secrets, et pas avant : ce contrôle doit PARLER à la base et
+   * au stockage, donc il n'est pas un contrôle de configuration. L'ordre
+   * compte dans l'autre sens aussi — il vient AVANT `app.listen`, pour qu'une
+   * instance incohérente ne serve jamais une seule requête.
+   */
+  await refuserSiLeStockageEstVide(app);
 
   // Confiance aux proxys INTERNES uniquement (Caddy + web, sur le réseau
   // Docker en IP privées), jamais « trust all ». `req.ip` reflète alors la

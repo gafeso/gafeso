@@ -5,7 +5,9 @@
 // Réservé à etablissement.apparence (l'API revérifie). À la sauvegarde : PATCH
 // /tenancy/settings puis purge du cache SSR de l'accueil (POST /revalidate).
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useState } from 'react';
+
+import { FormulaireCharge, useFormulaireCharge } from '@/components/formulaire-charge';
 import type { HomeContent } from '@/lib/server-api';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
@@ -145,14 +147,72 @@ function ColorField({
   );
 }
 
+type ChargeAccueil = {
+  primaryColor: string;
+  themeTokens: Record<string, string>;
+  latticeEnabled: boolean;
+  content: HomeContent;
+};
+
 export default function AdminAccueilPage() {
   const { functions } = useMyFunctions();
   const allowed = functions?.includes('etablissement.apparence');
 
-  const [content, setContent] = useState<HomeContent>(EMPTY_CONTENT);
-  const [primary, setPrimary] = useState('#0F2B46');
-  const [tokens, setTokens] = useState<Record<string, string>>(DEFAULT_TOKENS);
-  const [lattice, setLattice] = useState(false);
+  if (functions && !allowed) {
+    return (
+      <Alert tone="error">
+        Vous n’avez pas la permission de modifier l’apparence de l’établissement
+        (fonction «&nbsp;etablissement.apparence&nbsp;»).
+      </Alert>
+    );
+  }
+
+  /*
+   * ⚠ `actif` ATTEND SANS APPELER tant que les fonctions sont inconnues.
+   * MESURÉ avant migration : l'effet partait quel que soit le droit, donc une
+   * personne sans `etablissement.apparence` déclenchait un 403 — et c'est NOUS
+   * qui le provoquions.
+   */
+  return <Chargeur actif={Boolean(allowed)} />;
+}
+
+function Chargeur({ actif }: { actif: boolean }) {
+  const charger = useCallback(() => api<ChargeAccueil>('/tenancy/home', {}, getToken()), []);
+  const { etat, recharger } = useFormulaireCharge(charger, actif);
+
+  return (
+    <FormulaireCharge
+      etat={etat}
+      titre={<h1 className="font-serif text-2xl font-bold">Page d’accueil</h1>}
+      motif={LIBELLES.accueilAdmin.chargementMotif}
+      recharger={recharger}
+    >
+      {(donnees) => <Formulaire donnees={donnees} />}
+    </FormulaireCharge>
+  );
+}
+
+/**
+ * ⭐ CE QUE LA MIGRATION RÉPARE — et le drapeau écrit à la main ne le couvrait pas.
+ *
+ * `chargee` protégeait bien l'ATTENTE. Sur ÉCHEC, l'écran retombait dans le
+ * rendu ordinaire : formulaire rendu avec `EMPTY_CONTENT`, bouton
+ * « Enregistrer » ACTIF. Mesuré avant correction — DEUX boutons soumissibles —
+ * et enregistrer à cet instant efface la page d'accueil de l'école.
+ *
+ * « Un dispositif se vérifie par son EFFET, jamais par sa présence » : le garde
+ * existait, il s'exécutait, et il ne couvrait pas la moitié des cas.
+ */
+function Formulaire({ donnees }: { donnees: ChargeAccueil }) {
+
+  // ⚠ Initialisés depuis les données REÇUES, jamais depuis une constante.
+  const [content, setContent] = useState<HomeContent>(donnees.content);
+  const [primary, setPrimary] = useState(donnees.primaryColor);
+  const [tokens, setTokens] = useState<Record<string, string>>({
+    ...DEFAULT_TOKENS,
+    ...donnees.themeTokens,
+  });
+  const [lattice, setLattice] = useState(donnees.latticeEnabled);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,26 +228,8 @@ export default function AdminAccueilPage() {
    * cas de `admin-bandeau.spec.tsx` lisaient l'écran AVANT la réponse. Le test
    * était faux ET le produit l'était — et c'est le produit qui coûtait.
    */
-  const [chargee, setChargee] = useState(false);
-  // `number` = index de la diapositive en cours d'envoi.
   const [uploading, setUploading] = useState<'logo' | 'hero' | number | null>(null);
 
-  useEffect(() => {
-    api<{
-      primaryColor: string;
-      themeTokens: Record<string, string>;
-      latticeEnabled: boolean;
-      content: HomeContent;
-    }>('/tenancy/home', {}, getToken())
-      .then((data) => {
-        setContent(data.content);
-        setPrimary(data.primaryColor);
-        setTokens({ ...DEFAULT_TOKENS, ...data.themeTokens });
-        setLattice(data.latticeEnabled);
-      })
-      .then(() => setChargee(true))
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Chargement impossible.'));
-  }, []);
 
   const setId = useCallback(
     <K extends keyof HomeContent['identity']>(key: K, value: HomeContent['identity'][K]) => {
@@ -257,42 +299,12 @@ export default function AdminAccueilPage() {
     }
   }
 
-  if (functions && !allowed) {
-    return (
-      <Alert tone="error">
-        Vous n’avez pas la permission de modifier l’apparence de l’établissement
-            (fonction «&nbsp;etablissement.apparence&nbsp;»).
-      </Alert>
-    );
-  }
-
-  /*
-   * ⭐⭐ AUCUN FORMULAIRE AVANT LES DONNÉES. Le titre reste — la page doit se
-   * nommer — mais il n'y a NI champ modifiable NI bouton « Enregistrer », donc
-   * rien à enregistrer trop tôt.
-   *
-   * ⚠ Et l'erreur de chargement garde sa priorité : quand `error` est posé, on
-   * tombe dans le rendu ordinaire, qui l'affiche. Un écran bloqué sur
-   * « Chargement… » après un échec serait une attente sans fin.
-   */
-  if (!chargee && !error) {
-    return (
-      <div className="flex flex-col gap-3">
-        <h1 className="font-serif text-2xl font-bold">Page d’accueil</h1>
-        <p className="text-sm text-muted">{LIBELLES.accueilAdmin.chargement}</p>
-        <p className="max-w-prose text-xs text-muted">
-          {LIBELLES.accueilAdmin.chargementMotif}
-        </p>
-      </div>
-    );
-  }
 
   const id = content.identity;
 
   return (
     <form onSubmit={save} className="flex flex-col gap-6 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl font-bold">Page d’accueil</h1>
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={() => window.open('/', '_blank')}>
             Prévisualiser

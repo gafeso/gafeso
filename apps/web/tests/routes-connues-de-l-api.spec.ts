@@ -125,7 +125,33 @@ const EXCEPTIONS: Exception[] = [
  * consultations en ligne et des téléchargements, et c'est même le seul volet de
  * statistiques qui lui reste.
  */
-const NOMBRE_D_APPELS = 152;
+/*
+ * ⚠ 152 → 153 LE 14 OCTOBRE 2026, ET AUCUN APPEL N'A ÉTÉ AJOUTÉ.
+ *
+ * `/tenancy/home` existait depuis toujours dans `/admin/accueil`. Il était
+ * INVISIBLE à ce relevé parce que son paramètre générique s'étalait sur sept
+ * lignes :
+ *
+ *     api<{
+ *       primaryColor: string;
+ *       …
+ *     }>('/tenancy/home', {}, getToken())
+ *
+ * Le motif cherche le chemin près de `api(` ; sept lignes de type l'en
+ * éloignaient. La migration vers `FormulaireCharge` a nommé le type
+ * (`api<ChargeAccueil>('/tenancy/home', …)`), et l'appel est devenu lisible.
+ *
+ * ⚠ C'est « un garde qui lit la source ne suit pas les variables », avec un
+ * TYPE à la place d'une variable — et le compte exact est la seule chose qui
+ * pouvait le dire : il n'a pas prouvé qu'un code était faux, il m'a OBLIGÉ à
+ * revenir regarder.
+ *
+ * ⚠ Et sa conséquence dépasse ce cas : tout appel dont le générique s'étale sur
+ * plusieurs lignes est hors de ce relevé. Borne écrite plutôt que tue ; la
+ * fermer demanderait d'apparier des accolades imbriquées, c'est-à-dire
+ * d'écrire un analyseur dans un test.
+ */
+const NOMBRE_D_APPELS = 153;
 /**
  * Dont ceux qui ne sont pas des lectures. Voir le témoin sur les verbes.
  * 70, et c'est EXACTEMENT le nombre d'occurrences de `method:` du front —

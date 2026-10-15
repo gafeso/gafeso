@@ -77,16 +77,16 @@ deux personnes différentes dans le fichier d'autorités.
 
 | | Constat mesuré |
 |---|---|
-| **La caisse** | Aucune colonne, aucune route ne consigne un PAIEMENT d'amende. Les amendes se calculent et s'affichent ; leur encaissement n'existe pas. *(backlog n°31)* |
+| **La caisse** | Aucune colonne, aucune route ne consigne un PAIEMENT d'amende. Les amendes se calculent et s'affichent ; leur encaissement n'existe pas. |
 | **Les paiements en ligne** | Le modèle `Payment` existe et **aucun code ne l'écrit** — le module n'est pas construit. Orange Money, Wave, MTN MoMo sont une intention, pas une fonction. |
 | **Les abonnements** | Même état : modèle présent, module non construit. |
 | **Le tri du catalogue** | L'API sert un paramètre `sort` à cinq valeurs. **Aucun écran ne l'emploie** — ni `sort=`, ni `tri=`, nulle part dans `apps/web`. |
 | **Rouvrir un inventaire clos** | `POST /inventory/sessions/:id/reopen` existe, gardée et testée. **Aucun écran ne l'appelle** : une clôture prématurée est aujourd'hui définitive. |
 | **Retirer un scan erroné** | `DELETE /inventory/sessions/:id/scans/:barcode` existe. **Aucun écran ne l'appelle.** |
 | **L'aperçu avant import** | `POST /accounts/expected-students/import/apercu` existe. Le front appelle `/import` directement : on importe sans voir. |
-| **La date d'acquisition** | `Item` ne porte AUCUNE date : l'acquisition et le catalogage sont confondus. *(backlog n°34)* |
-| **L'intégrité des fichiers déposés** | Aucun contrôle. *(backlog n°29)* |
-| **La diffusion mesurée** | Le serveur OAI ne journalise pas ses requêtes : on ne peut pas dire qui moissonne. *(backlog n°35)* |
+| **La date d'acquisition** | `Item` ne porte AUCUNE date : l'acquisition et le catalogage sont confondus. |
+| **L'intégrité des fichiers déposés** | Aucun contrôle. |
+| **La diffusion mesurée** | Le serveur OAI ne journalise pas ses requêtes : on ne peut pas dire qui moissonne. |
 
 ### Ce qui n'a JAMAIS été traversé en vrai
 
@@ -122,7 +122,7 @@ démonstration.
 
 ### Le backlog
 
-`docs/backlog-backend.md` porte **21 entrées ouvertes** au jour de cette mesure.
+Le registre des dettes du dépôt en porte **21 ouvertes** au jour de cette mesure. ⚠ Il n'est pas publié : les dettes ci-dessus sont donc DITES ici, et non désignées par un numéro que le lecteur de ce document ne peut pas suivre.
 Elles ne sont pas recopiées ici : un inventaire qui duplique le backlog
 diverge de lui, et deux listes qui se ressemblent ne sont pas la même liste.
 

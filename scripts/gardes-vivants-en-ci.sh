@@ -95,18 +95,39 @@ POSTGRES_PASSWORD=$(openssl rand -hex 22)
 JWT_SECRET=$(openssl rand -hex 24)
 ADMIN_API_KEY=$(openssl rand -hex 16)
 MEILI_MASTER_KEY=$(openssl rand -hex 16)
-MINIO_ROOT_USER=$MINIO_ROOT_USER_CI
-MINIO_ROOT_PASSWORD=$(openssl rand -hex 12)
+MINIO_ROOT_USER=GK$(openssl rand -hex 12)
+GARAGE_RPC_SECRET=$(openssl rand -hex 32)
+GARAGE_ADMIN_TOKEN=$(openssl rand -hex 32)
+MINIO_ROOT_PASSWORD=$(openssl rand -hex 32)
 OFFLINE_CONTENT_KEK=$(openssl rand -base64 32)
 OFFLINE_LICENSE_PRIVATE_KEY=$(openssl genpkey -algorithm ed25519 2>/dev/null | awk 'BEGIN{ORS="\\n"}1')
 ENV
 chmod 600 "$ENVF"
 vert "secrets engendrés — aucune valeur écrite dans ce script"
-# ⚠ `MINIO_ROOT_USER` fait au moins TROIS caractères : MinIO refuse en dessous,
-# et le message n'apparaît que dans SON journal — le compose dit seulement
-# « dependency failed to start: container … is unhealthy », qui n'accuse rien.
-# Mesuré : « ci » (2 caractères) faisait échouer toute la pile.
-[ "${#MINIO_ROOT_USER_CI}" -ge 3 ] || rouge "MINIO_ROOT_USER trop court pour MinIO"
+# ⚠ LA FORME DE LA CLÉ S3 N'EST PLUS LIBRE. Garage impose « GK » suivi de 24
+# hexadécimaux — mesuré : un nom lisible et un hex sans préfixe sont refusés
+# (HTTP 400). L'initialisation le vérifie AVANT tout réseau et dit comment en
+# engendrer une ; ce contrôle-ci est le témoin que la pile de CI en pose une
+# valide, sinon on mesurerait son refus au lieu du produit.
+#
+# ⚠ Il REMPLACE le contrôle de longueur de MinIO (« au moins 3 caractères »),
+# qui n'a plus d'objet — et dont le motif vaut encore d'être lu : MinIO refusait
+# en dessous de trois, et ne le disait que dans SON journal, pendant que le
+# compose annonçait seulement « container is unhealthy ».
+# ⚠ LE NOM PASSE EN ARGUMENT, une fois de plus. Mon témoin s'écrivait
+# `grep -qE '^NOM=<motif>'` — et le garde de publication y a vu une VALEUR de
+# secret, à juste titre : il ne peut pas distinguer un motif d'expression
+# régulière d'un mot de passe, il lirait le même texte. Quatrième fois que ce
+# garde me reprend sur ce fichier, et quatrième fois qu'il a raison.
+forme_attendue() {
+  grep -qE "^$1=$2\$" "$ENVF" \
+    || rouge "« $1 » de la pile de CI n'a pas la forme exigée par Garage"
+}
+forme_attendue MINIO_ROOT_USER 'GK[0-9a-f]{24}'
+# ⚠ ET LE SECRET AUSSI : exactement 64 hexadécimaux, mesuré séparément de la
+# clé. Mon premier jet en engendrait 48 et l'initialisation refusait — un
+# contrôle qui ne porte que sur la MOITIÉ d'une exigence laisse passer l'autre.
+forme_attendue MINIO_ROOT_PASSWORD '[0-9a-f]{64}'
 
 # La base est exposée au LANCEUR : `test:base` tourne sur le dépôt, pas dans
 # l'image (l'image ne porte pas les tests).
@@ -129,33 +150,6 @@ services:
   meilisearch:
     ports:
       - "$PORT_MEILI:7700"
-  # ⚠⚠ MINIO — L IMAGE OFFICIELLE N EST PLUS TÉLÉCHARGEABLE, ET C EST MESURÉ
-  #
-  # Le 13 octobre 2026, la CI publique a échoué sur :
-  #   pull access denied for minio/minio, repository does not exist
-  # Mesuré ensuite avec un témoin POSITIF (alpine se télécharge) et un témoin
-  # NÉGATIF (un dépôt inventé rend le MÊME 401) : ni le tag, ni le DIGEST, ni
-  # aucun miroir public ne la servent. Épingler l empreinte ne sauve donc rien
-  # — le refus porte sur le DÉPÔT, pas sur l étiquette.
-  #
-  # Ce qui sert encore les MÊMES OCTETS : le namespace d archive de Broadcom.
-  # Mesuré, pas supposé — cette image rend
-  # commit-id=d10bb7e1b667c2df72c394ef1fa52ab4a6802d0f, exactement celui de
-  # notre image de production, et nos 11 appels S3 réels y passent 11/11.
-  #
-  # ⚠ CECI NE VAUT QUE POUR LA PILE DE CI. Le compose de PRODUCTION reste
-  # INCHANGÉ : une image d archive ne reçoit aucun correctif de sécurité, et la
-  # cible de la V1 est Garage. Voir DEPLOY.md, section stockage.
-  minio:
-    image: bitnamilegacy/minio@sha256:faf554135d50ff8b382f79df7795e080726cb2d6f4ce7f056d733a6437546f6a
-    # ⚠ L entrypoint de cette image lance le serveur LUI-MÊME sur
-    # /bitnami/minio/data. La commande de production (server /data) doit donc
-    # être EFFACÉE, sinon elle écrirait dans un chemin que l utilisateur 1001
-    # ne possède pas.
-    command: []
-    user: "1001"
-    volumes:
-      - minio_data:/bitnami/minio/data
 YML
 
 # =========================================================================

@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Garage — configuration de PRODUCTION.
+#
+# ⚠ AUCUN SECRET ICI : les deux secrets viennent de l'environnement
+# (`GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`), que le compose exige et refuse
+# de démarrer sans. Un secret dans un fichier versionné est un secret publié.
+#
+# ⚠ `replication_factor = 1` : une seule machine. C'est le déploiement que
+# DEPLOY.md décrit — un serveur, un compose. Le jour où il y en a plusieurs,
+# cette valeur change ET le layout change : ce n'est pas un réglage qu'on monte
+# après coup sans y penser.
+# ──────────────────────────────────────────────────────────────────────────────
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# ⚠ Ni `rpc_secret` ni `admin_token` ne figurent ici : Garage les lit dans
+# l'environnement (`GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`). Mesuré sur une
+# pile jetable, pas supposé — un fichier qui les porterait serait un secret
+# versionné.
+
+[s3_api]
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+# ⚠ Le domaine S3 n'est PAS celui des couvertures : les URL signées arrivent
+# par chemin (`/digital-copies/<clé>`), pas par sous-domaine de bucket.
+root_domain = ".s3.interne"
+
+[s3_web]
+bind_addr = "[::]:3902"
+# ⭐ C'EST ICI QUE LA LECTURE PUBLIQUE SE DÉCIDE. Garage choisit le bucket par
+# le NOM D'HÔTE : le bucket public porte donc le domaine de stockage pour nom,
+# et Caddy transmet l'hôte d'origine. Le suffixe ci-dessous ne sert qu'aux
+# sous-domaines éventuels ; un bucket dont l'alias global EST le domaine complet
+# est reconnu sans lui — mesuré.
+root_domain = ".web.interne"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

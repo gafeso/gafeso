@@ -102,9 +102,14 @@ export default function ClassesPage() {
     }
   }, []);
 
+  /*
+   * ⚠ ON N'APPELLE QUE SI LE DROIT EST LÀ — mesuré par l'épreuve, même défaut
+   * que `/admin/regles-de-circulation` et `/admin/pages-legales`.
+   */
+  const peutGerer = functions?.includes('lecteurs.gerer');
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (peutGerer) void load();
+  }, [peutGerer, load]);
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
@@ -264,7 +269,7 @@ export default function ClassesPage() {
   // restait sur « Chargement… » indéfiniment — une invitation à patienter sur
   // quelque chose qui n'arrivera jamais. Le menu cachait bien l'entrée : ce
   // n'est pas la porte qui manquait, c'est la SORTIE.
-  if (functions && !functions.includes('lecteurs.gerer')) {
+  if (functions && !peutGerer) {
     return <Alert tone="error">{LIBELLES.refusDeDroit.classes}</Alert>;
   }
 
@@ -306,7 +311,12 @@ export default function ClassesPage() {
               placeholder="L1"
             />
           </label>
-          <Button type="submit" disabled={saving}>
+          {/*
+            ⚠ ET PAS AVANT DE SAVOIR CE QUI EXISTE : créer une classe sans voir
+            la liste produit un doublon, et les classes gouvernent l'ACCÈS aux
+            collections.
+          */}
+          <Button type="submit" disabled={saving || classes === null}>
             {saving ? 'Création…' : 'Créer la classe'}
           </Button>
         </form>

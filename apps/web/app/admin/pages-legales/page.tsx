@@ -102,9 +102,17 @@ export default function PagesLegalesPage() {
     }
   }, []);
 
+  /*
+   * ⚠ ON N'APPELLE QUE SI LE DROIT EST LÀ — mesuré avant correction : l'effet
+   * partait quelles que soient les fonctions, donc une personne sans
+   * `etablissement.apparence` déclenchait un 403 que NOUS provoquions. Et tant
+   * que `functions` est `undefined`, on ne SAIT pas : on attend, plutôt que de
+   * demander au hasard.
+   */
+  const peutEditer = functions?.includes('etablissement.apparence');
   useEffect(() => {
-    void charger();
-  }, [charger]);
+    if (peutEditer) void charger();
+  }, [peutEditer, charger]);
 
   async function envoyer(suivant: Record<ClePageLegale, PageLegale>) {
     /*
@@ -167,7 +175,7 @@ export default function PagesLegalesPage() {
     }
   }
 
-  if (functions && !functions.includes('etablissement.apparence')) {
+  if (functions && !peutEditer) {
     return (
       <main id={ID_CONTENU} className="mx-auto max-w-3xl px-4 py-8">
         <Alert tone="error">{LIBELLES.refusDeDroit.pagesLegales}</Alert>

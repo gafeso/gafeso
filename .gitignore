@@ -134,3 +134,20 @@ var/
 docs/captures/**/*.png
 docs/captures/**/*.jpg
 docs/captures/**/*.webp
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 🔴 LES DONNÉES RÉELLES EXPORTÉES D'UNE INSTANCE EN SERVICE
+#
+# `recette-garage/` reçoit les archives que l'exploitant exporte de la
+# démonstration pour qu'une migration soit éprouvée sur de VRAIES données.
+#
+# Le 15 octobre 2026, un `git add -A` de ma main a COMMITÉ une archive de 7,9 Mo
+# du volume MinIO de la démonstration. Elle n'est pas partie — le crochet de
+# pré-publication a refusé le push, pour une autre raison d'ailleurs — et c'est
+# la seule chose qui a empêché des données de production d'entrer dans
+# l'historique, où elles seraient restées lisibles à qui a le SHA.
+#
+# ⚠ Ce n'est pas un oubli de .gitignore : le dossier n'existait pas encore
+# quand j'ai demandé l'export. Un dossier neuf qui reçoit des données réelles
+# est à ignorer AVANT de le créer, pas après l'avoir commité.
+recette-garage/

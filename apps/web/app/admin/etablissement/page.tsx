@@ -1,6 +1,8 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useState } from 'react';
+
+import { FormulaireCharge, useFormulaireCharge } from '@/components/formulaire-charge';
 import { LIBELLES } from '@/lib/libelles';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
@@ -43,27 +45,84 @@ export default function EtablissementPage() {
    */
   const peutReglerAuthentification = myFunctions?.includes('securite.authentification');
 
-  const [settings, setSettings] = useState<TenantSettings | null>(null);
-  const [primaryColor, setPrimaryColor] = useState('#0F2B46');
-  const [secondaryColor, setSecondaryColor] = useState('#D97B2B');
-  const [require2fa, setRequire2fa] = useState(false);
+  if (myFunctions && !canManage) {
+    return (
+      <Alert tone="error">
+        Vous n’avez pas la permission de modifier l’établissement (fonction
+        «&nbsp;etablissement.apparence&nbsp;» ou
+        «&nbsp;etablissement.regles&nbsp;»).
+      </Alert>
+    );
+  }
+
+  /*
+   * ⚠ UN SEUL SOUS-ARBRE, quelle que soit la phase. Rendre un écran d'attente
+   * PUIS `Reglages` montait deux `<h1>` successifs : React démonte le premier,
+   * et un test qui l'avait capturé le trouve détaché. On passe donc
+   * l'autorisation au crochet, qui ATTEND sans appeler.
+   */
+  return (
+    <Reglages
+      actif={Boolean(canManage)}
+      peutReglerAuthentification={Boolean(peutReglerAuthentification)}
+    />
+  );
+}
+
+/**
+ * ⭐ LE FORMULAIRE N'EXISTE QU'AVEC SES DONNÉES.
+ *
+ * ⚠ CE QUE CETTE MIGRATION RÉPARE, et c'est le pire des vingt écrans : les
+ * états partaient sur des valeurs par DÉFAUT — `useState('#0F2B46')`. Avant la
+ * réponse, l'écran n'avait donc pas l'air vide, il avait l'air **rempli et
+ * juste**. Enregistrer à cet instant écrivait des couleurs que personne n'avait
+ * choisies par-dessus celles de l'école, et rien à l'écran ne l'annonçait.
+ *
+ * Désormais `Formulaire` reçoit les réglages en PROPRIÉTÉ : il n'y a aucun
+ * instant où il existe sans eux, donc aucun défaut à initialiser.
+ */
+function Reglages({
+  actif,
+  peutReglerAuthentification,
+}: {
+  actif: boolean;
+  peutReglerAuthentification: boolean;
+}) {
+  const charger = useCallback(() => api<TenantSettings>('/tenancy/current'), []);
+  const { etat, recharger } = useFormulaireCharge(charger, actif);
+
+  return (
+    <FormulaireCharge
+      etat={etat}
+      titre={<h1 className="font-serif text-3xl font-bold">Établissement</h1>}
+      motif={LIBELLES.etablissement.motifChargement}
+      recharger={recharger}
+    >
+      {(settings) => (
+        <Formulaire
+          settings={settings}
+          peutReglerAuthentification={peutReglerAuthentification}
+        />
+      )}
+    </FormulaireCharge>
+  );
+}
+
+function Formulaire({
+  settings,
+  peutReglerAuthentification,
+}: {
+  settings: TenantSettings;
+  peutReglerAuthentification: boolean;
+}) {
+  // ⚠ Initialisés depuis les données REÇUES, jamais depuis un défaut.
+  const [primaryColor, setPrimaryColor] = useState(settings.primaryColor);
+  const [secondaryColor, setSecondaryColor] = useState(settings.secondaryColor);
+  const [require2fa, setRequire2fa] = useState(settings.require2fa);
   const [saving, setSaving] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const current = await api<TenantSettings>('/tenancy/current');
-      setSettings(current);
-      setPrimaryColor(current.primaryColor);
-      setSecondaryColor(current.secondaryColor);
-      setRequire2fa(current.require2fa);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : LIBELLES.etablissement.chargementImpossible);
-    }
-  }, []);
 
   async function saveSecurity(next: boolean) {
     setSavingSecurity(true);
@@ -94,10 +153,6 @@ export default function EtablissementPage() {
     }
   }
 
-  useEffect(() => {
-    if (canManage) void load();
-  }, [canManage, load]);
-
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -118,21 +173,10 @@ export default function EtablissementPage() {
     }
   }
 
-  if (myFunctions && !canManage) {
-    return (
-      <Alert tone="error">
-        Vous n’avez pas la permission de modifier l’établissement (fonction
-        «&nbsp;etablissement.apparence&nbsp;» ou
-        «&nbsp;etablissement.regles&nbsp;»).
-      </Alert>
-    );
-  }
-
   return (
     <div>
-      <h1 className="font-serif text-3xl font-bold">Établissement</h1>
       <p className="mt-1 text-sm text-muted">
-        Couleurs de {settings?.name ?? 'l’école'}, appliquées sur tout le site (page
+        Couleurs de {settings.name}, appliquées sur tout le site (page
         d’accueil, constellation, boutons).
       </p>
 
@@ -201,7 +245,13 @@ export default function EtablissementPage() {
         </Card>
       )}
 
-      {settings !== null && canManage && (
+      {/*
+        ⚠ LES DEUX CONDITIONS ONT DISPARU, et c'est le TYPE qui les a rendues
+        inutiles : `settings` est une propriété non nulle, et ce composant n'est
+        rendu qu'à qui peut gérer. Un garde devenu décoratif se relit comme une
+        protection — mieux vaut qu'il n'existe plus que qu'il rassure pour rien.
+      */}
+      {(
         <div className="max-w-2xl">
           <TenantQrSection slug={settings.slug} url={settings.enrollmentUrl} />
         </div>

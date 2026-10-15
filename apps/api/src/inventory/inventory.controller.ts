@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FunctionsGuard } from '../auth/functions.guard';
 import { RequiresFunctions } from '../auth/functions.decorator';
+import { blocInventaire } from './bloc-inventaire';
 import { FONCTIONS } from '../auth/functions';
 import { ModuleRequis } from '../modules/module-requis.decorator';
 import { ModuleActifGuard } from '../modules/module-actif.guard';
@@ -95,7 +96,17 @@ export class InventoryController {
     @Body() dto: ScanDto,
   ) {
     const { db } = this.db(tenant);
-    return this.inventory.scan(db, id, dto.barcode);
+    const brut = await this.inventory.scan(db, id, dto.barcode);
+    /**
+     * ⚠ LE BLOC `inventaire` EST AJOUTÉ, RIEN N'EST RETIRÉ.
+     *
+     * `result` et `item` continuent de sortir : l'écran de récolement du web
+     * les lit déjà, et les retirer casserait un client EN SERVICE pour servir
+     * un client neuf. L'application mobile lit `inventaire`, dont les trois
+     * classes pilotent son geste — et dont la PHRASE dit laquelle des cinq
+     * issues c'était.
+     */
+    return { ...brut, inventaire: blocInventaire(brut.result, brut.barcode) };
   }
 
   @Get('sessions/:id/counts')

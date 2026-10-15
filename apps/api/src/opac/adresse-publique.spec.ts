@@ -24,34 +24,88 @@ describe('🔴 L’adresse publique de la notice', () => {
   it('🔴 les DEUX appels de production passent le slug', () => {
     // On lit les appels entiers, parenthèse à parenthèse : un `resolved.slug`
     // ailleurs dans le fichier ne prouverait rien sur CET appel.
-    const appels = CONTROLEUR.match(/this\.opac\.recordDetail\(([\s\S]*?)\n\s*\);/g) ?? [];
+    /**
+     * ⭐⭐ LES APPELS SE LISENT PAR ÉQUILIBRE DE PARENTHÈSES, pas par un motif
+     * qui suppose un saut de ligne.
+     *
+     * 🔴 LE MOTIF PRÉCÉDENT EXIGEAIT UN APPEL MULTI-LIGNES
+     * (`recordDetail\(([\s\S]*?)\n\s*\);`). Il a été écrit quand les trois
+     * appels l'étaient, et il tenait par COÏNCIDENCE de mise en forme.
+     *
+     * Le 14 octobre 2026, `/opac/scan` a été réécrit et son appel tient sur une
+     * ligne : le motif n'en a plus vu que deux, et le compte a convoqué. ⚠ Mais
+     * le vrai défaut n'est pas le compte — c'est qu'un appel SUR UNE LIGNE QUI
+     * OUBLIERAIT LE SLUG aurait été INVISIBLE à ce garde. Il mesurait une
+     * convention de formatage, pas une propriété du code.
+     *
+     * La lecture par équilibre de parenthèses ne suppose rien de la mise en
+     * forme — et c'est la seule qui mesure ce que le garde annonce.
+     */
+    const appels: string[] = [];
+    const MARQUE = 'this.opac.recordDetail(';
+    for (let d = CONTROLEUR.indexOf(MARQUE); d >= 0; d = CONTROLEUR.indexOf(MARQUE, d + 1)) {
+      let p = 0;
+      let f = d + MARQUE.length - 1;
+      do {
+        if (CONTROLEUR[f] === '(') p += 1;
+        else if (CONTROLEUR[f] === ')') p -= 1;
+        f += 1;
+      } while (p > 0 && f < CONTROLEUR.length);
+      appels.push(CONTROLEUR.slice(d, f));
+    }
     expect(
       appels.length,
       'Le nombre d’appels à `recordDetail` a changé. Ce n’est pas un échec : ' +
         'c’est une convocation. Un appel NEUF doit passer le slug, sinon sa ' +
         'réponse portera `publicUrl: null` pour toujours.',
-      // ⭐ 2 → 3 le 11 octobre 2026 : `/opac/scan`, qui résout une adresse
-      // scannée. Le compte a fait son office — il a convoqué, et la question
-      // qu'il posait était la bonne : cet appel neuf passe-t-il le slug ?
+      // ⭐ 2 → 3 le 11 octobre 2026 : `/opac/scan`. Le compte a fait son office.
+      // ⚠ 14 octobre : TOUJOURS 3, et c'est le motif qui n'en voyait que 2 —
+      // la convocation portait sur l'instrument, pas sur le code.
     ).toBe(3);
     for (const appel of appels) {
-      // ⚠ Le slug est le QUATRIÈME argument — après `db`, `id`, `member`.
-      //
-      // 🔴 MA PREMIÈRE ÉCRITURE NE POUVAIT PAS ÉCHOUER. Elle coupait à
-      // `indexOf('isMember(')` et cherchait `resolved.slug` après — or
-      // `isMember(resolved.slug, …)` LE CONTIENT. La fenêtre le trouvait donc
-      // toujours, y compris sur un appel où le quatrième argument manquait.
-      // Le contrôle négatif l'a dit ; la relecture ne l'avait pas vu.
-      //
-      // On coupe donc après la PARENTHÈSE FERMANTE de `isMember(...)`.
-      const debut = appel.indexOf('isMember(');
-      const apresMembre = debut < 0 ? '' : appel.slice(appel.indexOf(')', debut) + 1);
+      /**
+       * ⚠ LE SLUG EST LE QUATRIÈME ARGUMENT, et on le lit comme tel — par
+       * découpage des arguments de PREMIER NIVEAU, pas par une fenêtre de
+       * texte.
+       *
+       * 🔴 Les deux écritures précédentes ont échoué pour la même raison : une
+       * FENÊTRE. La première coupait à `isMember(` et trouvait `resolved.slug`
+       * DEDANS, donc elle ne pouvait jamais échouer. La seconde coupait après
+       * sa parenthèse fermante — juste, mais seulement tant que le troisième
+       * argument EST un `isMember(...)` écrit sur place. Depuis ce matin c'est
+       * une variable, et la fenêtre ne trouvait plus rien.
+       */
+      /**
+       * ⚠ LES COMMENTAIRES PARTENT AVANT LE DÉCOUPAGE. Ils contiennent des
+       * VIRGULES — « LE SLUG EST OBLIGATOIRE ICI, et un garde l'exige » — et
+       * mon découpeur les prenait pour des séparateurs d'arguments : il voyait
+       * SIX arguments dont le quatrième était un bout de phrase.
+       *
+       * C'est la troisième écriture de ce contrôle, et la troisième fois que
+       * l'instrument se trompe sur la forme du texte plutôt que sur le code.
+       */
+      const dedans = appel
+        .slice(MARQUE.length, -1)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '');
+      const args: string[] = [];
+      let p = 0;
+      let courant = '';
+      for (const c of dedans) {
+        if (c === '(' || c === '[' || c === '{') p += 1;
+        if (c === ')' || c === ']' || c === '}') p -= 1;
+        if (c === ',' && p === 0) {
+          args.push(courant.trim());
+          courant = '';
+        } else courant += c;
+      }
+      if (courant.trim()) args.push(courant.trim());
       expect(
-        apresMembre.includes('resolved.slug'),
+        args.length >= 4 && args[3].includes('slug'),
         'Un appel à `recordDetail` ne passe pas le slug en quatrième ' +
           'argument. Sans lui, `publicUrl` et `identifiantPerenne` sortent à ' +
           '`null` — et c’est « une colonne SERVIE que personne ne remplit ».\n' +
-          appel.slice(0, 220),
+          `arguments lus : ${JSON.stringify(args)}`,
       ).toBe(true);
     }
   });

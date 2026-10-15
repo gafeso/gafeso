@@ -298,7 +298,14 @@ describe('⭐⭐ pendant le chargement, rien n’est enregistrable', () => {
      * assertion d'absence posée trop tôt passe toujours — « il faut d'abord
      * attendre quelque chose qui, lui, DOIT y être ».
      */
-    await screen.findByText(LIBELLES.accueilAdmin.chargement);
+    /*
+     * ⚠ LE LIBELLÉ PROPRE À L'ÉCRAN A DISPARU AVEC LA MIGRATION, et c'est voulu :
+     * `FormulaireCharge` rend un « Chargement… » partagé PLUS le motif, qui est
+     * le seul texte qui apprenne quelque chose. Garder « Chargement de la
+     * configuration… » aurait demandé de maintenir un libellé qu'aucun écran
+     * n'affiche — un libellé sans lecteur, tenu en vie par un test.
+     */
+    await screen.findByText(LIBELLES.formulaireCharge.chargement);
 
     /*
      * ⚠ `queryAllByRole` ET NON `queryByRole` : le formulaire chargé porte DEUX
@@ -350,6 +357,6 @@ describe('⭐⭐ pendant le chargement, rien n’est enregistrable', () => {
     );
     render(<AccueilAdminPage />);
     await screen.findByText(/Panne|Chargement impossible/i);
-    expect(screen.queryByText(LIBELLES.accueilAdmin.chargement)).toBeNull();
+    expect(screen.queryByText(LIBELLES.formulaireCharge.chargement)).toBeNull();
   });
 });

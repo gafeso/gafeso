@@ -7,12 +7,29 @@ import { useParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/session';
 import { Card } from '@/components/ui';
+import { CouvertureV3 } from '@/components/couverture-v3';
 
 interface Work {
   recordId: string;
   title: string;
   year: number | null;
   recordType: string;
+  /**
+   * ⭐⭐ LES DEUX CLÉS DE LA v3, REQUISES — mesuré le 15 octobre 2026 sur
+   * l'objet ENTIER servi par `GET /opac/authors/:id` : chaque œuvre porte
+   * `coverDomain, coverTemplate, recordId, recordType, title, year`.
+   *
+   * ⚠ REQUISES ET NON OPTIONNELLES, et c'est la décision qui compte : un `?`
+   * laisserait passer une route qui cesserait de les servir, et la vignette
+   * retomberait en silence sur le domaine « autre » — un document de droit
+   * peint en gris, sans que rien ne le dise.
+   *
+   * ⚠ Et on ne DÉRIVE pas `coverDomain` de `recordType` ici : « si vous le
+   * refaites, vous le referez autrement, et trois clients composeraient trois
+   * couvertures pour un même document » *(session backend)*.
+   */
+  coverTemplate: string;
+  coverDomain: string;
 }
 interface WorksByRole {
   role: string;
@@ -99,10 +116,28 @@ export function FicheAuteur({ initial = null }: { initial?: AuthorDetail | null 
             <div className="mt-3 flex flex-col gap-2">
               {group.works.map((w) => (
                 <Card key={w.recordId} className="!p-3">
-                  <Link href={`/opac/${w.recordId}`} className="text-ocre underline">
-                    {w.title}
-                  </Link>
-                  {w.year && <span className="ml-2 text-xs text-muted">{w.year}</span>}
+                  <div className="flex items-start gap-3">
+                    {/*
+                      ⚠ 56 px : le mode MINIATURE de la v3 (seuil 80). À cette
+                      taille un titre ferait 3,7 px — la vignette ne porte donc
+                      que la teinte, le motif et le logo symbole, et le titre
+                      reste à côté, en texte. Elle est décorative, d'où
+                      l'`aria-hidden` que le composant pose lui-même.
+                    */}
+                    <CouvertureV3
+                      coverTemplate={w.coverTemplate}
+                      coverDomain={w.coverDomain}
+                      titre={w.title}
+                      largeur={56}
+                      className="rounded"
+                    />
+                    <div>
+                      <Link href={`/opac/${w.recordId}`} className="text-ocre underline">
+                        {w.title}
+                      </Link>
+                      {w.year && <span className="ml-2 text-xs text-muted">{w.year}</span>}
+                    </div>
+                  </div>
                 </Card>
               ))}
             </div>

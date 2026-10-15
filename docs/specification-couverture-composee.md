@@ -4,9 +4,20 @@ Entrée de passation du **mobile** vers le **backend** (intégration rc8) et ver
 le **web**, qui doit la reprendre **à l'identique** : un même document ne peut
 pas avoir deux couvertures selon l'écran où on le regarde.
 
-Implémentation de référence :
-`lib/widgets/couverture_generee.dart` et `lib/theme/gafeso_theme.dart` du dépôt
-mobile (`gafeso/gafeso-mobile`, étiquette `v1.0.0-rc5` et suivantes).
+⚠ **L'IMPLÉMENTATION DE RÉFÉRENCE A CHANGÉ, et cet en-tête disait encore
+l'ancienne.** La référence est la **v3 finale** — les huit gabarits et la grille
+de `positions-textes.json` — et non plus le widget du dépôt mobile. Le corps de
+ce document la décrit déjà ; seul l'en-tête était resté en arrière.
+
+*Corrigé le 14 octobre 2026, en reprenant le seul apport de la branche de
+passation du mobile avant de la supprimer. Elle portait un bandeau « ce document
+est supplanté comme référence » que `main` n'avait pas : le document avait été
+réécrit pour DEVENIR la référence, et personne n'avait relu son en-tête.*
+
+L'implémentation du mobile (`lib/widgets/couverture_generee.dart`,
+`lib/theme/gafeso_theme.dart`) reste exacte **pour l'application**, et c'est
+d'elle que la v3 est dérivée — mais ce n'est plus elle qui tranche quand les
+deux diffèrent.
 
 ---
 
