@@ -115,15 +115,33 @@ const DECLARES: { depuis: string; vers: string; motif: string }[] = [
   },
 ];
 
-describe.skipIf(!MESURABLE)(
-  '⚠ L’OBLIGATION : un fichier publié ne renvoie à rien de retenu',
-  () => {
+/**
+ * ⚠⚠ LE RELEVÉ EST PARESSEUX, ET CE N'EST PAS UN STYLE.
+ *
+ * 🔴 MA PREMIÈRE CORRECTION A LAISSÉ LA CI PUBLIQUE ROUGE. J'avais posé
+ * `describe.skipIf(!MESURABLE)` en croyant que le corps ne s'exécuterait pas —
+ * or `skipIf` SAUTE LES TESTS mais ÉVALUE LE CORPS du describe, pour les
+ * collecter. L'appel au publieur était dans ce corps : il a donc tourné, et
+ * rendu `ENOENT` à la MÊME ligne qu'avant.
+ *
+ * ⚠ Ce dépôt le sait depuis le 13 septembre 2026, écrit noir sur blanc : « rien
+ * ne se construit dans le corps d'un `describe` gaté ». Je venais de le relire
+ * en corrigeant, et je l'ai quand même fait — une règle écrite protège de
+ * l'ignorance, pas de la pente.
+ *
+ * Tout ce qui touche le disque vit donc dans `releve()`, mémoïsée et appelée
+ * DEPUIS chaque `it`, là où le saut a réellement lieu.
+ */
+type Releve = { lus: string[]; parChemin: Renvoi[]; parPointeur: Renvoi[]; PUB: Set<string> };
+let memo: Releve | null = null;
+
+function releve(): Releve {
+  if (memo) return memo;
   const PUB = publies();
   const documents = [...PUB].filter((f) => f.endsWith('.md')).sort();
   const lus: string[] = [];
   const parChemin: Renvoi[] = [];
   const parPointeur: Renvoi[] = [];
-
   for (const f of documents) {
     let texte: string;
     try {
@@ -133,9 +151,6 @@ describe.skipIf(!MESURABLE)(
     }
     lus.push(f);
     for (const m of texte.match(CHEMIN) ?? []) {
-      // ⚠ un chemin qui ne DÉSIGNE RIEN n'est pas un renvoi vers un retenu :
-      // c'est un exemple, ou un fichier disparu. Le second cas est une autre
-      // famille, et le mélanger ici rendrait ce garde illisible.
       if (!suivis.has(m)) continue;
       if (PUB.has(m)) continue;
       parChemin.push({ depuis: f, vers: m });
@@ -144,11 +159,18 @@ describe.skipIf(!MESURABLE)(
       parPointeur.push({ depuis: f, vers: m.replace(/\s+/g, ' ') });
     }
   }
+  memo = { lus, parChemin, parPointeur, PUB };
+  return memo;
+}
 
+describe.skipIf(!MESURABLE)(
+  '⚠ L’OBLIGATION : un fichier publié ne renvoie à rien de retenu',
+  () => {
   it('⚠ TÉMOIN : les documents publiés sont LUS, et le relevé voit la matière', () => {
     // ⚠ Le témoin porte sur la MATIÈRE, pas sur les trouvailles : un dépôt
     // parfait n'aurait AUCUN renvoi, et un témoin qui exigerait des trouvailles
     // punirait celui qui fait bien.
+    const { lus } = releve();
     expect(lus.length, 'aucun document publié lu — ce garde ne mesure rien').toBeGreaterThan(10);
     expect(lus, 'DEPLOY.md doit être dans la population').toContain('DEPLOY.md');
   });
@@ -171,6 +193,7 @@ describe.skipIf(!MESURABLE)(
   });
 
   it('chaque renvoi par CHEMIN est absent, ou DÉCLARÉ avec son motif', () => {
+    const { parChemin } = releve();
     const orphelins = parChemin.filter(
       (r) => !DECLARES.some((d) => d.depuis === r.depuis && d.vers === r.vers),
     );
@@ -188,7 +211,7 @@ describe.skipIf(!MESURABLE)(
 
   it('aucun POINTEUR NUMÉROTÉ vers un document retenu', () => {
     expect(
-      parPointeur.map((r) => `${r.depuis} : ${r.vers}`).sort(),
+      releve().parPointeur.map((r) => `${r.depuis} : ${r.vers}`).sort(),
       'Un document publié renvoie au backlog ou à un brief PAR SON NUMÉRO.\n' +
         'Ce n’est pas un chemin, donc aucun relevé d’adresses ne le voit — et ' +
         'c’est pourtant une impasse aussi sûre.\n' +
@@ -200,6 +223,7 @@ describe.skipIf(!MESURABLE)(
 
   it('⚠ aucune déclaration ne couvre un renvoi DISPARU', () => {
     // Une exception qu'on ne relit jamais finit par couvrir autre chose.
+    const { parChemin } = releve();
     const perimees = DECLARES.filter(
       (d) => !parChemin.some((r) => r.depuis === d.depuis && r.vers === d.vers),
     );
