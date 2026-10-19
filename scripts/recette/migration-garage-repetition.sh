@@ -72,8 +72,17 @@ docker run -d --name "$PROJET-garage" -p "$PORT_S3:3900" -p "$PORT_WEB:3902" -p 
   --memory=4g --memory-swap=4g "$IMAGE_GARAGE" >/dev/null
 for _ in $(seq 1 30); do curl -4 -s -m 3 -o /dev/null "http://127.0.0.1:$PORT_ADMIN/health" && break; sleep 1; done
 DOMAINE=couvertures.exemple.test
-if GARAGE_ADMIN_URL="http://127.0.0.1:$PORT_ADMIN" GARAGE_ADMIN_TOKEN="$JETON" \
-   STORAGE_PUBLIC_DOMAIN="$DOMAINE" GARAGE_KEY_OUT="$BAC/cle.env" \
+# ⚠ CORRIGÉ le 16 octobre 2026 : depuis le 14, garage-initialiser.mjs n'ENGENDRE
+# plus de clé — il IMPORTE celle que l'exploitant a déjà posée dans
+# MINIO_ROOT_USER/MINIO_ROOT_PASSWORD (voir DEPLOY.md, étape ②). Cette
+# répétition appelait encore l'ancienne forme et recevait le refus nommé
+# « MINIO_ROOT_USER et MINIO_ROOT_PASSWORD sont exiges » — trouvé en
+# rejouant ce script le 16, sans rapport avec ce qu'on y cherchait ce jour-là.
+CLE=GK$(openssl rand -hex 12)
+SEC=$(openssl rand -hex 32)
+if MINIO_ROOT_USER="$CLE" MINIO_ROOT_PASSWORD="$SEC" \
+   GARAGE_ADMIN_URL="http://127.0.0.1:$PORT_ADMIN" GARAGE_ADMIN_TOKEN="$JETON" \
+   STORAGE_PUBLIC_DOMAIN="$DOMAINE" \
    node scripts/lib/garage-initialiser.mjs > "$BAC/init.log" 2>&1; then
   vert "initialisation : $(grep -c . "$BAC/init.log") lignes, aucun geste manuel"
 else
@@ -81,13 +90,11 @@ else
 fi
 # ⚠ DEUX FOIS : l'idempotence est une propriete de l'ETAT.
 B1=$(curl -4 -s -m 8 -H "Authorization: Bearer $JETON" "http://127.0.0.1:$PORT_ADMIN/v1/bucket?list" | grep -o '"id"' | wc -l)
-GARAGE_ADMIN_URL="http://127.0.0.1:$PORT_ADMIN" GARAGE_ADMIN_TOKEN="$JETON" \
+MINIO_ROOT_USER="$CLE" MINIO_ROOT_PASSWORD="$SEC" \
+  GARAGE_ADMIN_URL="http://127.0.0.1:$PORT_ADMIN" GARAGE_ADMIN_TOKEN="$JETON" \
   STORAGE_PUBLIC_DOMAIN="$DOMAINE" node scripts/lib/garage-initialiser.mjs >/dev/null 2>&1
 B2=$(curl -4 -s -m 8 -H "Authorization: Bearer $JETON" "http://127.0.0.1:$PORT_ADMIN/v1/bucket?list" | grep -o '"id"' | wc -l)
 [ "$B1" = "$B2" ] && vert "idempotente : $B1 bucket(s) avant et apres" || rouge "l etat a change ($B1 -> $B2)"
-
-CLE=$(grep '^MINIO_ROOT_USER=' "$BAC/cle.env" | cut -d= -f2-)
-SEC=$(grep '^MINIO_ROOT_PASSWORD=' "$BAC/cle.env" | cut -d= -f2-)
 
 titre "un fonds a la source, puis la VERIFICATION SEULE (aucune bascule)"
 export MINIO_SOURCE_URL="http://127.0.0.1:$PORT_MINIO" MINIO_SOURCE_KEY=sortie MINIO_SOURCE_SECRET="$MDP"

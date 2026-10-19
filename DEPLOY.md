@@ -434,78 +434,30 @@ resté inchangé exprès.
 LUI, le retour arrière. Un script de migration qui efface la source supprime en
 même temps la seule chose qui permet de revenir.
 
-**① Engendrez de NOUVEAUX identifiants S3.** Votre mot de passe MinIO actuel ne
-respecte presque sûrement pas la forme que Garage impose — mesuré : la clé est
-« GK » + 24 hexadécimaux, le secret EXACTEMENT 64 hexadécimaux.
-
-```bash
-printf 'MINIO_ROOT_USER=GK%s\n' "$(openssl rand -hex 12)"
-printf 'MINIO_ROOT_PASSWORD=%s\n' "$(openssl rand -hex 32)"
-printf 'GARAGE_RPC_SECRET=%s\n'   "$(openssl rand -hex 32)"
-printf 'GARAGE_ADMIN_TOKEN=%s\n'  "$(openssl rand -hex 32)"
-```
-
-**② ARRÊTEZ les écritures.** Les services qui écrivent sont `api` et `web` :
-
-```bash
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml stop api web
-```
-
-⚠ Le script le VÉRIFIE et refuse si l'API répond encore. Une copie prise pendant
-qu'on écrit est une copie dont on ne sait rien.
-
-**③ Montez Garage seul**, pour que son initialisation pose les buckets :
-
-```bash
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d garage garage-init
-```
-
-**④ Vérifiez SANS rien basculer.** Cette forme ne touche ni les objets ni la
-configuration — elle compare, et elle refuse si un seul objet diffère :
-
-```bash
-MINIO_SOURCE_URL=http://127.0.0.1:9000 \
-MINIO_SOURCE_KEY=<ancienne clé MinIO> MINIO_SOURCE_SECRET=<ancien secret> \
-GARAGE_S3_URL=http://127.0.0.1:3900 \
-GARAGE_KEY=<nouvelle clé> GARAGE_SECRET=<nouveau secret> \
-STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
-node scripts/migration-minio-vers-garage.mjs --verifier-seulement
-```
-
-**⑤ Migrez.** Mêmes variables, plus `API_HEALTH_URL` pour que le script puisse
-vérifier que les écritures sont bien arrêtées :
-
-```bash
-… API_HEALTH_URL=https://$API_DOMAIN/health \
-node scripts/migration-minio-vers-garage.mjs --migrer --confirmation=$STORAGE_DOMAIN
-```
-
-Il copie, puis vérifie **chaque objet** : clé, taille et somme SHA-256, dans les
-deux sens — rien en trop, rien en moins. Un compte égal ne prouve rien.
-
-**⑥ Le RETOUR ARRIÈRE**, et il est éprouvé :
-
-```bash
-cp .env.prod.avant-garage .env.prod
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
-```
-
-Le volume MinIO porte encore tous les objets. La répétition complète de cette
-procédure, retour arrière compris, est rejouable :
-`./scripts/recette/migration-garage-repetition.sh`.
-
-⚠ **Ce que la répétition ne prouve pas** : elle migre un MinIO qu'elle a semé
-elle-même. Sur vos données réelles, faites d'abord le ④ — il compare sans rien
-écrire.
+⚠ **CETTE VUE D'ENSEMBLE EN PORTAIT AUPARAVANT LA FORME, ET ELLE ÉTAIT FAUSSE
+SUR LE SERVEUR RÉEL** — mesuré le 16 octobre 2026 : ni `node` sur l'hôte, ni les
+ports 9000/3900 publiés. Pour ne pas la laisser contredire la procédure
+corrigée (« deux documents qui s'accordent ne prouvent rien s'ils ont la même
+source, et divergent dès que l'un change »), elle ne la répète plus : la
+procédure complète, par la voie CONTENEURISÉE rejouée sur pile jetable, est
+dans la section suivante — **« LA BASCULE DE LA DÉMONSTRATION »** — et c'est la
+seule à suivre.
 
 ### 🔴 LA BASCULE DE LA DÉMONSTRATION — procédure complète, rc14
 
-**Décidée le 15 octobre 2026. Chaque étape porte son RÉSULTAT ATTENDU, et un
-point d'arrêt explicite : si une vérification ne rend pas ce qui est écrit,
-ARRÊTEZ-VOUS et ne passez pas à la suivante.**
+**Décidée le 15 octobre 2026. SUSPENDUE le 16 octobre 2026** après mesure sur
+le serveur réel : ni `node` sur l'hôte, ni les ports 9000/3900 publiés — les
+deux que la première version de cette procédure supposait. **Réécrite le
+16 octobre 2026 pour une voie entièrement CONTENEURISÉE**, rejouée et vérifiée
+sur une pile jetable avant d'être écrite ici — voir
+`./scripts/recette/migration-garage-conteneurisee.sh`.
+
+**Chaque étape porte son RÉSULTAT ATTENDU, et un point d'arrêt explicite : si
+une vérification ne rend pas ce qui est écrit, ARRÊTEZ-VOUS et ne passez pas à
+la suivante.**
 
 ⚠ **Rien n'est supprimé par cette procédure.** Le volume MinIO reste intact du
-début à la fin : c'est lui, le retour arrière de l'étape ⑧.
+début à la fin : c'est lui, le retour arrière de l'étape ⑨.
 
 ⚠ **ET LES DONNÉES EXPORTÉES NE VONT PAS DANS LE DÉPÔT**, même dans un dossier
 ignoré — un dossier du dépôt est à portée de `git add -A`. Toutes les commandes
@@ -514,33 +466,74 @@ ci-dessous écrivent dans `~/sauvegardes-gafeso/`, hors du dépôt.
 ```bash
 mkdir -p ~/sauvegardes-gafeso && cd ~/sauvegardes-gafeso
 JOUR=$(date +%F)
+# ⚠ Le chemin du dépôt cloné N'EST PAS ~/gafeso sur toute instance — posez-le
+# une fois, et toute la suite s'y réfère par $GAFESO_REPO.
+GAFESO_REPO=~/gafeso   # <- remplacez par le chemin RÉEL sur cette machine
 ```
 
 ---
 
-#### ① LES NOUVEAUX IDENTIFIANTS — leur FORME n'est pas libre
+#### ⓪ ESPACE DISQUE — à vérifier AVANT de construire quoi que ce soit
 
-Garage impose « GK » + 24 hexadécimaux à la clé, et EXACTEMENT 64
-hexadécimaux au secret (mesuré : 48 hex, 32 hex et base64 de 32 octets sont
-refusés). Votre mot de passe MinIO actuel ne respecte presque sûrement pas cette
-forme.
+Mesuré sur une construction FRAÎCHE, sans aucun cache (le pire cas, celui d'un
+serveur qui n'a jamais construit ces images ou dont le cache a été purgé) :
+
+| | Mesuré |
+|---|---|
+| image `api` | 876 Mo |
+| image `web` | 314 Mo |
+| cache de construction consommé (les deux images, à froid) | **5,8 Go** |
+| **total, à froid** | **≈ 7 Go** |
+
+⚠ **7,5 Go libres sur le serveur ne suffisent PAS confortablement à ce total**,
+et ce chiffre ne compte pas encore la migration elle-même : le script COPIE
+sans supprimer — pendant la fenêtre de bascule, le volume MinIO et le volume
+Garage portent tous les deux le fonds complet, en même temps.
+
+**Avant de construire**, sur le serveur réel :
 
 ```bash
-printf 'MINIO_ROOT_USER=GK%s\n'   "$(openssl rand -hex 12)"
-printf 'MINIO_ROOT_PASSWORD=%s\n' "$(openssl rand -hex 32)"
-printf 'GARAGE_RPC_SECRET=%s\n'   "$(openssl rand -hex 32)"
-printf 'GARAGE_ADMIN_TOKEN=%s\n'  "$(openssl rand -hex 32)"
+docker system df
 ```
 
-**Attendu** : quatre lignes. Reportez-les dans `.env.prod` — mais gardez les
-ANCIENNES valeurs de côté : l'étape ⑤ en a besoin pour lire la source.
+Si `RECLAIMABLE` sous `Build Cache` ou `Images` est significatif (probable :
+chaque RC précédente a laissé ses couches), nettoyez — ces deux commandes ne
+touchent NI aux conteneurs en service NI aux volumes :
 
-⛔ **POINT D'ARRÊT** : si `MINIO_ROOT_USER` ne correspond pas à
-`^GK[0-9a-f]{24}$`, l'initialisation refusera en le disant. Vérifiez avant.
+```bash
+# NE PAS EXÉCUTER SANS LIRE : purge tout cache de construction et toute
+# image non référencée par un conteneur EN COURS. Rien de ce qui tourne
+# n'est affecté — vérifié : seules les couches de constructions PASSÉES
+# et les images orphelines partent.
+docker builder prune -af
+docker image prune -af
+```
+
+⛔ **POINT D'ARRÊT** : si après nettoyage `docker system df` montre toujours
+moins de 2 Go de marge au-delà du total mesuré ci-dessus, ne lancez pas la
+construction — libérez de l'espace autrement (un volume externe, ou construire
+sur une autre machine et transférer les images) avant de poursuivre.
 
 ---
 
-#### ② LA SAUVEGARDE — base ET volume, et elle se VÉRIFIE
+#### ① LA SAUVEGARDE — base, volume, ET `.env.prod` AVANT toute modification
+
+⚠ **Réordonné le 16 octobre 2026** : l'ancienne étape ① posait déjà les
+nouveaux identifiants Garage avant que `.env.prod` soit sauvegardé — le
+script de migration ne le sauvegarde qu'à la bascule elle-même (étape ⑦),
+c'est-à-dire APRÈS que cette étape-ci l'aurait déjà réécrit. Un abandon entre
+les deux aurait laissé la configuration ANCIENNE introuvable. La sauvegarde
+vient donc EN PREMIER, sur le fichier tel qu'il est encore.
+
+```bash
+cp "$GAFESO_REPO/.env.prod" ~/sauvegardes-gafeso/env-prod-avant-bascule-$JOUR
+chmod 600 ~/sauvegardes-gafeso/env-prod-avant-bascule-$JOUR
+diff "$GAFESO_REPO/.env.prod" ~/sauvegardes-gafeso/env-prod-avant-bascule-$JOUR
+```
+
+**Attendu** : `diff` ne rend RIEN — un `cp` qui aurait échoué en silence
+laisserait la seule copie de l'ancienne configuration introuvable au moment
+où l'on en aurait besoin.
 
 ```bash
 docker exec -i gafeso-prod-db-1 sh -c 'pg_dumpall -U "$POSTGRES_USER" --clean --if-exists' \
@@ -554,8 +547,18 @@ zcat ~/sauvegardes-gafeso/base-$JOUR.sql.gz | grep -c '^COPY '
 sur un cluster existant ÉCHOUE en silence et **AJOUTE** des lignes aux tables
 sans contrainte. Mesuré le 6 octobre.
 
+⚠ **Identifiez le nom réel du conteneur MinIO avant de continuer** — il n'est
+pas garanti d'être `gafeso-prod-minio-1` sur toute instance :
+
 ```bash
-docker run --rm -v gafeso-prod_minio_data:/v:ro -v ~/sauvegardes-gafeso:/s alpine:3.20 \
+ANCIEN_MINIO=$(docker ps --format '{{.Names}}' | grep -i minio | head -1)
+echo "ancien conteneur MinIO : ${ANCIEN_MINIO:?aucun trouvé — cherchez à la main}"
+ANCIEN_VOLUME=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$ANCIEN_MINIO")
+echo "son volume : ${ANCIEN_VOLUME:?aucun trouvé}"
+```
+
+```bash
+docker run --rm -v "$ANCIEN_VOLUME":/v:ro -v ~/sauvegardes-gafeso:/s alpine:3.20 \
   tar czf /s/minio-$JOUR.tar.gz -C /v .
 docker run --rm -i alpine:3.20 tar tzf - < ~/sauvegardes-gafeso/minio-$JOUR.tar.gz | wc -l
 ```
@@ -563,17 +566,45 @@ docker run --rm -i alpine:3.20 tar tzf - < ~/sauvegardes-gafeso/minio-$JOUR.tar.
 **Attendu** : plusieurs centaines d'entrées. ⚠ Une archive se vérifie en la
 **LISANT**, jamais à sa taille : une archive de 4 ko se restaure parfaitement et
 ne contient rien.
-⚠ Vérifiez le nom du volume d'abord : `docker volume ls | grep minio`.
 
 ⛔ **POINT D'ARRÊT** : si `tar tzf` échoue ou rend moins de 100 entrées,
 n'allez pas plus loin. Sans sauvegarde lisible, il n'y a pas de retour arrière.
 
 ---
 
+#### ② LES NOUVEAUX IDENTIFIANTS — leur FORME n'est pas libre, et ils sont QUATRE
+
+Garage impose « GK » + 24 hexadécimaux à la clé, et EXACTEMENT 64
+hexadécimaux au secret (mesuré : 48 hex, 32 hex et base64 de 32 octets sont
+refusés). Votre mot de passe MinIO actuel ne respecte presque sûrement pas cette
+forme. Deux identifiants supplémentaires sont propres à Garage et n'ont pas
+d'équivalent MinIO :
+
+```bash
+printf 'MINIO_ROOT_USER=GK%s\n'   "$(openssl rand -hex 12)"
+printf 'MINIO_ROOT_PASSWORD=%s\n' "$(openssl rand -hex 32)"
+printf 'GARAGE_RPC_SECRET=%s\n'   "$(openssl rand -hex 32)"
+printf 'GARAGE_ADMIN_TOKEN=%s\n'  "$(openssl rand -hex 32)"
+```
+
+**Attendu** : quatre lignes. Reportez-les dans `.env.prod` — mais gardez les
+ANCIENNES valeurs de `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` de côté : l'étape
+⑥ en a besoin pour lire la source.
+
+⚠ **Les deux premiers noms sont HÉRITÉS de MinIO et ne le désignent plus** :
+`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` portent désormais la clé et le secret
+GARAGE, pour l'API. Ne pas confondre avec l'ANCIENNE paire, qui reste
+nécessaire pour lire la source jusqu'à l'étape ⑥ seulement.
+
+⛔ **POINT D'ARRÊT** : si `MINIO_ROOT_USER` ne correspond pas à
+`^GK[0-9a-f]{24}$`, l'initialisation refusera en le disant. Vérifiez avant.
+
+---
+
 #### ③ ARRÊTER LES ÉCRITURES
 
 ```bash
-cd ~/gafeso   # le dépôt cloné
+cd "$GAFESO_REPO"
 docker compose --env-file .env.prod -f docker/docker-compose.prod.yml stop api web
 curl -sS -o /dev/null -w '%{http_code}\n' https://$API_DOMAIN/health
 ```
@@ -606,19 +637,62 @@ elle est idempotente, une seconde exécution ne crée rien de plus.
 
 ---
 
-#### ⑤ VÉRIFIER SANS RIEN BASCULER
+#### ⑤ VÉRIFIER QUE L'ANCIEN MinIO ET LE NOUVEAU GARAGE SE REJOIGNENT SUR LE RÉSEAU
+
+**Ne supposez pas que les deux sont sur le même réseau Docker — vérifiez-le.**
+`docker compose up` crée le réseau `<projet>_default` ; si l'ancien conteneur
+MinIO a été lancé sous le MÊME nom de projet (c'est le cas si votre
+`COMPOSE_PROJECT_NAME` n'a pas changé), il y est déjà. Sinon, il faut l'y
+rattacher explicitement — sans cela, les adresses internes de l'étape ⑥ ne
+résoudront rien.
+
+```bash
+RESEAU_GARAGE=$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' \
+  "$(docker ps --format '{{.Names}}' | grep -- -garage-1$)")
+RESEAU_MINIO=$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' "$ANCIEN_MINIO")
+echo "garage : $RESEAU_GARAGE   minio : $RESEAU_MINIO"
+if [ "$RESEAU_GARAGE" != "$RESEAU_MINIO" ]; then
+  docker network connect "$RESEAU_GARAGE" "$ANCIEN_MINIO"
+  echo "rattaché — vérifiez de nouveau avant de continuer"
+fi
+```
+
+**Attendu** : les deux lignes affichent le MÊME réseau (après rattachement si
+besoin).
+
+```bash
+docker run --rm --network "$RESEAU_GARAGE" curlimages/curl -sS -o /dev/null -w '%{http_code}\n' \
+  "http://$ANCIEN_MINIO:9000/minio/health/live"
+```
+
+**Attendu** : `200` — l'ancien MinIO répond par son NOM DE CONTENEUR, depuis le
+réseau que Garage vient de rejoindre.
+
+⛔ **POINT D'ARRÊT** : si ce n'est pas `200`, ne passez pas à l'étape suivante
+— les adresses internes de la migration ne résoudraient rien, et un script
+qui ne peut pas joindre sa source REFUSE désormais en le disant (voir ⑥).
+
+---
+
+#### ⑥ VÉRIFIER SANS RIEN BASCULER — par `docker compose run`, adresses INTERNES
+
+**Aucun port n'est publié, aucun `node` n'est requis sur l'hôte.** La migration
+tourne DANS un conteneur jetable construit depuis l'image `api`, qui porte déjà
+le script et sa dépendance (`@aws-sdk/client-s3`) — rien à ajouter à l'image ni
+au compose.
 
 Cette forme ne touche NI les objets NI la configuration. Elle compare, et elle
 refuse si un seul objet diffère.
 
 ```bash
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d minio 2>/dev/null || true
-MINIO_SOURCE_URL=http://127.0.0.1:9000 \
-MINIO_SOURCE_KEY=<ANCIENNE clé> MINIO_SOURCE_SECRET=<ANCIEN secret> \
-GARAGE_S3_URL=http://127.0.0.1:3900 \
-GARAGE_KEY=<nouvelle clé> GARAGE_SECRET=<nouveau secret> \
-STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
-node scripts/migration-minio-vers-garage.mjs --verifier-seulement
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  run --rm --no-deps --entrypoint node \
+  -e MINIO_SOURCE_URL="http://$ANCIEN_MINIO:9000" \
+  -e MINIO_SOURCE_KEY=<ANCIENNE clé> -e MINIO_SOURCE_SECRET=<ANCIEN secret> \
+  -e GARAGE_S3_URL=http://garage:3900 \
+  -e GARAGE_KEY=<nouvelle clé> -e GARAGE_SECRET=<nouveau secret> \
+  -e STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
+  api scripts/migration-minio-vers-garage.mjs --verifier-seulement
 ```
 
 **Attendu** : le compte des objets à la source, puis un REFUS qui NOMME les
@@ -626,19 +700,46 @@ manquants — c'est normal, rien n'a encore été copié. Le chiffre qui compte 
 « N objet(s) a la source ».
 
 ⛔ **POINT D'ARRÊT** : si le compte à la source est **0**, la source n'est pas
-lue (mauvaise clé, mauvais port). Migrer alors « réussirait » sur zéro objet.
+lue (mauvaise clé, mauvais nom de conteneur). Migrer alors « réussirait » sur
+zéro objet — c'est exactement ce que le script refuse désormais de lui-même
+(« AUCUN objet examine »).
+
+⛔ **ET SI LE MESSAGE DIT « INJOIGNABLE »** : il NOMME laquelle des deux
+extrémités (source MinIO ou cible Garage) ne répond pas du tout, avant même de
+parler de buckets ou d'identifiants. Revenez à l'étape ⑤.
 
 ---
 
-#### ⑥ MIGRER
+#### ⑦ MIGRER
 
-Mêmes variables, plus `API_HEALTH_URL` pour que le script puisse vérifier
-l'arrêt des écritures :
+Même commande, `--migrer` à la place de `--verifier-seulement`, plus
+`API_HEALTH_URL` pour que le script vérifie l'arrêt des écritures :
 
 ```bash
-… API_HEALTH_URL=https://$API_DOMAIN/health \
-node scripts/migration-minio-vers-garage.mjs --migrer --confirmation=$STORAGE_DOMAIN
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  run --rm --no-deps --entrypoint node --user "$(id -u):$(id -g)" \
+  -e MINIO_SOURCE_URL="http://$ANCIEN_MINIO:9000" \
+  -e MINIO_SOURCE_KEY=<ANCIENNE clé> -e MINIO_SOURCE_SECRET=<ANCIEN secret> \
+  -e GARAGE_S3_URL=http://garage:3900 \
+  -e GARAGE_KEY=<nouvelle clé> -e GARAGE_SECRET=<nouveau secret> \
+  -e STORAGE_PUBLIC_DOMAIN=$STORAGE_DOMAIN \
+  -e API_HEALTH_URL=https://$API_DOMAIN/health \
+  -e ENV_FILE=/app/.env.prod.recu \
+  -v "$GAFESO_REPO/.env.prod:/app/.env.prod.recu" \
+  api scripts/migration-minio-vers-garage.mjs --migrer --confirmation=$STORAGE_DOMAIN
 ```
+
+⚠ **`.env.prod` est monté en volume POUR CETTE SEULE COMMANDE** : le script
+bascule la configuration DEDANS le conteneur jetable, qui écrit directement
+dans le fichier de l'hôte via ce montage — c'est la seule façon pour un
+conteneur de modifier un fichier qui doit survivre après sa sortie.
+
+⚠ **ET `--user "$(id -u):$(id -g)"` N'EST PAS UNE PRUDENCE, C'EST UNE
+NÉCESSITÉ, mesurée** : l'image tourne en `gafeso` (UID 100) par défaut.
+Écrire dans un fichier monté dont l'hôte est propriétaire (UID 1000 typique,
+`chmod 600`) échoue en `EACCES` sans cet indicateur — vérifié en écrivant
+dans les deux conditions. Avec lui, le conteneur écrit sous VOTRE identité
+d'exploitant, exactement celle qui possède déjà `.env.prod`.
 
 **Attendu** :
 ```
@@ -654,20 +755,22 @@ configuration sauvegardee : .env.prod.avant-garage (0600)
 lui-même et n'a RIEN basculé. Ne forcez pas — lisez les écarts nommés.
 
 *Mesuré sur une copie des données réelles de la démonstration : 179 objets,
-179 vérifiés au SHA-256, 0 écart, 5 secondes.*
+179 vérifiés au SHA-256, 0 écart, 5 secondes. Et la voie conteneurisée
+elle-même rejouée sur pile jetable, port par port fermé : 52 objets, 0 écart —
+voir `./scripts/recette/migration-garage-conteneurisee.sh`.*
 
 ---
 
-#### ⑦ DÉMARRER ET CONTRÔLER
+#### ⑧ DÉMARRER ET CONTRÔLER
 
 ```bash
-docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --build
 curl -sS https://$API_DOMAIN/health
 ```
 
 **Attendu** : `{"status":"ok","version":"v1.0.0-rc14","commit":"…"}`.
-⚠ Si vous lisez `"version":"non étiquetée"`, l'étape ④ a été faite sans
-`eval "$(scripts/version-du-depot.sh --exporter)"`.
+⚠ Si vous lisez `"version":"non étiquetée"`, l'étape ④ (ou celle-ci) a été
+faite sans `eval "$(scripts/version-du-depot.sh --exporter)"`.
 
 ⭐ **ET SI LA MIGRATION N'AVAIT PAS EU LIEU, L'API REFUSERAIT DE DÉMARRER** :
 elle compte les documents numériques en base et les objets dans le bucket, et
@@ -695,7 +798,7 @@ qu'avant la bascule.
 
 ---
 
-#### ⑧ LE RETOUR ARRIÈRE, si l'un des contrôles échoue
+#### ⑨ LE RETOUR ARRIÈRE, si l'un des contrôles échoue
 
 ```bash
 cp .env.prod.avant-garage .env.prod
@@ -709,11 +812,12 @@ MinIO porte encore tous les objets**, la migration n'y a rien touché.
 
 ⚠ `git checkout` du compose n'est PAS le retour arrière : le compose de rc14
 EST sur Garage. Ce qui se défait, c'est la CONFIGURATION — et c'est pourquoi le
-script la sauvegarde avant de la changer.
+script la sauvegarde avant de la changer (étape ①, et de nouveau à l'étape ⑦).
 
 *La procédure entière, retour arrière compris, est rejouable sur pile jetable :
-`./scripts/recette/migration-garage-repetition.sh`.*
-
+`./scripts/recette/migration-garage-repetition.sh` (le comportement du script)
+et `./scripts/recette/migration-garage-conteneurisee.sh` (la voie
+d'invocation : zéro port publié, zéro `node` sur l'hôte).*
 ### La cible
 
 **Garage** (AGPL-3.0, comme Gafeso). Mesuré sur nos appels réels : 32 Mo

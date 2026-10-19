@@ -41,9 +41,25 @@ const RACINE = join(__dirname, '..', '..', '..', '..');
 const DEPLOY = readFileSync(join(RACINE, 'DEPLOY.md'), 'utf-8');
 const DOCKERFILE = readFileSync(join(RACINE, 'apps', 'api', 'Dockerfile'), 'utf-8');
 
-/** Les scripts que `DEPLOY.md` fait exécuter dans le conteneur. */
+/**
+ * Les scripts que `DEPLOY.md` fait exécuter dans le conteneur.
+ *
+ * ⚠ DEUX FORMES, depuis le 16 octobre 2026 : `node scripts/X.mjs` (un
+ * `exec`/`run` qui garde l'entrypoint de l'image) et `api scripts/X.mjs` (un
+ * `run --entrypoint node`, où « node » est un drapeau séparé du nom du
+ * service — nécessaire pour `docker compose run`, qui n'accepte pas
+ * `entrypoint: node` et une commande dans le même token). La bascule vers
+ * Garage a introduit la seconde : le compte est passé de 6 à 5 avant qu'elle
+ * ne soit reconnue — exactement la famille « un garde qui lit la source ne
+ * suit pas les variables », ici une forme d'INVOCATION plutôt qu'une
+ * variable.
+ */
 function scriptsAppelés(): string[] {
-  return [...new Set([...DEPLOY.matchAll(/node (scripts\/[A-Za-z0-9_./-]+\.mjs)/g)].map((m) => m[1]))];
+  return [
+    ...new Set(
+      [...DEPLOY.matchAll(/(?:node |^\s*api )(scripts\/[A-Za-z0-9_./-]+\.mjs)/gm)].map((m) => m[1]),
+    ),
+  ];
 }
 
 /**

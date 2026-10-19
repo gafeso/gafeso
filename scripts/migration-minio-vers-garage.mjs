@@ -68,6 +68,30 @@ if (migrer && !confirmation) {
 const src = clientS3(E.MINIO_SOURCE_URL, E.MINIO_SOURCE_KEY, E.MINIO_SOURCE_SECRET);
 const dst = clientS3(E.GARAGE_S3_URL, E.GARAGE_KEY, E.GARAGE_SECRET);
 
+/**
+ * ⚠ JOIGNABLE ≠ LISIBLE. Sans ce controle, une adresse fausse et un bucket
+ * absent produisent le MEME message plus bas (« bucket illisible »), et
+ * rien ne dit si c'est le RESEAU ou les IDENTIFIANTS qui sont en cause.
+ *
+ * Trouve le 16 octobre 2026, en executant la migration depuis un
+ * conteneur sur le reseau du compose : une adresse mal orthographiee
+ * (nom de service errone) et un identifiant faux produisaient tous les
+ * deux « illisible », sans dire LEQUEL des deux cotes ne repondait pas.
+ */
+async function verifierJoignable(nom, url) {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(5000) });
+  } catch (e) {
+    refuse(nom + ' est INJOIGNABLE a ' + url + ' : ' + (e.cause?.code ?? e.name), [
+      "Toute reponse HTTP, meme une erreur S3, aurait suffi a prouver que",
+      "l'adresse repond. Verifiez le nom du service et qu'il est sur le",
+      "MEME reseau Docker que ce conteneur (`docker network inspect`).",
+    ]);
+  }
+}
+await verifierJoignable('la SOURCE (MinIO)', E.MINIO_SOURCE_URL);
+await verifierJoignable('la CIBLE (Garage)', E.GARAGE_S3_URL);
+
 // ── 1. les ecritures sont-elles ARRETEES ?
 if (migrer) {
   const sonde = E.API_HEALTH_URL;
