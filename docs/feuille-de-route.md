@@ -161,61 +161,99 @@ statut 404 conservé — mesuré par la même commande, sur un build de producti
 
 ---
 
-## V1.1 — L'URL signée de lecture n'est ni liée à la session, ni à usage unique
+## V1.1 — Lecture attribuée
 
-**Mesuré le 19 octobre 2026, sans aucun changement de code, à la demande de
-Jean** — après la décision qu'aucun lecteur non identifié ne lit un document
-(voir plus bas). C'est la seule fuite réelle qui reste pour un lecteur
-IDENTIFIÉ.
+**Posé le 20 octobre 2026, par Jean, après la mesure suivante : l'attribution
+n'existe NULLE PART**, ni web ni mobile. Le filigrane web n'est qu'un
+affichage à l'écran — le fichier qui sort est identique pour tous les
+lecteurs. Côté hors ligne, la base de développement le confirme sans
+ambiguïté : trois licences actives de trois appareils différents
+(`offline_licenses`, tenant zinda) pointent vers le **même** `enc_object_key`
+— un seul blob chiffré, partagé, qui ne porte la marque d'aucun lecteur.
+`rights` n'est appliqué par personne.
 
-`OpacService.getReadUrl` appelle `StorageService.getSignedDownloadUrl`, qui
-produit une URL S3 présignée ordinaire (`@aws-sdk/s3-request-presigner`,
-`getSignedUrl`) portant uniquement `Bucket`, `Key` et
-`ResponseContentDisposition`. Rien n'y identifie l'étudiant qui l'a demandée,
-et rien côté serveur n'enregistre qu'elle a déjà été consommée.
+Un seul lot plutôt que trois tickets séparés, parce que les trois défauts
+ci-dessous partagent UNE CAUSE : **l'API sert le document en clair** (ou
+chiffré de façon identique pour tout le monde) et délègue toute la
+protection à une URL, jamais à une marque portée par le fichier lui-même.
 
-| | Mesuré |
-|---|---|
-| Liée au compte qui l'a demandée ? | **Non** — une URL présignée S3 est valide pour QUICONQUE la détient |
-| À usage unique ? | **Non** — valide pour tout appel jusqu'à expiration, aucun jeton consommé |
-| Protection actuelle | le TTL seul : 300 s (lecture OPAC), 900 s (téléchargement admin) — déjà documentée dans `CLAUDE.md` comme « protection raisonnable, assumée comme non absolue » |
+### 1. Web : filigrane posé À LA VOLÉE, sans stockage
 
-⚠ **Ce que ça permet concrètement** : l'URL apparaît dans l'onglet Réseau du
-navigateur pendant tout son TTL. Copiée, partagée, ou simplement cachée par
-un proxy intermédiaire, elle reste utilisable par un tiers pendant la fenêtre
-restante — sans qu'aucune vérification de session n'intervienne à ce
-second appel.
+Le filigrane nominatif existe déjà à l'écran (pdf.js, canvas) — ce lot ne le
+réinvente pas, il le fait porter par le FICHIER qui sort, pas seulement par
+ce qui s'affiche. Composé au moment de la requête, à partir de l'identité du
+compte qui lit, jamais stocké : la même notice ne produit pas un fichier par
+lecteur à demeure, elle produit un flux dérivé à chaque demande. Coût de
+stockage : **nul** — c'est précisément pour ça que « à la volée » est la
+forme à retenir plutôt qu'une copie par compte.
 
-**Ce qu'il faudrait** : lier l'émission au compte qui l'a demandée (un jeton
-propre à la session, vérifié à la livraison plutôt que délégué à S3/Garage
-tel quel) et la consommer à la première lecture — un second appel avec le
-même jeton doit échouer, pas seulement expirer.
+### 2. Hors ligne : un blob par APPAREIL ACTIF, détruit à la révocation
 
-⚠ **La forme FAUTIVE que ce problème appelle** : raccourcir le TTL en croyant
-fermer la fenêtre. Un TTL plus court réduit la fenêtre, il ne retire pas le
-partage possible PENDANT elle — et un TTL trop court casserait une session de
-lecture légitime plus longue que lui (c'est déjà la raison des 5 minutes
-actuelles plutôt que les 15 de l'admin).
+Aujourd'hui : un seul blob chiffré par notice, **partagé** entre tous les
+appareils qui en détiennent une licence (mesuré ci-dessus). Demain : un blob
+par appareil actif, produit à l'émission de la licence et **détruit à sa
+révocation** — ce qui donne à la révocation un effet matériel immédiat
+(aujourd'hui, revoir le bail est le SEUL mécanisme ; le blob, lui, survit).
 
----
+### 3. Plus aucune URL signée exposée au navigateur
 
-## V1.1 — Plafonds par compte, par jour et par établissement
+**Mesuré le 19 octobre 2026, sans changement de code.**
+`OpacService.getReadUrl` → `StorageService.getSignedDownloadUrl` produit une
+URL S3 présignée ordinaire, valide pour QUICONQUE la détient (ni liée au
+compte, ni à usage unique — seule protection : un TTL de 300 s/900 s, déjà
+documenté comme « raisonnable, non absolu »). Elle apparaît dans l'onglet
+Réseau du navigateur pendant tout son TTL : copiée ou cachée par un proxy,
+elle reste utilisable par un tiers pendant la fenêtre restante, sans
+vérification de session au second appel.
 
-**Confirmé le 19 octobre 2026**, dans la même décision que ci-dessus : une
-fois l'URL liée à la session et à usage unique, la défense suivante contre
-un usage abusif (un compte compromis, un script qui boucle) est une LIMITE
-DE DÉBIT à trois niveaux, qui ne se remplacent pas l'un l'autre :
-- **par COMPTE** — un lecteur donné ne télécharge pas un nombre illimité de
-  documents dans la journée ;
-- **par JOUR** — la fenêtre sur laquelle ce plafond se mesure ;
-- **par ÉTABLISSEMENT** — un plafond agrégé, pour borner le coût d'un compte
-  compromis à l'échelle de l'école plutôt qu'à celle d'un seul lecteur.
+⚠ **La forme FAUTIVE que ce problème appelle** : raccourcir le TTL en
+croyant fermer la fenêtre. Ça réduit la fenêtre, ça ne retire pas le partage
+possible PENDANT elle, et un TTL trop court casserait une session de lecture
+légitime plus longue que lui.
 
-⚠ Aucun des trois n'existe aujourd'hui sur ce chemin, mesuré (audit du
-19 octobre 2026) : `/auth/login` et les routes voisines sont limitées
-(`@Throttle`, `app.module.ts`), mais c'est une limite PAR IP et générique
-(300 requêtes/60 s) — rien ne porte sur la LECTURE elle-même une fois
-authentifié, ni par compte, ni par jour, ni par établissement.
+Avec le filigrane à la volée (point 1), cette fuite se referme par
+construction plutôt que par un second mécanisme : le navigateur ne reçoit
+plus jamais une URL vers l'objet brut, il reçoit un flux déjà attribué,
+servi par l'API elle-même (authentifiée par session, pas par une signature
+S3 détachable).
+
+### 4. Plafonds par compte et par jour
+
+Défense contre l'abus une fois le point 3 posé (un compte compromis, un
+script qui boucle) : une limite par COMPTE (un lecteur ne consulte pas un
+nombre illimité de documents par jour) et par JOUR (la fenêtre de mesure).
+Mesuré le 19 octobre 2026 : `/auth/login` et les routes voisines sont
+limitées (`@Throttle`), mais c'est une limite PAR IP et générique — rien ne
+porte sur la lecture elle-même une fois authentifié.
+
+### Coût de stockage estimé — pour arbitrer sur des chiffres, pas une impression
+
+**Mesuré sur la base de développement, pas deviné** : `tenant_zinda` porte
+**9 licences actives pour 4 notices distinctes** — soit 2,25 appareils actifs
+par notice offline-activée, en moyenne, sur cet échantillon. Sous le modèle
+actuel (1 blob partagé par notice), ces 4 notices tiennent dans **4 blobs** ;
+sous « un blob par appareil actif », elles en demanderaient **9** — un
+multiplicateur mesuré de **×2,25** sur ces données.
+
+⚠ **Ce multiplicateur ne se généralise pas tel quel à un fonds réel** : notre
+corpus de développement pèse en moyenne **54 Ko** par copie chiffrée (156
+copies, tenant zinda) — des PDF d'essai, pas des thèses ou des ouvrages. Pour
+arbitrer sur un ordre de grandeur RÉALISTE, voici un calcul explicitement
+hypothétique (à ne pas confondre avec les chiffres ci-dessus, qui sont
+mesurés) :
+
+| | Aujourd'hui (1 blob partagé) | V1.1 (1 blob / appareil actif) |
+|---|---|---|
+| Document moyen (hypothèse, pas mesuré) | 2 Mo | 2 Mo |
+| Appareils actifs par document (hypothèse) | — | 10 |
+| Stockage par document offline-activé | 2 Mo | **20 Mo** |
+| Pour 500 documents offline-activés sur un fonds | 1 Go | **10 Go** |
+
+Le multiplicateur réel dépend du nombre moyen d'appareils actifs par
+document — une grandeur qu'aucune instance n'a encore produite à l'échelle,
+et qui devra être mesurée (pas supposée) dès qu'un fonds de taille réelle
+aura des licences hors ligne actives, avant de fixer un plafond de stockage
+par établissement.
 
 ---
 

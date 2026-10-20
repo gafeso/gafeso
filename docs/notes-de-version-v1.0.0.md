@@ -92,6 +92,10 @@ v1.0.0. Public visé : l'exploitant qui installe ou met à jour une instance.*
   (14 jours par défaut, réglable par établissement). Ce n'est ni immédiat
   dans tous les cas, ni indéfini dans aucun — c'est une propriété du produit,
   pas une limite oubliée.
+- **Pas d'attribution sur le document extrait** : la consultation est tracée
+  nominativement côté serveur ; en revanche un document extrait ne porte
+  aucune marque identifiant son lecteur. Le marquage par lecteur est prévu
+  en V1.1.
 - `minio/minio` n'est plus dans le compose de production. Un redémarrage
   depuis l'ancien compose échouera au téléchargement de l'image (dépôt
   retiré de Docker Hub — fait externe, pas un choix de notre part).
