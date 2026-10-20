@@ -140,7 +140,23 @@ async function currentHost(): Promise<string> {
   return h.get('x-forwarded-host') ?? h.get('host') ?? '';
 }
 
-async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
+/**
+ * ⚠ AJOUTÉ le 20 octobre 2026 : « panne » et « hôte inconnu » étaient toutes
+ * deux `null`, indiscernables pour l'appelant — exactement le défaut que ce
+ * dépôt nomme ailleurs (`ExistencePublique`), appliqué cette fois à la
+ * RÉSOLUTION DU TENANT elle-même plutôt qu'à une notice. `tenancy.home` (et
+ * `tenancy.current`) lève un 400 NOMMÉ (« Tenant non résolu ») exactement
+ * quand le domaine ne correspond à aucun établissement — jamais pour une
+ * autre raison. Cette distinction permet à la page d'accueil de dire la
+ * bonne chose : un domaine structurellement inconnu n'est pas une panne
+ * passagère à laquelle « réessayez » s'applique.
+ */
+export type EtatResolutionHote = 'resolu' | 'hote_inconnu' | 'indisponible';
+
+async function fetchTenantAvecEtat<T>(
+  path: string,
+  host: string,
+): Promise<{ etat: EtatResolutionHote; data: T | null }> {
   const sep = path.includes('?') ? '&' : '?';
   const url = `${apiUrl()}${path}${sep}__host=${encodeURIComponent(host)}`;
   try {
@@ -148,13 +164,18 @@ async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
       headers: { 'x-forwarded-host': host },
       next: { tags: [homeCacheTag(host)], revalidate: HOME_TTL },
     });
+    if (res.status === 400) {
+      // Le seul 400 de cette route est « Tenant non résolu » — voir
+      // tenancy.controller.ts. Structurel, pas une panne : pas de `console.error`.
+      return { etat: 'hote_inconnu', data: null };
+    }
     if (!res.ok) {
       // NON silencieux : trace l'URL et le code pour diagnostiquer côté serveur
-      // (ex. mauvaise API_URL, tenant non résolu). L'appelant affiche un repli.
+      // (ex. mauvaise API_URL). L'appelant affiche un repli.
       console.error(`[server-api] ${url} (host="${host}") → HTTP ${res.status}`);
-      return null;
+      return { etat: 'indisponible', data: null };
     }
-    return (await res.json()) as T;
+    return { etat: 'resolu', data: (await res.json()) as T };
   } catch (err) {
     // Échec réseau (API réellement injoignable / URL erronée) : on ne casse
     // pas le rendu de la page publique, mais on LOGGE la cause exacte — sans
@@ -163,8 +184,12 @@ async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
       `[server-api] échec du fetch ${url} (host="${host}") : ${(err as Error).message}. ` +
         `Vérifier API_URL du conteneur web (attendu http://api:4000 en prod).`,
     );
-    return null;
+    return { etat: 'indisponible', data: null };
   }
+}
+
+async function fetchTenant<T>(path: string, host: string): Promise<T | null> {
+  return (await fetchTenantAvecEtat<T>(path, host)).data;
 }
 
 /** Charge utile complète de la page d'accueil du tenant courant (SSR). */
@@ -366,6 +391,14 @@ export async function noticePublique(
 
 export async function fetchTenantHome(): Promise<TenantHome | null> {
   return fetchTenant<TenantHome>('/tenancy/home', await currentHost());
+}
+
+/** Comme `fetchTenantHome`, mais garde POURQUOI — voir `EtatResolutionHote`. */
+export async function fetchTenantHomeAvecEtat(): Promise<{
+  etat: EtatResolutionHote;
+  data: TenantHome | null;
+}> {
+  return fetchTenantAvecEtat<TenantHome>('/tenancy/home', await currentHost());
 }
 
 export interface Constellation {

@@ -149,10 +149,9 @@ function buildCsp(nonce: string): string {
  * `TenantMiddleware.resolveByHost` (apps/api/src/tenancy/tenant.middleware.ts)
  * utilise ensuite pour choisir l'école.
  *
- * ⚠ ET CE N'ÉTAIT PAS EXPLOITABLE DE N'IMPORTE OÙ, mesuré aussi : à travers
- * Caddy (`docker/Caddyfile`), un Host inconnu ne sort jamais de Caddy (200
- * vide, rien forwardé — aucun bloc de site ne correspond), et Caddy réécrit
- * lui-même X-Forwarded-Host par défaut, même si le CLIENT en envoie un. Le
+ * ⚠ ET CE N'ÉTAIT PAS EXPLOITABLE POUR FUITER DES DONNÉES, mesuré aussi : à
+ * travers Caddy (`docker/Caddyfile`), un Host inconnu ne sort jamais de Caddy
+ * — aucun bloc de site ne correspond, donc RIEN n'est transmis à `web`. Le
  * chemin qui restait ouvert est un accès DIRECT à `web:3000` — à l'intérieur
  * du réseau Docker, ou par un port publié par erreur — qui ne passe PAS par
  * Caddy. Pour une requête AUTHENTIFIÉE, `JwtAuthGuard` (apps/api/src/auth/
@@ -160,6 +159,16 @@ function buildCsp(nonce: string): string {
  * à celui résolu — vérifié par un jeton réel d'une école, Host forgé vers une
  * autre : 401 « Jeton émis pour une autre école. » Ce contrôle-ci protège les
  * routes PUBLIQUES (catalogue), qui n'ont pas cette seconde garde.
+ *
+ * ⚠ CE QUI ÉTAIT FAUX, mesuré le 20 octobre 2026 sur la démonstration réelle
+ * par Jean : « un Host inconnu ne sort jamais de Caddy » décrivait un **200
+ * vide**, pas une absence de réponse — exactement le faux silencieux que
+ * `docker/Caddyfile` nommait déjà pour le port 80 seul, et qui existait AUSSI
+ * sur 443 dès qu'un client garde un SNI valide (celui de `PUBLIC_DOMAIN`) et
+ * ne forge que l'en-tête Host — ce qui réussit la poignée de main TLS avant
+ * que Caddy ne refuse au niveau HTTP. Corrigé côté Caddy (bloc `:443` ajouté
+ * ce jour) : un Host qui ne correspond à aucun site déclaré reçoit désormais
+ * un 404 explicite, sur 80 comme sur 443 — jamais un 200 vide.
  */
 function hoteAttendu(): string | null {
   try {
@@ -169,17 +178,53 @@ function hoteAttendu(): string | null {
   }
 }
 
-export function middleware(request: NextRequest) {
+/**
+ * ⚠ CORRIGÉ le 20 octobre 2026 : la comparaison contre le seul `APP_URL` est
+ * plus étroite que la réalité du produit. `domains` (schéma `public`) porte
+ * PLUSIEURS domaines — mesuré en base de développement : `localhost` ET
+ * `zinda.localhost` pour la même école, `horizon.localhost` pour une autre,
+ * sur UNE installation. Un établissement qui déclare son propre domaine (la
+ * raison d'être de cette table) se serait vu refuser par une comparaison à
+ * une seule chaîne.
+ *
+ * Chemin rapide : égal à `APP_URL` → aucun appel réseau, c'est le cas de
+ * CHAQUE requête légitime normale. Repli, uniquement pour un Host qui diffère
+ * (donc déjà suspect ou déjà rare) : on interroge l'API, seule détentrice de
+ * la table `domains` — ne pas la réinterroger ici en dupliquant son accès
+ * base, qui romprait la frontière entre `web` et `api` de ce monolithe
+ * modulaire.
+ */
+async function hoteValide(hoteSansPort: string): Promise<boolean> {
+  const attendu = hoteAttendu();
+  if (!attendu) return true; // APP_URL absent : voir le commentaire plus bas.
+  if (hoteSansPort === attendu) return true;
+  try {
+    const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
+    const res = await fetch(`${apiUrl}/tenancy/current`, {
+      headers: { 'x-forwarded-host': hoteSansPort },
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    // ⚠ L'API est peut-être simplement injoignable (panne, démarrage) : un
+    // Host par ailleurs légitime ne doit pas être refusé pour une raison qui
+    // n'a rien à voir avec lui. On REFUSE quand même ici, et pas « laisse
+    // passer » : un Host qui N'ÉTAIT PAS `APP_URL` reste la seule population
+    // visée par ce contrôle, et la panne ne doit pas devenir un contournement.
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const originalHost = request.headers.get('host');
   const hoteSansPort = originalHost?.split(':')[0] ?? null;
-  const attendu = hoteAttendu();
-  // ⚠ `attendu` absent (APP_URL non posé) laisse passer plutôt que de tout
-  // refuser : ce cas ne devrait pas arriver en production (APP_URL est
-  // `:?requis` dans docker-compose.prod.yml), et un refus large masquerait
-  // une erreur de configuration derrière un message qui parle de Host.
-  if (attendu && hoteSansPort && hoteSansPort !== attendu) {
+  // ⚠ `hoteSansPort` absent laisse passer plutôt que de tout refuser : ce cas
+  // ne devrait pas arriver (Host est un en-tête HTTP/1.1 obligatoire), et un
+  // refus large masquerait une erreur de configuration derrière un message
+  // qui parle de Host.
+  if (hoteSansPort && !(await hoteValide(hoteSansPort))) {
     return new NextResponse('Hôte non reconnu.', { status: 400 });
   }
 

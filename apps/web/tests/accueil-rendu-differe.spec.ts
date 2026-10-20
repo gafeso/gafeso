@@ -8,10 +8,10 @@
  * Et surtout : premier octet ≈ page complète, avant. Rien ne s'écoulait, le
  * visiteur regardait du blanc du début à la fin.
  *
- * ⚠ LE PLANCHER EST STRUCTUREL : `fetchTenantHome` commande l'affichage — nom
- * de l'école, bandeau, repli sobre d'un domaine inconnu. Descendre sous un
- * aller-retour échangerait du blanc contre un squelette sans marque, et c'est
- * une décision prise contre.
+ * ⚠ LE PLANCHER EST STRUCTUREL : `fetchTenantHomeAvecEtat` commande
+ * l'affichage — nom de l'école, bandeau, les deux replis (hôte inconnu,
+ * panne). Descendre sous un aller-retour échangerait du blanc contre un
+ * squelette sans marque, et c'est une décision prise contre.
  *
  * Ce test lit la SOURCE, faute de pouvoir rendre un composant serveur
  * asynchrone dans jsdom. C'est une vérification de forme, et elle est explicite
@@ -54,12 +54,27 @@ describe('⚠ la page n’attend plus les trois appels différés', () => {
 });
 
 describe('⚠ ce que la page attend ENCORE, et pourquoi', () => {
-  it('fetchTenantHome reste avant le repli sobre', () => {
+  it('fetchTenantHomeAvecEtat reste avant les deux replis', () => {
     const debut = page.indexOf('export default async function HomePage');
-    const posHome = page.indexOf('await fetchTenantHome()', debut);
-    const posRepli = page.indexOf('if (!home)', debut);
+    const posHome = page.indexOf('await fetchTenantHomeAvecEtat()', debut);
+    const posRepliHoteInconnu = page.indexOf("etat === 'hote_inconnu'", debut);
+    const posRepliPanne = page.indexOf('if (!home)', debut);
     expect(posHome).toBeGreaterThan(-1);
-    expect(posRepli).toBeGreaterThan(posHome);
+    expect(posRepliHoteInconnu).toBeGreaterThan(posHome);
+    expect(posRepliPanne).toBeGreaterThan(posRepliHoteInconnu);
+  });
+
+  it('⭐ les deux replis sont DISTINCTS : un hôte inconnu n’est pas une panne', () => {
+    // Témoin d'absence : avant le 20 octobre 2026, un seul `if (!home)`
+    // confondait les deux. Un hôte inconnu qui retomberait sur le même
+    // texte que la panne redeviendrait indiscernable.
+    const debut = page.indexOf('export default async function HomePage');
+    const blocHoteInconnu = page.slice(
+      page.indexOf("etat === 'hote_inconnu'", debut),
+      page.indexOf('if (!home)', debut),
+    );
+    expect(blocHoteInconnu).toContain('Aucun établissement ne correspond');
+    expect(blocHoteInconnu).not.toContain('Le catalogue est accessible');
   });
 });
 

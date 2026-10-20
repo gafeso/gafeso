@@ -28,6 +28,24 @@ export default function LirePage() {
   // (signature distincte), ce qui fait réinitialiser epub.js en cours de
   // route et casse le rendu (résolution interne qui part en vrille).
   const fetchedRef = useRef(false);
+  /*
+   * ⭐⭐ LA REDEMANDE EST BORNÉE À UNE, et c'est ICI qu'elle se compte.
+   *
+   * L'URL de lecture vaut 300 s. Mesuré le 19 octobre 2026 : refusée, elle
+   * n'était pas redemandée — une requête, un 403, et l'écran renvoyait à la
+   * fiche. Quelqu'un qui revient sur son onglet dix minutes plus tard devait
+   * tout recommencer.
+   *
+   * ⚠ LE COMPTE VIT DANS LA PAGE, pas dans le lecteur. Un composant qui se
+   * rejouerait lui-même boucle sans que personne le voie : sur une panne
+   * durable du stockage, il redemanderait indéfiniment, et chaque tour coûte un
+   * appel à l'API ET une URL signée de plus. Le lecteur DEMANDE ; c'est la page
+   * qui dit non.
+   *
+   * Si la seconde tentative échoue, le message du lecteur s'affiche — il nomme
+   * déjà le geste à faire et porte une sortie vers la fiche.
+   */
+  const redemandeFaite = useRef(false);
 
   useEffect(() => {
     if (fetchedRef.current) return;
@@ -107,9 +125,36 @@ export default function LirePage() {
       </header>
       <div className="min-h-0 flex-1">
         {data.fileFormat === 'EPUB' ? (
+          /*
+           * ⚠ BORNE ÉCRITE : L'EPUB NE REDEMANDE PAS. `react-reader` récupère
+           * le fichier lui-même, dans epub.js — ce composant n'a pas de requête
+           * propre, donc aucun refus à rattraper sans entrer dans la
+           * bibliothèque. Lui passer `redemanderUrl` serait un décor.
+           *
+           * ⚠ Et le coût est NUL aujourd'hui, mesuré plutôt que supposé :
+           * 156 copies numériques dans le fonds, 156 PDF, zéro EPUB. Le jour où
+           * un EPUB est téléversé, cette borne devient réelle — c'est pour ça
+           * qu'elle est écrite ici plutôt que tue.
+           */
           <EpubReader url={data.url} recordId={id} />
         ) : (
-          <PdfReader url={data.url} title={data.title} />
+          <PdfReader
+            url={data.url}
+            title={data.title}
+            redemanderUrl={async () => {
+              if (redemandeFaite.current) return null;
+              redemandeFaite.current = true;
+              try {
+                const frais = await api<ReadResponse>(`/opac/records/${id}/read`);
+                return frais.url;
+              } catch {
+                // ⚠ On ne pose PAS d'erreur ici : le lecteur affichera la
+                // sienne, qui nomme déjà le geste à faire. Deux messages pour
+                // un même échec en feraient un bruit.
+                return null;
+              }
+            }}
+          />
         )}
       </div>
     </div>

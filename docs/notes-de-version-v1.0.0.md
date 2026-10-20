@@ -20,6 +20,13 @@ v1.0.0. Public visé : l'exploitant qui installe ou met à jour une instance.*
   officielle de MinIO n'était plus téléchargeable.
 - Rotation documentée de six secrets de production, par ordre de coût
   croissant, avec marche à suivre et contrôle avant/après chacun.
+- Caddy refuse désormais explicitement toute requête dont le domaine ne
+  correspond à aucun établissement de l'installation — y compris en HTTPS
+  avec un certificat par ailleurs valide (une connexion établie sous le
+  certificat de l'application ne donne plus accès à ce qui est derrière un
+  autre nom). Aucune donnée n'était exposée par l'ancien comportement ; il
+  rendait un 200 vide sans le dire, ce qui compliquait le diagnostic d'une
+  mauvaise configuration DNS autant qu'il aurait pu masquer un essai.
 
 **Conformité et établissement**
 - Pages légales par établissement (mentions légales, confidentialité),

@@ -12,7 +12,7 @@ import {
   fetchChiffres,
   fetchConstellation,
   fetchNouveautes,
-  fetchTenantHome,
+  fetchTenantHomeAvecEtat,
   toHomeTheme,
   versionQuiTourne,
 } from '@/lib/server-api';
@@ -32,7 +32,14 @@ import styles from './home.module.css';
 import { LIBELLES } from '@/lib/libelles';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const home = await fetchTenantHome();
+  const { etat, data: home } = await fetchTenantHomeAvecEtat();
+  // ⚠ « Hôte inconnu » et « panne passagère » ne portent PAS le même titre.
+  // Un domaine structurellement inconnu n'est pas une bibliothèque qui
+  // charge encore — le dire évite qu'un onglet « Bibliothèque » muet se lise
+  // comme une installation qui fonctionne.
+  if (etat === 'hote_inconnu') {
+    return { title: 'Aucun établissement ne correspond à ce domaine' };
+  }
   const name = home?.content.identity.fullName || home?.name || 'Bibliothèque';
   return { title: name, description: home?.content.identity.lead || undefined };
 }
@@ -57,9 +64,26 @@ function safeHref(url: string): string {
 }
 
 export default async function HomePage() {
-  const home = await fetchTenantHome();
+  const { etat, data: home } = await fetchTenantHomeAvecEtat();
 
-  // Domaine inconnu / API indisponible : repli sobre, sans contenu d'école.
+  // ⚠ UN DOMAINE STRUCTURELLEMENT INCONNU N'EST PAS UNE PANNE : le repli
+  // « catalogue accessible ci-dessous » n'a pas de sens ici — `/opac` ne
+  // résoudrait pas davantage d'établissement sous ce même Host. Le dire,
+  // plutôt qu'une page qui ressemble à une bibliothèque qui charge encore.
+  if (etat === 'hote_inconnu') {
+    return (
+      <main id={ID_CONTENU} style={{ maxWidth: 640, margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>
+        <h1 style={{ fontFamily: 'Charter, Georgia, serif' }}>Aucun établissement ne correspond à ce domaine</h1>
+        <p style={{ color: '#5E6B78', marginTop: 12 }}>
+          Le serveur Gafeso fonctionne : c&rsquo;est l&rsquo;adresse demandée qui n&rsquo;est
+          déclarée pour aucun établissement de cette installation.
+        </p>
+      </main>
+    );
+  }
+
+  // Panne passagère (API indisponible) : repli sobre, sans contenu d'école,
+  // avec un geste qui reste PLAUSIBLE — le catalogue PEUT redevenir joignable.
   if (!home) {
     return (
       <main id={ID_CONTENU} style={{ maxWidth: 640, margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>
@@ -91,9 +115,9 @@ export default async function HomePage() {
   // leurs sections, derrière des frontières `Suspense`. La page ne les attend
   // plus : premier octet à 1,53 s au lieu de 3,14.
   //
-  // ⚠ `fetchTenantHome` reste seul et AVANT : le repli sobre ci-dessus dépend
-  // de sa réponse, et c'est lui qui porte le nom de l'école et le bandeau.
-  // C'est le plancher de ce lot, structurel et assumé.
+  // ⚠ `fetchTenantHomeAvecEtat` reste seul et AVANT : les deux replis
+  // ci-dessus dépendent de sa réponse, et c'est lui qui porte le nom de
+  // l'école et le bandeau. C'est le plancher de ce lot, structurel et assumé.
   // ⚠ LA VERSION QUI TOURNE, demandée à l'API et jamais déduite. `null` quand
   // on ne sait pas — et alors on n'affiche RIEN : un pied muet vaut mieux qu'un
   // numéro inventé, qui enverrait un support lire le mauvais code.

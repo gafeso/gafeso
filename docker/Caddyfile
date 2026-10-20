@@ -157,12 +157,19 @@
 # et qu'il lui manque un enregistrement. Le diagnostic est indisponible
 # précisément au moment où il est nécessaire.
 #
-# Port 80 UNIQUEMENT, délibérément. Sur 443, un Host inconnu n'a par
-# définition pas de certificat : la poignée de main TLS échoue avant qu'aucune
-# réponse HTTP soit possible, et le navigateur affiche une erreur de
-# certificat — un message, pas une page blanche. Le cas à corriger est bien
-# celui du HTTP en clair, qui est ce que l'on obtient avant qu'un certificat
-# existe.
+# ⚠ CE BLOC ÉTAIT RESTREINT AU PORT 80 JUSQU'AU 20 OCTOBRE 2026, sur un
+# raisonnement qui s'est révélé FAUX, mesuré sur la démonstration réelle par
+# Jean : « un Host inconnu n'a par définition pas de certificat, la poignée de
+# main TLS échoue avant toute réponse HTTP ». C'est vrai SEULEMENT si le client
+# forge aussi le SNI. Un client qui garde un SNI valide (celui de
+# {$PUBLIC_DOMAIN}, dont le certificat existe réellement) et ne forge QUE
+# l'en-tête HTTP Host — ce que fait tout outil qui sépare `--resolve` du Host
+# envoyé — fait réussir la poignée de main TLS normalement, PUIS atteint le
+# routage HTTP avec un Host qui ne correspond à aucun bloc. Mesuré :
+# `curl --resolve {$PUBLIC_DOMAIN}:443:<ip> -H "Host: inconnu" https://{$PUBLIC_DOMAIN}/`
+# rendait 200, corps vide — le même faux silencieux que sur le port 80, par un
+# chemin que ce commentaire excluait par construction. Voir le bloc `:443`
+# ci-dessous, qui ferme l'écart.
 #
 # 404 et non 421 « Misdirected Request », pourtant sémantiquement plus juste :
 # un 421 autorise le client HTTP/2 à REJOUER la requête sur une nouvelle
@@ -215,6 +222,31 @@
 			Documentation : docs/INSTALLATION.md
 			TEXTE 404
 	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ── Attrape-tout : même chose, mais pour une connexion TLS déjà établie ──
+#
+# Ajouté le 20 octobre 2026, après la mesure sur la démonstration réelle citée
+# plus haut. Sans ADRESSE (pas de nom, pas de port TLS explicite), ce bloc ne
+# demande AUCUN certificat propre — mesuré sur une pile jetable identique en
+# forme : son démarrage ne déclenche de gestion automatique TLS que pour les
+# domaines nommés ci-dessus, jamais pour celui-ci. Une requête ne peut
+# l'atteindre qu'après une poignée de main TLS déjà réussie sous le certificat
+# d'un AUTRE bloc (SNI = un domaine réellement déclaré) ; ce bloc ne fait alors
+# que refuser au niveau HTTP, sur le Host, ce que ce SNI valide a laissé
+# passer.
+#
+# ⚠ ET CE N'EST PAS UNE OUVERTURE DE PLUS : aucune des trois adresses
+# déclarées plus haut ne porte de secret que ce bloc révélerait — les trois
+# sont déjà directement joignables par leur propre nom. Ce qu'il ferme est la
+# seule chose qui restait ouverte : un Host qui ne correspond à AUCUNE d'elles.
+:443 {
+	respond "Aucun établissement ne correspond à ce domaine ({host})." 404
 
 	log {
 		output stdout

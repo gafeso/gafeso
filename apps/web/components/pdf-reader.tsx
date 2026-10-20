@@ -110,7 +110,43 @@ function foldText(text: string): string {
   return out;
 }
 
-export function PdfReader({ url, title }: { url: string; title: string }) {
+/**
+ * ⚠ L'URL SIGNÉE A ÉTÉ REFUSÉE — distinct de « le document est illisible ».
+ *
+ * Sans ce type, le `catch` ne pouvait pas savoir s'il valait la peine de
+ * redemander : un PDF corrompu et une signature périmée arrivaient tous deux
+ * comme un `Error` quelconque, et redemander sur le premier ferait un appel
+ * pour rien.
+ */
+class RefusDeLUrl extends Error {
+  constructor(readonly statut: number) {
+    super(`HTTP ${statut}`);
+    this.name = 'RefusDeLUrl';
+  }
+}
+
+export function PdfReader({
+  url,
+  title,
+  redemanderUrl,
+}: {
+  url: string;
+  title: string;
+  /**
+   * ⭐⭐ UNE SEULE REDEMANDE, et c'est l'APPELANT qui en tient le compte.
+   *
+   * L'URL de lecture est signée pour 300 s. Mesuré le 19 octobre 2026 : quand
+   * elle était refusée, le lecteur n'en redemandait PAS — une requête, un 403,
+   * et l'écran renvoyait à la fiche. Quelqu'un qui revient sur son onglet dix
+   * minutes plus tard devait tout recommencer.
+   *
+   * ⚠ RENDRE `null` SIGNIFIE « plus de redemande », pas « erreur ». La borne
+   * « une seule fois » est ainsi tenue AILLEURS qu'ici : ce composant ne compte
+   * rien, il demande, et il s'arrête quand on lui dit non. Une reprise qui se
+   * compterait elle-même serait invisible à qui lit la page.
+   */
+  redemanderUrl?: () => Promise<string | null>;
+}) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -143,13 +179,31 @@ export function PdfReader({ url, title }: { url: string; title: string }) {
     let loadedDoc: PDFDocumentProxy | null = null;
     const controller = new AbortController();
 
-    Promise.all([
-      loadPdfJs(),
-      fetch(url, { signal: controller.signal }).then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.arrayBuffer();
-      }),
-    ])
+    /*
+     * ⚠ UN REFUS DE L'URL N'EST PAS UNE ERREUR DE DOCUMENT. On distingue les
+     * deux : un `HTTP 4xx/5xx` sur le fichier dit que l'URL signée ne vaut
+     * plus, et cela SE RATTRAPE ; un PDF illisible, non.
+     */
+    const recuperer = async (adresse: string) => {
+      const res = await fetch(adresse, { signal: controller.signal });
+      if (!res.ok) throw new RefusDeLUrl(res.status);
+      return res.arrayBuffer();
+    };
+
+    const octets = async () => {
+      try {
+        return await recuperer(url);
+      } catch (err) {
+        if (!(err instanceof RefusDeLUrl) || !redemanderUrl) throw err;
+        const fraiche = await redemanderUrl();
+        // ⚠ `null` = l'appelant a épuisé sa redemande. On relance l'erreur
+        // d'origine plutôt que d'en inventer une autre.
+        if (!fraiche) throw err;
+        return recuperer(fraiche);
+      }
+    };
+
+    Promise.all([loadPdfJs(), octets()])
       .then(async ([pdfjs, buffer]) => {
         const loaded = await pdfjs.getDocument({
           data: new Uint8Array(buffer),

@@ -262,8 +262,16 @@ export class TenancyController {
    * Charge utile COMPLÈTE de la page d'accueil vitrine du domaine courant
    * (spec docs/spec-accueil-tenant.md) : identité + thème + contenu normalisé.
    * Sans authentification — c'est une page publique, rendue en SSR à partir
-   * de cet unique appel. Renvoie un 404 « soft » (payload minimal) plutôt
-   * qu'une 400 si le domaine est inconnu, pour ne pas casser le rendu.
+   * de cet unique appel.
+   *
+   * ⚠ CORRIGÉ le 20 octobre 2026 : ce commentaire affirmait « 404 soft,
+   * payload minimal, pour ne pas casser le rendu si le domaine est inconnu ».
+   * **Faux depuis longtemps** — le code juste en dessous lève une
+   * `BadRequestException` (400), explicite et nommée, comme `current()`. Le
+   * SSR qui appelle cette route (`apps/web/lib/server-api.ts`) absorbe
+   * lui-même l'échec en `null` — ce n'est pas cette route qui adoucit, c'est
+   * son appelant, et confondre les deux a laissé ce commentaire faux sans
+   * que personne ne le remarque.
    */
   @Get('home')
   @ApiOperation({ summary: 'Contenu complet de la page d’accueil du domaine courant' })
