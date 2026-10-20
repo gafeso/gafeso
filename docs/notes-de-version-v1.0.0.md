@@ -86,6 +86,12 @@ v1.0.0. Public visé : l'exploitant qui installe ou met à jour une instance.*
 
 ## Ruptures et points d'attention
 
+- **Révocation d'un compte et lecture hors ligne** : après révocation,
+  une copie hors ligne déjà posée sur un appareil cesse d'être lisible dès
+  que l'appareil revient en ligne, et au plus tard au terme du bail local
+  (14 jours par défaut, réglable par établissement). Ce n'est ni immédiat
+  dans tous les cas, ni indéfini dans aucun — c'est une propriété du produit,
+  pas une limite oubliée.
 - `minio/minio` n'est plus dans le compose de production. Un redémarrage
   depuis l'ancien compose échouera au téléchargement de l'image (dépôt
   retiré de Docker Hub — fait externe, pas un choix de notre part).

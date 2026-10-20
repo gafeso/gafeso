@@ -161,6 +161,131 @@ statut 404 conservé — mesuré par la même commande, sur un build de producti
 
 ---
 
+## V1.1 — L'URL signée de lecture n'est ni liée à la session, ni à usage unique
+
+**Mesuré le 19 octobre 2026, sans aucun changement de code, à la demande de
+Jean** — après la décision qu'aucun lecteur non identifié ne lit un document
+(voir plus bas). C'est la seule fuite réelle qui reste pour un lecteur
+IDENTIFIÉ.
+
+`OpacService.getReadUrl` appelle `StorageService.getSignedDownloadUrl`, qui
+produit une URL S3 présignée ordinaire (`@aws-sdk/s3-request-presigner`,
+`getSignedUrl`) portant uniquement `Bucket`, `Key` et
+`ResponseContentDisposition`. Rien n'y identifie l'étudiant qui l'a demandée,
+et rien côté serveur n'enregistre qu'elle a déjà été consommée.
+
+| | Mesuré |
+|---|---|
+| Liée au compte qui l'a demandée ? | **Non** — une URL présignée S3 est valide pour QUICONQUE la détient |
+| À usage unique ? | **Non** — valide pour tout appel jusqu'à expiration, aucun jeton consommé |
+| Protection actuelle | le TTL seul : 300 s (lecture OPAC), 900 s (téléchargement admin) — déjà documentée dans `CLAUDE.md` comme « protection raisonnable, assumée comme non absolue » |
+
+⚠ **Ce que ça permet concrètement** : l'URL apparaît dans l'onglet Réseau du
+navigateur pendant tout son TTL. Copiée, partagée, ou simplement cachée par
+un proxy intermédiaire, elle reste utilisable par un tiers pendant la fenêtre
+restante — sans qu'aucune vérification de session n'intervienne à ce
+second appel.
+
+**Ce qu'il faudrait** : lier l'émission au compte qui l'a demandée (un jeton
+propre à la session, vérifié à la livraison plutôt que délégué à S3/Garage
+tel quel) et la consommer à la première lecture — un second appel avec le
+même jeton doit échouer, pas seulement expirer.
+
+⚠ **La forme FAUTIVE que ce problème appelle** : raccourcir le TTL en croyant
+fermer la fenêtre. Un TTL plus court réduit la fenêtre, il ne retire pas le
+partage possible PENDANT elle — et un TTL trop court casserait une session de
+lecture légitime plus longue que lui (c'est déjà la raison des 5 minutes
+actuelles plutôt que les 15 de l'admin).
+
+---
+
+## V1.1 — Plafonds par compte, par jour et par établissement
+
+**Confirmé le 19 octobre 2026**, dans la même décision que ci-dessus : une
+fois l'URL liée à la session et à usage unique, la défense suivante contre
+un usage abusif (un compte compromis, un script qui boucle) est une LIMITE
+DE DÉBIT à trois niveaux, qui ne se remplacent pas l'un l'autre :
+- **par COMPTE** — un lecteur donné ne télécharge pas un nombre illimité de
+  documents dans la journée ;
+- **par JOUR** — la fenêtre sur laquelle ce plafond se mesure ;
+- **par ÉTABLISSEMENT** — un plafond agrégé, pour borner le coût d'un compte
+  compromis à l'échelle de l'école plutôt qu'à celle d'un seul lecteur.
+
+⚠ Aucun des trois n'existe aujourd'hui sur ce chemin, mesuré (audit du
+19 octobre 2026) : `/auth/login` et les routes voisines sont limitées
+(`@Throttle`, `app.module.ts`), mais c'est une limite PAR IP et générique
+(300 requêtes/60 s) — rien ne porte sur la LECTURE elle-même une fois
+authentifié, ni par compte, ni par jour, ni par établissement.
+
+---
+
+## V1.1 — Inscription à validation automatique, pour la lecture seule (Université virtuelle)
+
+**Décidé le 19 octobre 2026.** La lecture anonyme est abandonnée (voir
+ci-dessous) ; pour une bibliothèque entièrement numérique dont les visiteurs
+n'ont pas de carte d'adhérent papier à présenter d'abord, exiger un
+bibliothécaire pour activer chaque compte serait un frein disproportionné à
+l'usage que l'établissement veut permettre.
+
+**Ce qui est demandé** : une option PAR ÉTABLISSEMENT — pas un défaut global
+— qui active une activation automatique pour un profil d'inscription limité
+à la lecture seule. Le visiteur reste **toujours identifié** : il crée un
+compte, il le vérifie (email), et ce compte est actif en deux clics plutôt
+qu'après un geste d'un bibliothécaire. Ce n'est PAS un accès anonyme déguisé
+en inscription facile — c'est un raccourci sur le DÉLAI d'identification,
+jamais sur l'identification elle-même.
+
+⚠ **Ce que ça devra trancher**, sans l'avoir fait ce soir : quelles fonctions
+porte ce profil (lecture seule exclut *a priori* le prêt physique, qui n'a pas
+de sens pour un visiteur sans adresse connue de l'établissement) ; comment il
+se distingue d'un étudiant inscrit au sens propre (pas de classe, pas
+d'abonnement — donc aucune règle d'accès ne le couvrirait sous le modèle
+actuel, voir l'entrée ci-dessous sur l'invariant d'authentification) ; et le
+risque d'abus d'une activation sans vérification humaine (comptes jetables en
+masse), qui est précisément ce que l'activation manuelle existe pour limiter
+aujourd'hui.
+
+---
+
+## Invariant : aucune lecture de document sans compte identifié
+
+**Tranché le 19 octobre 2026 par Jean**, après une mesure dans le code (pas
+une hypothèse) : *le modèle d'accès actuel n'a aucune notion de lecteur
+anonyme — `AccessRule` ne porte que `className`/`subscriptionTier`, tous deux
+nullables, et le plus large des deux ("tout le monde") veut dire "tout
+étudiant inscrit de l'école", jamais "n'importe qui".* La possibilité d'un
+accès libre anonyme, envisagée pour l'Université virtuelle, est ABANDONNÉE —
+remplacée par l'inscription à validation automatique ci-dessus.
+
+**Ce qui doit suivre, en garde-fou plutôt qu'en habitude** : un test à
+population DÉRIVÉE qui relève toute route servant un document, une page de
+document, un flux de lecture ou une copie hors ligne, et exige qu'elle refuse
+une requête non authentifiée — une route ajoutée demain sans ce refus doit
+faire échouer la CI. Les couvertures restent l'exception déclarée (lecture
+anonyme du bucket, publique par conception) ; toute autre exception demande
+l'accord écrit de Jean.
+
+⚠ **Mesuré le 19 octobre 2026, avant d'écrire le garde** : les quatre routes
+candidates trouvées ce soir sont déjà authentifiées — `opac/records/:id/read`
+(`JwtAuthGuard`), `cataloging/records/:id/digital-copy/download-url`
+(`RequiresFunctions`, sous la garde de classe), `offline-licensing/*`
+(`JwtAuthGuard` de classe), `depots/:id/document` (idem). **L'invariant est
+donc déjà vrai aujourd'hui** — ce garde-fou le FIGE, il ne corrige rien.
+
+**Taille du lot, mesurée avant d'être proposée** : dériver correctement la
+population — reconnaître une route qui sert un document sans liste tenue à la
+main, et distinguer une authentification de compte (`JwtAuthGuard`) d'une clé
+de plateforme (`ApiKeyGuard`) ou d'un jeton d'amorçage
+(`SessionAssistantGuard`), qui ne sont pas des lecteurs identifiés au sens de
+cette règle — n'est pas un ajustement de dix minutes sur le garde existant
+(`gardes-declarees.spec.ts`, qui vérifie une FONCTION, pas une AUTHENTIFICATION).
+**Proposé comme lot séparé, juste après la v1.0.0**, plutôt que glissé dans
+rc15 sous la pression du calendrier — c'est exactement la pente que ce
+fichier déconseille ailleurs : un garde de sécurité écrit vite se fait avoir
+par la famille de défauts qu'il est censé traquer.
+
+---
+
 ## V1.1 — Guide illustré de l'interface
 
 **Décidé le 14 octobre 2026**, en tranchant le relevé de rétention de la

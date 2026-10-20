@@ -202,23 +202,33 @@ voulu : une suppression de données ne se fait pas en passant. Il peut être
 retiré à la main une fois le conteneur parti et l'absence vérifiée
 (`docker volume rm <projet>_redis_data`).
 
-## ⚠ Avant d'ajouter un `ports:` à la pile de production
+## ⚠ Avant d'ajouter un `ports:` à une pile de production
 
-*Écrit le 12 septembre 2026.*
+*Écrit le 12 septembre 2026. ⚠ CORRIGÉ le 19 octobre 2026 : cette section
+affirmait que « la pile de production (`gafeso-prod-*`) et la pile de
+développement (`bibliocloud-*`) tournent côte à côte » sur NOTRE machine de
+développement, et le présentait comme un fait établi de ce projet. C'était
+FAUX, repris sans le remesurer pendant plus d'un mois : la démonstration
+publique tourne sur un serveur séparé, auquel aucune session de développement
+n'a accès. Le `gafeso-prod-*` local n'est qu'une pile de RÉPÉTITION, sans
+rapport avec un public réel. La règle ci-dessous reste valable en général —
+pour QUICONQUE ferait tourner une répétition de production à côté de son
+développement — elle est reformulée en ces termes, plutôt que comme un fait de
+notre propre machine.*
 
-Sur la machine de développement, la pile de production (`gafeso-prod-*`) et la
-pile de développement (`bibliocloud-*`) tournent **côte à côte**. La seule chose
-qui les sépare est que **la production ne publie aucun port hôte** :
+Si une pile de production tourne sur la même machine qu'une pile de
+développement — pour une répétition, un test de montée de version — la seule
+chose qui doit les séparer est que **la production ne publie aucun port
+hôte**. Exemple mesuré sur une telle cohabitation :
 
 | | ports publiés |
 |---|---|
-| `bibliocloud-meilisearch-1` | `0.0.0.0:7700 → 7700` |
-| `bibliocloud-db-1` | `0.0.0.0:5433 → 5432` |
-| `gafeso-prod-meilisearch-1` | **aucun** (`7700/tcp`) |
-| `gafeso-prod-db-1` | **aucun** (`5432/tcp`) |
+| pile de développement (ex. `bibliocloud-db-1`) | `0.0.0.0:5433 → 5432` |
+| pile de production/répétition (ex. `gafeso-prod-db-1`) | **aucun** (`5432/tcp`) |
 
-Tout `localhost:7700` ou `localhost:5433` va donc sur le développement, et c'est
-ce qui permet de mesurer, sonder et muter sans risque pour les données réelles.
+Tout `localhost:<port>` doit alors aller sur le développement, jamais sur
+l'autre pile — et c'est ce qui permet de mesurer, sonder et muter sans risque
+pour des données qui compteraient.
 
 ⚠ **C'est une protection par ACCIDENT, pas par conception.** Rien ne l'impose et
 rien ne signalerait sa disparition. Un `ports:` ajouté à

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { BiblioRecord, DigitalFormat, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -163,7 +164,16 @@ export class DigitalCopyService {
     if (!verdict.accepte) throw new BadRequestException(verdict.refus);
     const format = verdict.format;
 
-    const objectKey = `${recordId}/${Date.now()}-${sanitizeFileName(file.originalname)}`;
+    // ⚠ ALÉATOIRE, PAS UN HORODATAGE — mesuré le 19 octobre 2026 (audit de
+    // sécurité) : `Date.now()` est approximable depuis `BiblioRecord.createdAt`
+    // (public, via le catalogue), et `recordId` lui-même est public. La clé
+    // n'était donc pas secrète — seule la fermeture du bucket (403 anonyme,
+    // mesuré) protégeait le fichier. `randomBytes(16)` ferme cette seconde
+    // ligne de défense SANS RIEN CASSER : les clés DÉJÀ écrites restent des
+    // chaînes stockées en base (`digital_copy.objectKey`), jamais recalculées
+    // — prouvé en relisant tous leurs appelants, aucun ne reconstruit une clé
+    // depuis `recordId`. Aucune migration n'est donc nécessaire.
+    const objectKey = `${recordId}/${randomBytes(16).toString('hex')}-${sanitizeFileName(file.originalname)}`;
     await this.storage.putObject(objectKey, file.buffer, file.mimetype);
 
     // L'ancien objet n'est supprimé qu'APRÈS le succès du nouvel upload et de

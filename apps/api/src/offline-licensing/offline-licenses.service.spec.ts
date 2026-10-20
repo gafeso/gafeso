@@ -267,6 +267,32 @@ describe('OfflineLicensesService — propriété des licences', () => {
     expect(db.offlineLicense.update).not.toHaveBeenCalled();
   });
 
+  /**
+   * ⭐ ÉPROUVÉ DIRECTEMENT le 19 octobre 2026 — demandé par Jean : « un code
+   * juste mais non éprouvé n'est juste qu'aujourd'hui ». `blobUrl()` est
+   * celle des deux qui sert VRAIMENT le contenu chiffré (l'URL signée du
+   * blob) ; `status()` ne fait que répondre un mot. Le contrôle existait déjà
+   * (même ligne depuis l'origine), mais seul son effet sur `status()` était
+   * testé — jamais lui-même.
+   */
+  it('⭐ blobUrl() refuse la licence d’un AUTRE utilisateur — AUCUNE URL signée délivrée', async () => {
+    const db = makeDb() as any;
+    db.offlineLicense.findUnique = vi.fn().mockResolvedValue({
+      id: 'lic-autre',
+      userId: 'quelqu-un-dautre',
+      recordId: 'rec1',
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    const { service, storage } = makeDeps();
+
+    await expect(
+      service.blobUrl(db, TENANT as never, USER, 'lic-autre'),
+    ).rejects.toThrow(/autre utilisateur/i);
+    // ⚠ LA GARANTIE QUI COMPTE : le contenu chiffré n'a jamais été atteint.
+    expect(storage.getSignedDownloadUrl).not.toHaveBeenCalled();
+    expect(db.digitalCopy.findUnique).not.toHaveBeenCalled();
+  });
+
   it('entitlements() borne la requête aux licences de l’appelant', async () => {
     const db = makeDb() as any;
     db.offlineLicense.findMany = vi.fn().mockResolvedValue([]);

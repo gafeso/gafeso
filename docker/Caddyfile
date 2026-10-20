@@ -48,7 +48,18 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	reverse_proxy web:3000
+	# SÉCURITÉ (mesuré le 19 octobre 2026) : même geste que pour API_DOMAIN,
+	# et pour la même raison. Caddy réécrit déjà X-Forwarded-Host par défaut
+	# (mesuré : un client qui en envoie un s'en voit imposer la vraie valeur),
+	# mais {host} reste ce que CADDY a reçu, pas une valeur qu'il connaît être
+	# un domaine d'école — un site derrière ce bloc reçoit toujours un Host
+	# égal à PUBLIC_DOMAIN par construction (routage par Host), donc le forcer
+	# ici est redondant AVEC Caddy, et c'est délibéré : la protection ne doit
+	# pas dépendre d'une seule couche. `apps/web/middleware.ts` porte le même
+	# contrôle, côté application.
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-Host {host}
+	}
 
 	log {
 		output stdout
@@ -73,10 +84,19 @@
 	# l'usurper pour cibler le schéma d'une AUTRE école (register/opac sans
 	# jeton). On FORCE donc X-Forwarded-Host au Host réel de la requête
 	# (api.<domaine>) : il ne résout aucune école (ce n'est pas un domaine
-	# d'établissement), ce qui neutralise l'usurpation. Le trafic normal des
-	# écoles passe par PUBLIC_DOMAIN → web (qui pose lui-même X-Forwarded-Host),
-	# pas par ce bloc. Une intégration ciblant une école doit passer par le
-	# domaine de l'école, pas par ce sous-domaine API générique.
+	# d'établissement), ce qui neutralise l'usurpation. Une intégration ciblant
+	# une école doit passer par le domaine de l'école, pas par ce sous-domaine
+	# API générique.
+	#
+	# ⚠ CORRIGÉ le 19 octobre 2026 : ce commentaire affirmait ensuite « le
+	# trafic normal des écoles passe par PUBLIC_DOMAIN → web (qui pose lui-même
+	# X-Forwarded-Host [correctement]) ». C'ÉTAIT FAUX, mesuré en lançant `web`
+	# seul et en lui envoyant un Host forgé : `apps/web/middleware.ts`
+	# RECOPIAIT le Host reçu sans le valider. Corrigé des deux côtés — le bloc
+	# PUBLIC_DOMAIN ci-dessus force maintenant X-Forwarded-Host comme celui-ci,
+	# et le middleware refuse un Host qui ne correspond pas à APP_URL — mais le
+	# fait que ce commentaire ait affirmé une propriété de CE bloc sans la
+	# mesurer est resté vrai pendant trois mois.
 	reverse_proxy api:4000 {
 		header_up X-Forwarded-Host {host}
 	}

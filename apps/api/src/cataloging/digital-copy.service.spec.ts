@@ -120,6 +120,27 @@ describe('DigitalCopyService — upload (stockage)', () => {
     expect(result.digitalCopy.fileFormat).toBe('PDF');
   });
 
+  /**
+   * ⭐ ALÉATOIRE, PAS DEVINABLE — audit de sécurité du 19 octobre 2026.
+   * `Date.now()` est approximable depuis `BiblioRecord.createdAt` (public) ;
+   * deux dépôts à la même milliseconde en auraient en plus porté la PREUVE.
+   */
+  it('⭐ la clé de l’objet N’EST PAS un horodatage — deux dépôts à la même notice diffèrent', async () => {
+    await service.upload(db, 'zinda', 'rec-1', pdfFile());
+    await service.upload(db, 'zinda', 'rec-1', pdfFile());
+
+    const cle1 = storage.putObject.mock.calls[0][0] as string;
+    const cle2 = storage.putObject.mock.calls[1][0] as string;
+
+    expect(cle1).not.toBe(cle2);
+    // ⚠ TÉMOIN DE FORME : 32 hexadécimaux (randomBytes(16)) entre le
+    // préfixe et le nom de fichier — jamais une suite de chiffres décimaux
+    // (un horodatage), même si les deux auraient pu produire 10 à 13
+    // chiffres par coïncidence.
+    expect(cle1).toMatch(/^rec-1\/[0-9a-f]{32}-/);
+    expect(cle2).toMatch(/^rec-1\/[0-9a-f]{32}-/);
+  });
+
   it('accepte un EPUB (type MIME application/epub+zip)', async () => {
     const result = await service.upload(
       db,

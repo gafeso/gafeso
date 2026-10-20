@@ -140,11 +140,50 @@ function buildCsp(nonce: string): string {
   ].join('; ');
 }
 
+/**
+ * ⚠ REFUSÉ le 19 octobre 2026 : ce fichier recopiait AVEUGLÉMENT le Host reçu
+ * dans `x-forwarded-host`, sans jamais vérifier qu'il correspond à CE que
+ * cette instance sert. Mesuré par l'effet (`web` lancé seul, pointé sur un
+ * serveur témoin) : un `Host: ecole-victime.exemple.test` forgé ressortait
+ * identique dans l'appel à l'API — exactement la valeur que
+ * `TenantMiddleware.resolveByHost` (apps/api/src/tenancy/tenant.middleware.ts)
+ * utilise ensuite pour choisir l'école.
+ *
+ * ⚠ ET CE N'ÉTAIT PAS EXPLOITABLE DE N'IMPORTE OÙ, mesuré aussi : à travers
+ * Caddy (`docker/Caddyfile`), un Host inconnu ne sort jamais de Caddy (200
+ * vide, rien forwardé — aucun bloc de site ne correspond), et Caddy réécrit
+ * lui-même X-Forwarded-Host par défaut, même si le CLIENT en envoie un. Le
+ * chemin qui restait ouvert est un accès DIRECT à `web:3000` — à l'intérieur
+ * du réseau Docker, ou par un port publié par erreur — qui ne passe PAS par
+ * Caddy. Pour une requête AUTHENTIFIÉE, `JwtAuthGuard` (apps/api/src/auth/
+ * jwt-auth.guard.ts:29) refuse déjà un jeton dont le tenant ne correspond pas
+ * à celui résolu — vérifié par un jeton réel d'une école, Host forgé vers une
+ * autre : 401 « Jeton émis pour une autre école. » Ce contrôle-ci protège les
+ * routes PUBLIQUES (catalogue), qui n'ont pas cette seconde garde.
+ */
+function hoteAttendu(): string | null {
+  try {
+    return new URL(process.env.APP_URL ?? '').hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const requestHeaders = new Headers(request.headers);
   const originalHost = request.headers.get('host');
+  const hoteSansPort = originalHost?.split(':')[0] ?? null;
+  const attendu = hoteAttendu();
+  // ⚠ `attendu` absent (APP_URL non posé) laisse passer plutôt que de tout
+  // refuser : ce cas ne devrait pas arriver en production (APP_URL est
+  // `:?requis` dans docker-compose.prod.yml), et un refus large masquerait
+  // une erreur de configuration derrière un message qui parle de Host.
+  if (attendu && hoteSansPort && hoteSansPort !== attendu) {
+    return new NextResponse('Hôte non reconnu.', { status: 400 });
+  }
+
+  const requestHeaders = new Headers(request.headers);
   if (originalHost) requestHeaders.set('x-forwarded-host', originalHost);
 
   // Propage l'IP cliente vers l'API interne (chaîne X-Forwarded-For posée par
