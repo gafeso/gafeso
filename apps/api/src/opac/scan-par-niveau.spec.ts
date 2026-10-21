@@ -129,6 +129,37 @@ describe('⭐ le scan par niveau : le serveur décide de ce qui part', () => {
   });
 
   /**
+   * ⭐⭐ UNE NOTICE SANS EXEMPLAIRE — trouvé par le mobile contre le serveur
+   * réel le 20 octobre 2026, et AUCUN cas de ce fichier ne l'éprouvait : les
+   * 21 cas précédents composent tous avec au moins un exemplaire.
+   *
+   * ⚠ LE DÉFAUT N'ÉTAIT PAS UNE VALEUR FAUSSE, C'ÉTAIT UNE CLÉ QUI N'AURAIT
+   * PAS DÛ EXISTER : `emplacement: "Emplacement non renseigné"`,
+   * `exemplaire: { codeBarre: '', statut: 'Inconnu' }`. Le client affiche ce
+   * qu'il reçoit — c'est sa règle, et elle est juste — donc ces trois
+   * affirmations partaient vers un lecteur pour un livre qui n'a tout
+   * simplement aucun exemplaire. « Inconnu » affirme un statut qui existe et
+   * qu'on ignore ; l'absence n'affirme rien.
+   */
+  describe('⭐ une notice SANS AUCUN exemplaire', () => {
+    it('étudiant : la clé emplacement est ABSENTE, pas un texte de remplissage', () => {
+      const brut = composer('etudiant', []);
+      expect('emplacement' in brut, JSON.stringify(brut)).toBe(false);
+    });
+    it('bibliothécaire : les clés emplacement ET exemplaire sont ABSENTES', () => {
+      const brut = composer('bibliothecaire', []);
+      expect('emplacement' in brut, JSON.stringify(brut)).toBe(false);
+      expect('exemplaire' in brut, JSON.stringify(brut)).toBe(false);
+      expect('emprunteur' in brut).toBe(false);
+    });
+    it('la disponibilité reste honnête : « Aucun exemplaire physique »', () => {
+      for (const n of NIVEAUX_DE_SCAN) {
+        expect(composer(n, []).disponibilite).toBe('Aucun exemplaire physique');
+      }
+    });
+  });
+
+  /**
    * ⭐⭐ LA LISTE EXACTE DES CLÉS, PAR NIVEAU — et c'est un contrôle négatif qui
    * m'a obligé à l'écrire ainsi.
    *

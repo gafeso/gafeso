@@ -292,12 +292,20 @@ export class OpacController {
       );
     }
     const hotes = await this.opac.hotesDeLEcole(resolved.slug);
-    const lu = reconnaitreAdresse(url, hotes);
+    const lu = reconnaitreAdresse(url, hotes, resolved.slug);
     if (!lu.reconnue) {
       if (lu.motif === 'autre-etablissement') {
+        // ⚠ La forme pérenne ne porte qu'un SLUG (pas d'hôte connu à l'analyse
+        // — voir identifiant-perenne.ts) : on le résout ICI, où la base est
+        // atteignable, pour garder le même message dans les deux cas.
+        const hote =
+          'hote' in lu ? lu.hote : (await this.opac.hotesDeLEcole(lu.slugEtranger))[0];
         throw new ConflictException(
-          `Ce document appartient à une autre bibliothèque (${lu.hote}). ` +
-            'Changez d’établissement dans l’application pour l’ouvrir.',
+          hote
+            ? `Ce document appartient à une autre bibliothèque (${hote}). ` +
+                'Changez d’établissement dans l’application pour l’ouvrir.'
+            : 'Ce document appartient à une autre bibliothèque. ' +
+                'Changez d’établissement dans l’application pour l’ouvrir.',
         );
       }
       throw new NotFoundException(

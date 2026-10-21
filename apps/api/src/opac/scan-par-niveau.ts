@@ -60,15 +60,34 @@ export type ReponseDeScan =
       niveau: 'etudiant';
       record: unknown;
       disponibilite: string;
-      emplacement: string;
+      /**
+       * ⚠ CORRIGÉ le 21 octobre 2026, mesuré par le mobile contre le serveur
+       * réel : une notice SANS aucun exemplaire rendait quand même
+       * `emplacement: "Emplacement non renseigné"` — un texte affirmant qu'un
+       * exemplaire existe et que seul son emplacement manque, alors
+       * qu'AUCUN exemplaire n'existe. Le client affiche ce qu'il reçoit, et
+       * c'est sa règle, juste ; donc la clé est ABSENTE quand il n'y a rien à
+       * dire, jamais remplie d'un texte qui affirme.
+       */
+      emplacement?: string;
       actions: string[];
     }
   | {
       niveau: 'bibliothecaire';
       record: unknown;
       disponibilite: string;
-      emplacement: string;
-      exemplaire: { codeBarre: string; statut: string };
+      /** ABSENT sans exemplaire — même motif que la variante 'etudiant'. */
+      emplacement?: string;
+      /**
+       * ⚠ ABSENT sans exemplaire, et non `{ codeBarre: '', statut: 'Inconnu' }`.
+       * `Item.barcode` est OBLIGATOIRE et UNIQUE en base (`schema.prisma`) : un
+       * exemplaire réel n'a JAMAIS un code-barres vide, et son statut est
+       * TOUJOURS l'une des six valeurs connues. Les deux replis précédents
+       * (`''`, `'Inconnu'`) ne pouvaient donc se déclencher QUE dans un seul
+       * cas — aucun exemplaire — et c'est exactement le cas où il fallait
+       * omettre la clé plutôt que la remplir.
+       */
+      exemplaire?: { codeBarre: string; statut: string };
       emprunteur?: { nom: string; echeance: string };
       actions: string[];
     };
@@ -184,11 +203,18 @@ export function reponseDeScan(entree: {
     // ⚠ L'emplacement OUI — c'est ce qui l'envoie au bon rayon. Le code-barres
     // de l'exemplaire et l'emprunteur NON : le premier sert les gestes de
     // guichet, le second est une donnée personnelle.
+    //
+    // ⚠ ET LA CLÉ ELLE-MÊME EST ABSENTE SANS EXEMPLAIRE — voir le motif sur
+    // le type `ReponseDeScan`. `phraseDEmplacement(null)` resterait fidèle à
+    // ce qu'elle décrit (« je n'ai rien ») si on l'appelait, mais ce n'est
+    // pas le CLIENT qui doit distinguer un texte qui affirme une absence
+    // d'une clé absente : c'est au serveur de ne pas l'envoyer.
+    const viseEtudiant = exemplaire ?? exemplaires[0] ?? null;
     return {
       niveau,
       record,
       disponibilite,
-      emplacement: phraseDEmplacement(exemplaire ?? exemplaires[0] ?? null),
+      ...(viseEtudiant ? { emplacement: phraseDEmplacement(viseEtudiant) } : {}),
       actions,
     };
   }
@@ -197,12 +223,16 @@ export function reponseDeScan(entree: {
     niveau,
     record,
     disponibilite,
-    emplacement: phraseDEmplacement(vise),
-    exemplaire: {
-      codeBarre: vise?.codeBarre ?? '',
-      statut: LIBELLES_STATUT[vise?.statut ?? ''] ?? vise?.statut ?? 'Inconnu',
-    },
     actions,
+    ...(vise
+      ? {
+          emplacement: phraseDEmplacement(vise),
+          exemplaire: {
+            codeBarre: vise.codeBarre,
+            statut: LIBELLES_STATUT[vise.statut] ?? vise.statut,
+          },
+        }
+      : {}),
   } as const;
   // ⚠ `emprunteur` n'est AJOUTÉ que s'il y a un prêt ET un nom. Pas de clé à
   // `null` : une clé absente ne se journalise pas, ne se met pas en cache, et

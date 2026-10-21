@@ -164,11 +164,22 @@ export function adressePubliqueDeLaNotice(
   return new URL(chemin, base).toString();
 }
 
-/** Ce qu'une adresse scannée peut être. */
+/**
+ * Ce qu'une adresse scannée peut être.
+ *
+ * ⚠ DEUX FORMES DE « AUTRE ÉTABLISSEMENT », et ce n'est pas une redondance :
+ * la forme COURTE (`/opac/<id>`) se juge par l'HÔTE scanné, connu tout de
+ * suite. La forme PÉRENNE (`/opac/resoudre/<identifiant>`) porte son école
+ * dans l'identifiant lui-même (`oai:<slug>:<id>`) — AUCUN hôte n'est connu à
+ * ce stade, parce que cette adresse peut avoir été servie depuis l'origine
+ * d'un entrepôt OAI, pas d'un domaine d'établissement (voir `localisationOai`).
+ * C'est à l'appelant (qui a accès à la base) de résoudre un hôte à afficher.
+ */
 export type AdresseScannee =
   | { reconnue: true; recordId: string }
   | { reconnue: false; motif: 'illisible' }
-  | { reconnue: false; motif: 'autre-etablissement'; hote: string };
+  | { reconnue: false; motif: 'autre-etablissement'; hote: string }
+  | { reconnue: false; motif: 'autre-etablissement'; slugEtranger: string };
 
 /**
  * ⭐ RECONNAÎT UNE ADRESSE SCANNÉE, et dit POURQUOI quand elle ne l'est pas.
@@ -249,9 +260,24 @@ export function adresseCourteDeLaNotice(
   return adressePubliqueDeLaNotice(appUrl, domainePrincipal, recordId);
 }
 
+/**
+ * ⚠ CORRIGÉ le 20 octobre 2026 : cette fonction ne reconnaissait QUE la forme
+ * courte (`/opac/<id>`) — mesuré par le mobile contre le serveur réel. La
+ * forme PÉRENNE (`/opac/resoudre/<identifiant>`), celle que porte `publicUrl`
+ * et donc les affiches et les pages de titre des PDF, rendait « illisible » :
+ * notre propre application refusait nos propres QR.
+ *
+ * ⚠ LES DEUX FORMES NE SE JUGENT PAS PAR LA MÊME AUTORITÉ, et c'est pour ça
+ * qu'elles restent deux branches distinctes plutôt qu'un chemin unique
+ * normalisé en amont : la forme courte se juge par l'HÔTE scanné (elle ne
+ * porte aucun slug) ; la forme pérenne se juge par le SLUG qu'elle porte
+ * elle-même (son hôte peut être celui d'un entrepôt OAI, sans rapport avec
+ * l'établissement — comparer son hôte serait comparer la mauvaise chose).
+ */
 export function reconnaitreAdresse(
   url: string,
   hotesDeLEcole: readonly string[],
+  slugCourant: string,
 ): AdresseScannee {
   let u: URL;
   try {
@@ -262,6 +288,18 @@ export function reconnaitreAdresse(
   if (u.protocol !== 'http:' && u.protocol !== 'https:') {
     return { reconnue: false, motif: 'illisible' };
   }
+
+  // ⭐ LA FORME PÉRENNE D'ABORD : son slug est l'autorité, jamais l'hôte.
+  const resoudre = /^\/opac\/resoudre\/([^/]+)\/?$/.exec(u.pathname);
+  if (resoudre?.[1]) {
+    const analyse = analyserIdentifiant(decodeURIComponent(resoudre[1]));
+    if (!analyse) return { reconnue: false, motif: 'illisible' };
+    if (analyse.slug !== slugCourant) {
+      return { reconnue: false, motif: 'autre-etablissement', slugEtranger: analyse.slug };
+    }
+    return { reconnue: true, recordId: analyse.id };
+  }
+
   // ⚠ Le CHEMIN d'abord : une adresse qui n'est pas une fiche de notice n'est
   // pas « d'un autre établissement », elle est illisible — et le dire
   // autrement enverrait quelqu'un changer d'école pour rien.
