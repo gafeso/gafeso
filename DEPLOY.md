@@ -453,7 +453,7 @@ procédure complète, par la voie CONTENEURISÉE rejouée sur pile jetable, est
 dans la section suivante — **« LA BASCULE DE LA DÉMONSTRATION »** — et c'est la
 seule à suivre.
 
-### 🔴 LA BASCULE DE LA DÉMONSTRATION — procédure complète, rc14
+### 🔴 LA BASCULE DE LA DÉMONSTRATION — procédure complète, VALABLE POUR TOUTE VERSION
 
 **Décidée le 15 octobre 2026. SUSPENDUE le 16 octobre 2026** après mesure sur
 le serveur réel : ni `node` sur l'hôte, ni les ports 9000/3900 publiés — les
@@ -778,7 +778,28 @@ docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --bu
 curl -sS https://$API_DOMAIN/health
 ```
 
-**Attendu** : `{"status":"ok","version":"v1.0.0-rc14","commit":"…"}`.
+**Attendu** : `{"status":"ok","version":"<l'étiquette que vous déployez>","commit":"…"}`.
+
+⚠ **CETTE LIGNE PORTAIT `v1.0.0-rc14` EN DUR JUSQU'AU 22 OCTOBRE 2026, et
+c'était un faux PRÊT À DÉCLENCHER UN ARRÊT.** Cette procédure dit en tête
+« si une vérification ne rend pas ce qui est écrit, ARRÊTEZ-VOUS » : un
+exploitant qui déploie rc19 lit `v1.0.0-rc19`, ne reconnaît pas la valeur
+écrite, et s'arrête — à la DERNIÈRE étape, c'est-à-dire **après** que le
+stockage a déjà basculé. Un document opératoire qui publie une VALEUR meurt à
+la version suivante ; celui qui nomme sa SOURCE survit.
+
+La valeur attendue est donc celle que l'étape ④ a exportée, et on la relit
+plutôt que de la recopier :
+
+```bash
+echo "$GAFESO_VERSION"            # l'étiquette que ce déploiement porte
+curl -sS https://$API_DOMAIN/health | grep -o "\"version\":\"$GAFESO_VERSION\""
+```
+
+**Attendu** : la seconde commande rend exactement la même étiquette que la
+première. Si elle ne rend RIEN, les deux diffèrent — et c'est cela qui est un
+vrai motif d'arrêt.
+
 ⚠ Si vous lisez `"version":"non étiquetée"`, l'étape ④ (ou celle-ci) a été
 faite sans `eval "$(scripts/version-du-depot.sh --exporter)"`.
 
@@ -820,8 +841,9 @@ curl -sS https://$API_DOMAIN/health
 **Attendu** : l'API répond, et les documents se lisent de nouveau — **le volume
 MinIO porte encore tous les objets**, la migration n'y a rien touché.
 
-⚠ `git checkout` du compose n'est PAS le retour arrière : le compose de rc14
-EST sur Garage. Ce qui se défait, c'est la CONFIGURATION — et c'est pourquoi le
+⚠ `git checkout` du compose n'est PAS le retour arrière : le compose ne connaît
+plus MinIO depuis rc14, donc TOUTE version que vous déployez aujourd'hui est
+sur Garage. Ce qui se défait, c'est la CONFIGURATION — et c'est pourquoi le
 script la sauvegarde avant de la changer (étape ①, et de nouveau à l'étape ⑦).
 
 *La procédure entière, retour arrière compris, est rejouable sur pile jetable :
