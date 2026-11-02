@@ -232,8 +232,68 @@ async function hoteValide(hoteSansPort: string): Promise<boolean> {
   }
 }
 
+/**
+ * ⭐⭐ LE PRÉFIXE `/p/` EN CAPITALES — RÉÉCRIT, et c'est une MESURE qui l'a
+ * trouvé, pas un test.
+ *
+ * ## 🔴 CE QUE LA MESURE A DIT, le 2 novembre 2026
+ *
+ * ```
+ * /P/OAI:ZINDA:B2DCAA10-…  → 307 http://zinda.localhost:3000/login
+ * /p/oai:zinda:b2dcaa10-…  → 308 /opac/b2dcaa10-…
+ * ```
+ *
+ * **Et c'est en CAPITALES que l'étiquette imprime** — le mode alphanumérique
+ * du QR ne couvre pas les minuscules. Toute étiquette produite ce jour-là aurait
+ * donc mené un lecteur, livre en main, à un écran de connexion. Sur la seule
+ * adresse du produit qu'on ne peut pas corriger après impression.
+ *
+ * ⚠ DEUX COUCHES étaient sensibles à la casse, et il fallait les deux :
+ * `pathname.startsWith('/p/')` dans ce fichier, ET le routeur de Next, dont les
+ * segments statiques sont sensibles à la casse. Corriger la première seule
+ * aurait donné un 404 au lieu d'un 307 — un progrès invisible.
+ *
+ * ⭐ La réécriture normalise donc le PRÉFIXE ici, en un seul endroit, et laisse
+ * le SEGMENT intact : c'est `identifiantDuSegment` qui le met en minuscules,
+ * après décodage, et la remise en minuscules y est prouvée sans perte.
+ *
+ * ⚠ AUCUN TEST UNITAIRE NE POUVAIT LE VOIR : le middleware n'est pas dans ce
+ * qu'on monte, et le routeur encore moins. C'est « vérifier connecté ne dit
+ * rien de ce que voit le public », sur la classe d'écrans dont le public EST le
+ * dehors — et ce qui l'a trouvé est un `curl` sans cookie.
+ */
+const PREFIXE_PERENNE = /^\/p\//i;
+
+/**
+ * Le chemin normalisé si son préfixe pérenne n'est pas en minuscules, sinon
+ * `null`.
+ *
+ * ⚠ Exposé pour que `casse-du-qr.spec.tsx` l'éprouve AVEC l'adresse que
+ * l'étiquette imprime réellement, au lieu d'une chaîne tapée à la main. Le
+ * middleware n'est pas montable dans un test ; ce qu'on peut éprouver est sa
+ * décision, et la chaîne d'arrivée a été mesurée au `curl` sans cookie —
+ * 2 bonds, 200, voir `DEMARRER-FRONT.md` § 6 septies.
+ */
+export function normaliserPrefixePerenne(pathname: string): string | null {
+  if (!PREFIXE_PERENNE.test(pathname) || pathname.startsWith('/p/')) return null;
+  return `/p/${pathname.slice(3)}`;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  /*
+   * ⚠ AVANT TOUT LE RESTE : la casse du préfixe est normalisée, sinon le
+   * contrôle de publicité juste en dessous refuse l'adresse que les étiquettes
+   * impriment. La redirection est PERMANENTE — l'adresse en capitales est
+   * gravée dans des QR, elle doit se comporter comme l'autre pour toujours.
+   */
+  const normalise = normaliserPrefixePerenne(pathname);
+  if (normalise !== null) {
+    const cible = request.nextUrl.clone();
+    cible.pathname = normalise;
+    return NextResponse.redirect(cible, 308);
+  }
 
   const originalHost = request.headers.get('host');
   const hoteSansPort = originalHost?.split(':')[0] ?? null;

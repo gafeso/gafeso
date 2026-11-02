@@ -828,12 +828,43 @@ Mesuré le 2 novembre 2026, et les deux formes évidentes ÉCHOUENT :
 
 ```bash
 docker restart "$(docker ps --format '{{.Names}}' | grep -- -caddy-1$)"
+```
+
+```bash
+REP=$(curl -sS -D- -o /dev/null --max-time 10 "https://$STORAGE_DOMAIN/" 2>&1); CODE=$?
+if   [ "$CODE" -ne 0 ];                                      then echo "⛔ INDÉCIDABLE — aucune connexion (curl $CODE). Ce contrôle ne dit RIEN."
+elif ! printf '%s' "$REP" | grep -qiE '^HTTP/';              then echo "⛔ INDÉCIDABLE — connecté, mais aucune réponse HTTP lisible."
+elif   printf '%s' "$REP" | grep -qiE '^server: *minio';     then echo "🔴 Server: MinIO — Caddy route ENCORE vers l'ancien stockage."
+else echo "✓ réponse HTTP reçue, et AUCUN Server: MinIO — Caddy a relu son fichier."
+fi
+```
+
+**Attendu** : la ligne `✓`. Les deux autres issues sont des points d'arrêt, et
+elles ne disent PAS la même chose — `🔴` veut dire « Caddy n'a pas relu »,
+`⛔` veut dire « je n'ai pas pu conclure ».
+
+🔴 **POURQUOI CE CONTRÔLE A CETTE FORME, ET PAS LA PLUS COURTE.** Il s'écrivait :
+
+```bash
 curl -sS -D- -o /dev/null "https://$STORAGE_DOMAIN/" | grep -i '^server:' || echo '(aucun en-tete Server)'
 ```
 
-**Attendu** : **AUCUN `Server: MinIO`**. Cet en-tête est la signature de MinIO ;
-tant qu'il apparaît, Caddy route encore vers l'ancien stockage et tout ce que
-vous contrôlerez ensuite portera sur MinIO, pas sur Garage.
+⚠ **Et il rendait le message RASSURANT quand il avait ÉCHOUÉ.** Mesuré en
+l'exécutant sur la démonstration le 2 novembre 2026 : Caddy venait de
+redémarrer, `curl` a rendu « (7) Failed to connect … after 60 ms », `grep` n'a
+rien trouvé dans une sortie VIDE, et le `||` a affiché « aucun en-tête
+Server ». L'exploitant a failli conclure que Garage servait **alors que rien
+n'écoutait**.
+
+C'est « une sortie vide ne prouve rien » dans sa forme la plus coûteuse : un
+`||` ne distingue pas « la commande a répondu NON » de « la commande n'a pas
+pu répondre ». Les trois cas se séparent ici, et le contrôle négatif les
+prouve — pointé sur un port fermé, il DIT qu'il n'a pas pu conclure (sortie 2),
+il ne dit jamais « bon ».
+
+⚠ Tant que `Server: MinIO` apparaît, Caddy route encore vers l'ancien stockage
+et tout ce que vous contrôlerez ensuite serait juste et porterait sur le
+mauvais.
 
 ⛔ **POINT D'ARRÊT** : si vous lisez `Server: MinIO`, le redémarrage n'a pas
 pris. Ne poursuivez pas : les contrôles suivants seraient justes et porteraient
@@ -1927,6 +1958,209 @@ chaîne entière tient.
 mais l'étagère mobile restera vide pour ceux-là. Le script le dit en fin de
 course ; `OFFLINE_CONTENT_KEK` et MinIO sont les deux premières choses à
 regarder.
+
+## MONTER D'UNE ÉTIQUETTE À UNE AUTRE — la procédure GÉNÉRIQUE
+
+*Écrite le 2 novembre 2026, en la dérivant pour la démonstration. Elle ne
+nomme AUCUNE version : elle dit comment MESURER ce qu'il faut faire, parce
+qu'une procédure qui publie des numéros meurt à la version suivante.*
+
+⚠ **TOUT DANS UN SEUL TERMINAL.** L'étape ③ exporte des variables de SHELL
+(elles ne sont pas dans `.env.prod`). Un nouvel onglet les perd, et `compose`
+redira « variable is not set » — en construisant alors une image qui répond
+« non étiquetée ».
+
+⚠ **JAMAIS `--remove-orphans`** si une bascule de stockage est en cours ou
+récente : MinIO n'est plus décrit par le compose, donc l'option le
+supprimerait — voir l'interdit en toutes lettres plus haut.
+
+### ① Ne rien écraser qu'on n'a pas lu
+
+```bash
+cd "$GAFESO_REPO" && git status --short
+```
+
+**Attendu** : aucune ligne pour `docker/Caddyfile` ni
+`docker/docker-compose.prod.yml`. Si l'un apparaît, quelqu'un a édité à la
+main sur le serveur : un `checkout` emporterait ce travail sans le dire.
+
+⛔ **POINT D'ARRÊT** : lisez la modification avant de poursuivre.
+
+### ② Se placer sur l'étiquette
+
+```bash
+git fetch --tags origin
+git checkout <l'étiquette visée>
+git describe --tags
+```
+
+**Attendu** : `git describe --tags` rend EXACTEMENT l'étiquette demandée à la
+ligne précédente. On compare deux sorties, jamais à un numéro écrit ici.
+
+### ③ Exporter la version — elle n'est PAS dans `.env.prod`
+
+```bash
+eval "$(scripts/version-du-depot.sh --exporter)"
+echo "$GAFESO_VERSION / $GAFESO_COMMIT"
+```
+
+**Attendu** : la ligne reprend ce que `git describe --tags` vient de rendre.
+Si vous lisez `non étiquetée`, l'étape ② n'a pas pris.
+
+### ④ MESURER ce qu'il faut construire — et ne construire que cela
+
+C'est l'étape qu'une procédure figée ne peut pas porter : ce qu'il faut
+reconstruire DÉPEND de ce qui a changé entre les deux étiquettes.
+
+```bash
+git diff --name-only <étiquette DÉPLOYÉE> <étiquette VISÉE> \
+  | sed -E 's|^(apps/api)/.*|\1|; s|^(apps/web)/.*|\1|; s|^(scripts)/.*|\1|; s|^(docker)/.*|\1|' \
+  | sort -u
+```
+
+Ce que chaque zone implique :
+
+| La zone qui apparaît | Ce qu'il faut |
+|---|---|
+| `apps/api` | reconstruire `api` |
+| `scripts` | reconstruire `api` AUSSI — le Dockerfile y copie `scripts/` |
+| `apps/web` | reconstruire `web` |
+| `docker` | lire le diff : si c'est le **Caddyfile**, l'étape ⑥ s'applique ; si c'est le **compose**, relire le diff AVANT de poursuivre, car `up -d` pourrait alors toucher d'autres services |
+| `apps/api/prisma` | ⚠ une MIGRATION s'appliquera au démarrage du conteneur `api` — reprenez la procédure de montée correspondante |
+| `apps/api/src/search` | ⚠ une RÉINDEXATION peut être nécessaire — voir « rc8 » plus haut |
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build <les services mesurés>
+```
+
+⚠ **ET SI `scripts/` A CHANGÉ, VÉRIFIEZ QUE L'IMAGE LE PORTE** — c'est ce qui
+a produit un « Cannot find module » en pleine bascule, sur une image restée à
+la version précédente :
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  run --rm --no-deps --entrypoint sh api -c 'ls scripts/autocontrole-lecture.mjs'
+```
+
+**Attendu** : le chemin s'affiche.
+
+### ⑤ Remplacer les conteneurs mesurés
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d <les mêmes services>
+```
+
+**Attendu** : les services NOMMÉS sont recréés — et compose VÉRIFIE aussi
+leurs dépendances au passage.
+
+⚠ **CET ATTENDU ÉTAIT FAUX, et il a été corrigé le 2 novembre 2026 en
+exécutant la procédure.** Il annonçait « seuls les services nommés sont
+recréés, aucune ligne concernant la base ou le stockage ». En réalité, sans
+`--no-deps`, `up -d api web` vérifie les quatre dépendances d'`api`
+(`db`, `meilisearch`, `garage`, `garage-init`) et **REJOUE `garage-init`**,
+qui est un conteneur d'initialisation déjà sorti.
+
+C'est SANS CONSÉQUENCE — `garage-init` est idempotent, et l'étape ④ le dit
+déjà : « une seconde exécution ne crée rien de plus ». Mais **un attendu faux
+use la confiance qu'on met dans les attendus justes**, et c'est la seule
+raison pour laquelle cette correction vaut d'être écrite : celui qui lit
+« aucune ligne concernant le stockage » et en voit quatre se demande ce qui
+ne va pas, au lieu de poursuivre.
+
+⚠ Ce qui, en revanche, ne doit PAS apparaître : une ligne qui RECRÉE `db` ou
+`garage` (ils sont seulement vérifiés), et toute ligne qui SUPPRIME un MinIO
+encore en vie — voir l'interdit `--remove-orphans`.
+
+### ⑥ Si `docker/Caddyfile` a changé — et LUI SEUL ne suffit pas à `compose`
+
+Mesuré le 2 novembre 2026, les deux formes évidentes ÉCHOUENT : le Caddyfile
+est un VOLUME monté, donc invisible à `compose`, et l'API d'administration de
+Caddy est fermée.
+
+```bash
+docker restart "$(docker ps --format '{{.Names}}' | grep -- -caddy-1$)"
+STORAGE_DOMAIN=$(grep -E '^STORAGE_DOMAIN=' .env.prod | cut -d= -f2-)
+```
+
+```bash
+REP=$(curl -sS -D- -o /dev/null --max-time 10 "https://$STORAGE_DOMAIN/" 2>&1); CODE=$?
+if   [ "$CODE" -ne 0 ];                                      then echo "⛔ INDÉCIDABLE — aucune connexion (curl $CODE). Ce contrôle ne dit RIEN."
+elif ! printf '%s' "$REP" | grep -qiE '^HTTP/';              then echo "⛔ INDÉCIDABLE — connecté, mais aucune réponse HTTP lisible."
+elif   printf '%s' "$REP" | grep -qiE '^server: *minio';     then echo "🔴 Server: MinIO — Caddy route ENCORE vers l'ancien stockage."
+else echo "✓ réponse HTTP reçue, et AUCUN Server: MinIO — Caddy a relu son fichier."
+fi
+```
+
+**Attendu** : la ligne `✓`. Les deux autres issues sont des points d'arrêt, et
+elles ne disent PAS la même chose — `🔴` veut dire « Caddy n'a pas relu »,
+`⛔` veut dire « je n'ai pas pu conclure ».
+
+🔴 **POURQUOI CE CONTRÔLE A CETTE FORME, ET PAS LA PLUS COURTE.** Il s'écrivait :
+
+```bash
+curl -sS -D- -o /dev/null "https://$STORAGE_DOMAIN/" | grep -i '^server:' || echo '(aucun en-tete Server)'
+```
+
+⚠ **Et il rendait le message RASSURANT quand il avait ÉCHOUÉ.** Mesuré en
+l'exécutant sur la démonstration le 2 novembre 2026 : Caddy venait de
+redémarrer, `curl` a rendu « (7) Failed to connect … after 60 ms », `grep` n'a
+rien trouvé dans une sortie VIDE, et le `||` a affiché « aucun en-tête
+Server ». L'exploitant a failli conclure que Garage servait **alors que rien
+n'écoutait**.
+
+C'est « une sortie vide ne prouve rien » dans sa forme la plus coûteuse : un
+`||` ne distingue pas « la commande a répondu NON » de « la commande n'a pas
+pu répondre ». Les trois cas se séparent ici, et le contrôle négatif les
+prouve — pointé sur un port fermé, il DIT qu'il n'a pas pu conclure (sortie 2),
+il ne dit jamais « bon ».
+
+### ⑦ L'auto-contrôle de lecture — il ne prend AUCUN argument
+
+```bash
+./scripts/autocontrole-lecture.sh
+```
+
+Depuis la racine du dépôt il trouve seul `.env.prod` et le compose.
+(`GAFESO_ENV_FILE` / `GAFESO_COMPOSE` ne servent que si ces fichiers sont
+ailleurs.)
+
+**Attendu** : « lecture de bout en bout », et l'origine affichée est celle
+construite depuis le `PUBLIC_DOMAIN` de votre `.env.prod`. En échec il NOMME
+la cause et sort en 1 — voir la section suivante pour ce qu'elle distingue.
+
+### ⑧ La version servie est celle qu'on a déployée
+
+```bash
+curl -sS "https://$(grep -E '^API_DOMAIN=' .env.prod | cut -d= -f2-)/health" \
+  | grep -o "\"version\":\"$GAFESO_VERSION\""
+```
+
+**Attendu** : la ligne sort, portant la même valeur qu'à l'étape ③. Si elle ne
+rend RIEN, les deux diffèrent — et c'est cela qui est un motif d'arrêt.
+
+### ⑨ Le retour arrière
+
+⚠ **Ce qui a changé aux étapes ⑤ et ⑥ seulement** : les conteneurs nommés, et
+le Caddyfile actif. **Rien en base** tant que l'étape ④ n'a pas signalé
+`apps/api/prisma`. Le stockage n'est pas touché.
+
+```bash
+git checkout <l'étiquette PRÉCÉDEMMENT déployée>
+eval "$(scripts/version-du-depot.sh --exporter)"
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build <les mêmes services>
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d <les mêmes services>
+docker restart "$(docker ps --format '{{.Names}}' | grep -- -caddy-1$)"
+```
+
+**Attendu** : l'étape ⑧ rend de nouveau la version de l'étiquette restaurée.
+
+⚠ **Et ce que ce retour arrière NE fait PAS** : il ne touche pas au stockage.
+Revenir d'une bascule de stockage est une AUTRE manœuvre — restaurer
+`.env.prod.avant-garage` et relancer MinIO explicitement, étape ⑨ de la
+bascule. Un échec de l'auto-contrôle dit que le routage ou l'en-tête ne va
+pas ; il ne dit PAS que le stockage a perdu les octets.
+
+---
 
 ## 🔴 FIN DE TOUTE MISE À JOUR — l'auto-contrôle de lecture
 

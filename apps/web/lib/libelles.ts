@@ -801,6 +801,51 @@ export const LIBELLES = {
       'vérifier. Réessayez dans un instant — l’étiquette, elle, reste bonne.',
   },
 
+  /**
+   * ⭐⭐ LES QUATRE ÉCHECS DU LECTEUR EN LIGNE — et pourquoi quatre.
+   *
+   * ## 🔴 CE QU'UN SEUL MESSAGE A COÛTÉ : DOUZE JOURS
+   *
+   * Le lecteur disait, pour tout : *« Le document n'a pas pu être chargé.
+   * Retournez à la fiche et relancez la lecture. »* Honnête, calme, et MUET.
+   *
+   * Le 2 novembre 2026, après une migration de MinIO vers Garage, le navigateur
+   * refusait les PDF faute d'en-tête `Access-Control-Allow-Origin`. La suite de
+   * tests était verte, la migration était juste, et la lecture impossible.
+   * **Douze jours.** Jean : *« un lecteur qui aurait nommé le refus d'origine
+   * nous aurait fait gagner douze jours. »*
+   *
+   * ⚠ Et l'auto-contrôle de fin d'installation ne suffit pas : il ne tourne
+   * qu'à l'installation, et la panne peut naître plus tard — un domaine qui
+   * change, un tenant qu'on ajoute.
+   *
+   * ## ⭐ CE QUI LES DISTINGUE N'EST PAS L'ERREUR, c'est une MESURE de plus
+   *
+   * Un blocage d'origine et une coupure réseau lèvent le **même** `TypeError`.
+   * Rien, dans l'erreur, ne les sépare. Le discriminant est ailleurs : au
+   * moment de l'échec, on redemande NOTRE PROPRE origine. Si elle répond, le
+   * réseau est debout — et c'est donc le stockage qui nous a refusés.
+   *
+   * ⚠ Chaque texte reste SIMPLE pour l'étudiant : il ne lui apprend pas ce
+   * qu'est une origine. C'est le `data-motif` posé à côté qui nous est lisible.
+   */
+  lecteur: {
+    /** ⚠ Le refus d'origine : la seule phrase qui nomme le SERVEUR de documents. */
+    echecOrigine:
+      'Le serveur de documents a refusé cette page. Ce n’est pas votre connexion ' +
+      '— signalez-le à votre bibliothèque, qui a le détail à transmettre.',
+    echecReseau:
+      'La connexion a été interrompue pendant le chargement. Réessayez dans un ' +
+      'instant.',
+    /** ⚠ Après la redemande d'URL : le lien de lecture n'est plus valable. */
+    echecExpire:
+      'Votre lien de lecture n’est plus valable. Retournez à la fiche et ' +
+      'relancez la lecture.',
+    echecIllisible:
+      'Ce document n’a pas pu être affiché. Signalez-le à votre bibliothèque : ' +
+      'le fichier est peut-être abîmé.',
+  },
+
   partage: {
     titre: 'Partager ce document',
     /**
@@ -921,14 +966,20 @@ export const LIBELLES = {
     /**
      * ⚠ DIT CE QUE L'APERÇU EST, et ce qu'il n'est PAS. Deux sorties existent —
      * cette planche, imprimée par le navigateur, et le PDF du serveur. Elles ne
-     * portent PAS la même chose : le PDF n'a pas de QR code, et il appose le
-     * sigle de l'établissement, que le front ne connaît pas. Taire cet écart
-     * ferait croire à un aperçu du PDF.
+     * portent PAS la même chose : le PDF encode l'adresse COURTE dans un carré
+     * de 13 mm en minuscules, cette planche l'adresse PÉRENNE dans 14 mm en
+     * capitales — et le PDF appose le sigle de l'établissement, que le front ne
+     * connaît pas. Taire cet écart ferait croire à un aperçu du PDF.
+     *
+     * 🔴 Ce commentaire a dit trois semaines que « le PDF n'a pas de QR code ».
+     * Vrai à l'écriture, faux depuis le 11 octobre 2026 — mesuré dans
+     * `label-pdf.ts`, pas relu ici.
      */
     intro:
       'Cette planche est ce qui s’imprimera depuis cette page. Le PDF du ' +
-      'catalogue, lui, ne porte pas de QR code — les deux sorties ne sont pas ' +
-      'interchangeables.',
+      'catalogue porte un QR différent : l’adresse courte, en 13 mm. Les deux ' +
+      'sorties ne sont pas interchangeables — pour une étiquette qu’on colle ' +
+      'dans un livre, imprimez celle-ci.',
     imprimer: 'Imprimer la planche',
     /** ⚠ Un état vide donne une SORTIE — ici, aller chercher des notices. */
     aucuneSelectionAction: 'Aller au catalogue',

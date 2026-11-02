@@ -49,8 +49,20 @@ export interface LabelData {
 export const LARGEUR_MODULE_MIN_MM = 0.25;
 
 /** Côté du QR, et l'écart qui le sépare du code-barres. */
-const QR_COTE_MM = 13;
-const QR_ECART_MM = 2;
+/**
+ * ⭐⭐ LE CÔTÉ EST IMPORTÉ, PAS ÉCRIT — 2 novembre 2026.
+ *
+ * Il valait `13` EN DUR ici, pendant que l'aperçu web en dérivait `14`. Les
+ * deux valeurs étaient alignées à la main, donc elles ont divergé au premier
+ * changement du seuil — « celui des deux qui recopie est celui qui aura tort
+ * dans six mois ».
+ *
+ * La dérivation vit désormais dans `opac/identifiant-perenne.ts`, avec son
+ * calcul écrit, et `etiquette-derivation-unique.spec.ts` LIT LA SOURCE des deux
+ * côtés pour refuser qu'ils se désaccordent — un test d'exécution verrait une
+ * constante figée s'accorder avec sa propre valeur.
+ */
+import { QR_COTE_MM, QR_ECART_MM } from '../opac/identifiant-perenne';
 
 export interface LabelLayout {
   /** Colonnes × lignes de la grille. */

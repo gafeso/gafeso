@@ -19,6 +19,8 @@ import {
 } from './couverture';
 import {
   adresseCourteDeLaNotice,
+  adresseGraveeSurEtiquette,
+  QR_COTE_MM,
   adressePubliqueDeLaNotice,
   construireIdentifiant,
 } from './identifiant-perenne';
@@ -941,6 +943,12 @@ export class OpacService {
       reponse.publicUrl = null;
       reponse.identifiantPerenne = null;
       reponse.shortUrl = null;
+      // ⚠ AJOUTÉE ICI AUSSI, et c'est un contrôle négatif qui l'a exigée : le
+      // contrat gelé a passé SANS BRONCHER quand j'ai ajouté `etiquette` plus
+      // bas, parce qu'il appelle `recordDetail` SANS slug — donc il ne voyait
+      // pas ma clé du tout. Sans cette ligne, `etiquette` apparaîtrait par
+      // intermittence, exactement ce que ce bloc existe pour empêcher.
+      reponse.etiquette = null;
       // ⚠ La couverture, elle, NE dépend PAS du slug : elle se résout depuis la
       // notice. Les clés existent donc avec leur valeur, pas avec `null` — une
       // couverture est composable même sans domaine déclaré.
@@ -957,6 +965,44 @@ export class OpacService {
     // ⭐ L'ADRESSE COURTE, pour l'étiquette : voir son motif au contrat. Une
     // seule lecture du domaine pour les deux — c'est la même école.
     reponse.shortUrl = appUrl ? adresseCourteDeLaNotice(appUrl, domaine, id) : null;
+    /**
+     * ⭐⭐ `etiquette` — CE QUE LE PDF GRAVE, SERVI À QUI L'AFFICHE.
+     *
+     * *Forme décidée par Jean le 2 novembre 2026, pour que personne ne
+     * l'invente.*
+     *
+     * ⚠ ELLE VIENT DE LA DÉRIVATION UNIQUE, celle que `label-pdf.ts` consomme
+     * déjà — PAS d'une seconde implémentation pour l'API. C'est tout l'objet :
+     * « celui des deux qui recopie est celui qui aura tort dans six mois ».
+     *
+     * ⚠ POURQUOI LA SERVIR ALORS QUE `publicUrl` + `identifiantPerenne`
+     * SUFFISENT À LA COMPOSER. Parce que composer EST la divergence : l'aperçu
+     * la composait, le PDF la dérivait, et les deux ont divergé sur trois axes
+     * (chaîne, côté, casse) sans que rien ne le dise. Le front n'a plus à
+     * recomposer — il lit.
+     *
+     * ⚠ `coteMm` EST CONSTANT PAR CONSTRUCTION, et c'est mesuré : il garantit
+     * que la PIRE version admise reste au-dessus du seuil d'impression, donc
+     * il ne dépend pas de la chaîne. Ce qui varie par notice est la VERSION du
+     * QR, donc la largeur de module — mesuré le 2 novembre 2026 : `zinda`
+     * (71 car.) → v4, 0,3415 mm ; un slug de 28 caractères (93 car.) → v5,
+     * 0,3111 mm. Les deux restent largement au-dessus de 0,25 mm.
+     *
+     * Il est néanmoins servi DANS l'objet par notice, et non à part : l'adresse
+     * l'est vraiment, et grouper ce qu'une étiquette demande évite qu'un
+     * appelant aille chercher la géométrie ailleurs — c'est-à-dire qu'il la
+     * recopie.
+     *
+     * ⚠ Servi même à un visiteur ANONYME, délibérément : l'adresse gravée est
+     * une fonction pure de `publicUrl` et `identifiantPerenne`, tous deux déjà
+     * publics, et elle est imprimée sur des livres. Rien n'y est réservé.
+     */
+    reponse.etiquette = appUrl
+      ? {
+          adresseGravee: adresseGraveeSurEtiquette(appUrl, domaine, id, slug),
+          coteMm: QR_COTE_MM,
+        }
+      : null;
   }
 
   /**

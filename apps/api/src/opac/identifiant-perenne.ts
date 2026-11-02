@@ -48,7 +48,37 @@ export function construireIdentifiant(slug: string, recordId: string): string {
  * autre école » sont deux réponses différentes pour qui les reçoit.
  */
 export function analyserIdentifiant(identifiant: string): { slug: string; id: string } | null {
-  const parts = identifiant.split(':');
+  /**
+   * 🔴 LA CASSE EST NORMALISÉE ICI, À LA FRONTIÈRE — 2 novembre 2026.
+   *
+   * ⚠ MESURÉ, SANS COOKIE, sur l'API de développement :
+   *   `oai:zinda:<uuid>` → **200**
+   *   `OAI:ZINDA:<UUID>` → **404**
+   *
+   * Et c'est une adresse GRAVÉE SUR UNE ÉTIQUETTE COLLÉE DANS UN LIVRE. Le QR
+   * encode désormais l'adresse en CAPITALES — non par goût : le mode
+   * alphanumérique d'un QR ne connaît QUE les majuscules, donc les capitales
+   * tiennent dans une version plus basse, donc des modules plus gros dans le
+   * même carré. Un identifiant refusé en capitales rendrait chaque planche
+   * imprimée inutilisable, définitivement.
+   *
+   * ⚠ LA SESSION FRONT A TROUVÉ DEUX COUCHES SENSIBLES À LA CASSE CHEZ ELLE
+   * (le préfixe public du middleware ET le routeur de Next) ; celle-ci est la
+   * TROISIÈME, et elle est côté API. Aucun test unitaire ne la voyait : ils
+   * passent tous l'identifiant déjà en minuscules.
+   *
+   * ⚠ ET LA MISE EN MINUSCULES EST SANS PERTE, mesuré avant de l'écrire plutôt
+   * que supposé — zéro `id` et zéro `slug` non-minuscules dans les deux écoles
+   * (`WHERE id <> lower(id)`). Les uuid sont engendrés en minuscules, les slugs
+   * aussi. **Et rien n'est RÉÉCRIT** : on normalise ce qu'on REÇOIT pour
+   * chercher, jamais ce qui est stocké — `BiblioRecord.id` ne change jamais,
+   * c'est le `docId` des licences hors-ligne déjà signées.
+   *
+   * ⚠ Normaliser ICI et non chez chaque appelant : ils sont trois (le scan, la
+   * route de résolution, et `GetRecord` d'OAI-PMH), et « y penser à chaque
+   * appel » est la forme qui échoue toujours — il suffit d'un oubli.
+   */
+  const parts = identifiant.trim().toLowerCase().split(':');
   if (parts.length !== 3 || parts[0] !== SCHEMA || !parts[1] || !parts[2]) return null;
   return { slug: parts[1], id: parts[2] };
 }
@@ -163,6 +193,97 @@ export function adressePubliqueDeLaNotice(
     : `/opac/${encodeURIComponent(recordId)}`;
   return new URL(chemin, base).toString();
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ⭐⭐ LA CHAÎNE GRAVÉE — UNE SEULE DÉRIVATION, ET ELLE VIT ICI
+ *
+ * *Décidée par Jean le 2 novembre 2026 : « Deux implémentations alignées à la
+ * main divergeront de nouveau au premier changement. Celui des deux qui
+ * recopie est celui qui aura tort dans six mois. »*
+ *
+ * Ce qui divergeait, mesuré par la session front :
+ *
+ * | | aperçu web | `label-pdf.ts` |
+ * |---|---|---|
+ * | chaîne encodée | `/p/oai:…` pérenne | `shortUrl` COURTE |
+ * | côté | 14 mm DÉRIVÉ | 13 mm EN DUR |
+ * | casse | MAJUSCULES | minuscules |
+ *
+ * ⚠ C'est le PDF qui va sur le papier, et une étiquette collée est définitive.
+ *
+ * ## ⚠ POURQUOI ICI, ET PAS DANS `apps/web`
+ *
+ * Le front l'avait ANTICIPÉ, et il l'a écrit : « L'API ne connaît pas encore
+ * `/p/`. On compose donc le CHEMIN — mais les deux parties viennent d'ELLE. »
+ * Il consommait déjà l'origine et l'identifiant depuis nos réponses ; la pièce
+ * qui manquait était que l'API serve la chaîne ENTIÈRE.
+ *
+ * ⚠ Et un paquet partagé (`packages/etiquette/`) serait plus propre le jour où
+ * un TROISIÈME consommateur arrive — l'impression depuis le mobile. Ce jour-là
+ * on le fera ; pas avant. Décision de Jean, même date.
+ *
+ * Les trois décisions qu'elle porte, chacune mesurée :
+ *
+ * · **`/p/<identifiant>`** plutôt que `/opac/resoudre/…` : le slug apparaît
+ *   DEUX fois (hôte, puis identifiant), donc chaque caractère de chemin
+ *   économisé vaut un demi-caractère de slug — le slug tenable passe de 15 à
+ *   21 caractères ;
+ * · **deux-points BRUTS**, pas `%3A` : le scanner accepte les deux, et
+ *   l'encodage coûte 4 caractères pour rien ;
+ * · **MAJUSCULES** : le mode alphanumérique d'un QR ne connaît que les
+ *   majuscules, donc elles tiennent dans une version plus basse — modules plus
+ *   gros dans le même carré.
+ *
+ * ⚠ Rend `null` dès qu'une partie manque, jamais un repli sur la forme courte :
+ * un QR qui mène ailleurs ne se remarque jamais, et celui-ci est collé dans un
+ * livre.
+ */
+export function adresseGraveeSurEtiquette(
+  appUrl: string,
+  domainePrincipal: string | null,
+  recordId: string,
+  slug: string,
+): string | null {
+  // ⚠ On RÉUTILISE la construction publique plutôt que de recomposer une
+  // origine : elle porte déjà « schéma et port d'APP_URL, HÔTE du domaine
+  // principal de l'école », et la redire ici en serait une seconde
+  // implémentation — exactement ce que ce bloc existe pour empêcher.
+  const publique = adressePubliqueDeLaNotice(appUrl, domainePrincipal, recordId, slug);
+  if (!publique) return null;
+  let origine: string;
+  try {
+    origine = new URL(publique).origin;
+  } catch {
+    return null;
+  }
+  return `${origine}/p/${construireIdentifiant(slug, recordId)}`.toUpperCase();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ⭐ LA GÉOMÉTRIE DU QR D'ÉTIQUETTE — DÉRIVÉE DU SEUIL, JAMAIS ÉCRITE
+ *
+ * ⚠ `QR_COTE_MM` valait **13 EN DUR** dans `label-pdf.ts`. Le nombre était le
+ * RÉSULTAT d'un calcul, et l'écrire le détachait de la contrainte qu'il existe
+ * pour respecter : le jour où `LARGEUR_MODULE_MIN_MM` monterait, le carré ne
+ * suivrait pas, et le QR passerait sous le seuil d'impression sans que rien ne
+ * le dise.
+ *
+ *   modules(v) = 4·v + 17                        (norme QR)
+ *   côté       = ⌈ (modules(VERSION_MAX) + 2·SILENCE) × SEUIL ⌉
+ *              = ⌈ (4·7 + 17 + 2·4) × 0,25 ⌉ = ⌈ 13,25 ⌉ = 14 mm
+ *
+ * ⚠ LE SEUL INSTRUMENT CAPABLE DE PROUVER QU'IL EST DÉRIVÉ **LIT LA SOURCE** :
+ * un test d'exécution verrait une constante figée s'accorder avec sa propre
+ * valeur. C'est `etiquette-derivation-unique.spec.ts` qui le tient, et il lit
+ * CE fichier ET celui du front.
+ */
+export const SILENCE_QR = 4;
+export const VERSION_MAX_ETIQUETTE = 7;
+export const LARGEUR_MODULE_MIN_MM = 0.25;
+export const MODULES_MAX_ETIQUETTE = 4 * VERSION_MAX_ETIQUETTE + 17 + 2 * SILENCE_QR;
+export const QR_COTE_MM = Math.ceil(MODULES_MAX_ETIQUETTE * LARGEUR_MODULE_MIN_MM);
+export const QR_ECART_MM = 2;
+
 
 /**
  * Ce qu'une adresse scannée peut être.
@@ -289,8 +410,31 @@ export function reconnaitreAdresse(
     return { reconnue: false, motif: 'illisible' };
   }
 
+  /**
+   * 🔴 LE CHEMIN EST COMPARÉ EN MINUSCULES, ET `/p/` EST RECONNU — 2 nov. 2026.
+   *
+   * ⚠ MESURÉ : avant ce jour, `reconnaitreAdresse` ne connaissait QUE
+   * `/opac/resoudre/…` en minuscules. Or l'étiquette grave désormais
+   * `/p/OAI:<SLUG>:<UUID>` — chemin court ET capitales, pour que le QR tienne
+   * dans une version plus basse. Les deux écarts se cumulaient : un scan de
+   * planche fraîchement imprimée rendait « ce n'est pas un QR Gafeso ».
+   *
+   * ⚠ C'est la TROISIÈME fois que ce défaut se présente : le front l'a eu sur
+   * son préfixe public et sur son routeur, je l'ai eu sur `analyserIdentifiant`
+   * (ci-dessus), et le voici sur le CHEMIN. Même cause chaque fois — une
+   * comparaison sensible à la casse sur une valeur qu'un QR écrit en capitales.
+   *
+   * ⚠ Et la mise en minuscules du chemin est sans perte pour ce qu'on en
+   * extrait : `analyserIdentifiant` normalise déjà, et les `id` sont engendrés
+   * en minuscules (mesuré : zéro `id <> lower(id)` dans les deux écoles).
+   */
+  const chemin = u.pathname.toLowerCase();
+
   // ⭐ LA FORME PÉRENNE D'ABORD : son slug est l'autorité, jamais l'hôte.
-  const resoudre = /^\/opac\/resoudre\/([^/]+)\/?$/.exec(u.pathname);
+  // Les DEUX chemins qu'une étiquette ou une affiche peut porter — `/p/` est
+  // la forme courte gravée, `/opac/resoudre/` la forme longue des affiches et
+  // des entrepôts OAI. Les deux sont servies pour toujours.
+  const resoudre = /^\/(?:p|opac\/resoudre)\/([^/]+)\/?$/.exec(chemin);
   if (resoudre?.[1]) {
     const analyse = analyserIdentifiant(decodeURIComponent(resoudre[1]));
     if (!analyse) return { reconnue: false, motif: 'illisible' };
@@ -303,7 +447,7 @@ export function reconnaitreAdresse(
   // ⚠ Le CHEMIN d'abord : une adresse qui n'est pas une fiche de notice n'est
   // pas « d'un autre établissement », elle est illisible — et le dire
   // autrement enverrait quelqu'un changer d'école pour rien.
-  const m = /^\/opac\/([^/]+)\/?$/.exec(u.pathname);
+  const m = /^\/opac\/([^/]+)\/?$/.exec(chemin);
   if (!m || !m[1]) return { reconnue: false, motif: 'illisible' };
 
   const hote = u.hostname.toLowerCase();

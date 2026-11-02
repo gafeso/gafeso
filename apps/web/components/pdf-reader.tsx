@@ -37,6 +37,7 @@ import {
 // lui-même est chargé nativement au runtime — voir loadPdfJs().
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { Input } from '@/components/ui';
+import { LIBELLES } from '@/lib/libelles';
 
 type PdfJs = typeof import('pdfjs-dist');
 
@@ -118,12 +119,86 @@ function foldText(text: string): string {
  * comme un `Error` quelconque, et redemander sur le premier ferait un appel
  * pour rien.
  */
-class RefusDeLUrl extends Error {
+/* ⚠ EXPORTÉ pour que l'épreuve atteigne le motif `url` par le VRAI chemin.
+   Sans ça, un test ne pouvait fabriquer qu'un objet qui lui RESSEMBLE, et le
+   classement rendait `illisible` — un cas promis que le test ne pouvait pas
+   exercer. */
+export class RefusDeLUrl extends Error {
   constructor(readonly statut: number) {
     super(`HTTP ${statut}`);
     this.name = 'RefusDeLUrl';
   }
 }
+
+/**
+ * ⭐⭐ LES QUATRE MOTIFS D'ÉCHEC — et pourquoi un seul a coûté douze jours.
+ *
+ * Le 2 novembre 2026, après une migration de MinIO vers Garage, le navigateur
+ * refusait les PDF faute d'`Access-Control-Allow-Origin`. Le lecteur disait
+ * *« Le document n'a pas pu être chargé »* — honnête, calme, et MUET. Douze
+ * jours à chercher ailleurs.
+ */
+export type MotifDEchec = 'origine' | 'reseau' | 'url' | 'illisible';
+
+/**
+ * ⭐⭐ CE QUI SÉPARE UN REFUS D'ORIGINE D'UNE PANNE RÉSEAU : UNE MESURE.
+ *
+ * ## ⚠ L'ERREUR NE LES DISTINGUE PAS, ET C'EST LE PROBLÈME
+ *
+ * Un blocage CORS et une coupure réseau lèvent **le même `TypeError`** —
+ * « Failed to fetch », sans détail, par conception : le navigateur ne révèle
+ * pas au script ce que la réponse interdite contenait. Lire l'erreur ne peut
+ * donc PAS trancher, et tout code qui prétend le faire se trompe.
+ *
+ * ## ⭐ LE DISCRIMINANT, et il tient en une requête
+ *
+ * Au moment de l'échec, on redemande **NOTRE PROPRE origine** — même origine,
+ * donc aucun CORS en jeu. Si elle répond, le réseau est debout, et c'est donc
+ * le stockage qui nous a refusés.
+ *
+ * ⚠ Trois gardes avant d'en arriver là, et chacun écarte un faux :
+ *
+ * | La garde | Ce qu'elle évite |
+ * |---|---|
+ * | `navigator.onLine === false` → `reseau` | accuser le stockage quand l'appareil est hors ligne |
+ * | même origine → `reseau` | CORS ne s'applique PAS à une ressource de notre origine |
+ * | la sonde échoue → `reseau` | **on ne SAIT pas**, et on ne devine pas |
+ *
+ * ⭐ Le dernier est le plus important : quand la sonde échoue, les deux
+ * explications restent possibles. On rend alors le motif le moins accusateur —
+ * dire « le serveur a refusé » sur une coupure de réseau enverrait une
+ * bibliothécaire chercher une panne qui n'existe pas.
+ *
+ * ⚠ ET LE MOTIF `origine` NE DÉCLENCHE PAS DE REDEMANDE D'URL. Une URL fraîche
+ * du même hôte sera refusée exactement pareil : ce serait un appel pour rien,
+ * et il retarderait le message qui, lui, sert.
+ */
+export async function classerEchec(err: unknown, adresse: string): Promise<MotifDEchec> {
+  if (err instanceof RefusDeLUrl) return 'url';
+  if (!(err instanceof TypeError)) return 'illisible';
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'reseau';
+  let origineDuDocument: string;
+  try {
+    origineDuDocument = new URL(adresse, window.location.href).origin;
+  } catch {
+    return 'reseau';
+  }
+  if (origineDuDocument === window.location.origin) return 'reseau';
+  try {
+    // ⚠ MÊME origine, donc aucun CORS : cette requête mesure le RÉSEAU seul.
+    await fetch('/api/health', { cache: 'no-store' });
+    return 'origine';
+  } catch {
+    return 'reseau';
+  }
+}
+
+const MESSAGE: Record<MotifDEchec, string> = {
+  origine: LIBELLES.lecteur.echecOrigine,
+  reseau: LIBELLES.lecteur.echecReseau,
+  url: LIBELLES.lecteur.echecExpire,
+  illisible: LIBELLES.lecteur.echecIllisible,
+};
 
 export function PdfReader({
   url,
@@ -148,7 +223,7 @@ export function PdfReader({
   redemanderUrl?: () => Promise<string | null>;
 }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [echec, setEchec] = useState<MotifDEchec | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -231,11 +306,15 @@ export function PdfReader({
         setNumPages(loaded.numPages);
       })
       .catch((err: Error) => {
-        if (!cancelled && err.name !== 'AbortError') {
-          setError(
-            'Le document n’a pas pu être chargé. Retournez à la fiche et relancez la lecture.',
-          );
-        }
+        if (cancelled || err.name === 'AbortError') return;
+        /*
+         * ⚠ Le classement est ASYNCHRONE — il sonde notre propre origine pour
+         * savoir si le réseau est debout — et il peut aboutir après le
+         * démontage. D'où le second `cancelled`.
+         */
+        void classerEchec(err, url).then((motif) => {
+          if (!cancelled) setEchec(motif);
+        });
       });
 
     return () => {
@@ -462,11 +541,18 @@ export function PdfReader({
     return map;
   }, [matches]);
 
-  if (error) {
+  if (echec) {
     return (
       <div className="flex h-full items-center justify-center px-6">
-        <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
+        {/* ⚠ `data-motif` : la phrase reste SIMPLE pour l'étudiant, et le motif
+            est lisible par NOUS — dans une capture, dans une recette, dans un
+            signalement. C'est la moitié qui a manqué douze jours. */}
+        <p
+          role="alert"
+          data-motif={echec}
+          className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800"
+        >
+          {MESSAGE[echec]}
         </p>
       </div>
     );

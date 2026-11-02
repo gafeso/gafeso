@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { adresseCourteDeLaNotice } from '../opac/identifiant-perenne';
+import { adresseGraveeSurEtiquette } from '../opac/identifiant-perenne';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResolvedTenant } from '../tenancy/tenancy.service';
@@ -59,10 +59,20 @@ export class LabelsService {
       sigle,
       // `null` sans APP_URL : pas de QR, et le code-barres reprend toute la
       // largeur. On ne devine pas une adresse qu'on imprimerait sur un livre.
-      // ⭐ LA FORME COURTE, et c'est un CHOIX : à 13 mm, l'adresse pérenne
-      // ferait monter le QR d'une version et rétrécir ses modules de 8 %, pour
-      // un gain nul — les deux adresses résolvent la même notice.
-      shortUrl: appUrl ? adresseCourteDeLaNotice(appUrl, domaine, it.record.id) : null,
+      // ⭐⭐ LA CHAÎNE GRAVÉE VIENT DE `adresseGraveeSurEtiquette`, ET D'ELLE
+      // SEULE — 2 novembre 2026.
+      //
+      // ⚠ Elle portait `adresseCourteDeLaNotice` avec, en commentaire, un
+      // CHOIX qui n'était plus vrai : « à 13 mm l'adresse pérenne ferait
+      // monter le QR d'une version pour un gain nul ». Le front a mesuré
+      // depuis que la route `/p/` raccourcit assez pour que la forme pérenne
+      // tienne — et que la forme courte, elle, MEURT AVEC LE DOMAINE.
+      //
+      // L'aperçu web imprimait donc la forme pérenne pendant que ce PDF
+      // imprimait la courte. C'est le PDF qui va sur le papier.
+      shortUrl: appUrl
+        ? adresseGraveeSurEtiquette(appUrl, domaine, it.record.id, tenant.slug)
+        : null,
     }));
     return buildLabelsPdf(labels, layout);
   }

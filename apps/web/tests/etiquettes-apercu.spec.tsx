@@ -108,14 +108,38 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
     expect((l - 2 * PLANCHE.padMm - 15) / 123).toBeLessThan(LARGEUR_MODULE_MIN_MM);
   });
 
-  it('⚠ les cotes de la planche sont celles du PDF — toute divergence est un défaut', () => {
+  it('⚠ les cotes de la planche sont celles du PDF — sauf UNE, déclarée', () => {
     expect(PLANCHE.largeurMm).toBe(210);
     expect(PLANCHE.margeGaucheMm).toBe(7);
     expect(PLANCHE.gouttiereMm).toBe(2.5);
     expect(LARGEUR_MODULE_MIN_MM).toBe(0.25);
-    expect(QR_COTE_MM).toBe(13);
     // 63,67 mm à trois colonnes : la largeur d'étiquette du PDF.
     expect(largeurEtiquetteMm()).toBeCloseTo(63.67, 1);
+  });
+
+  /**
+   * 🔴 LA SEULE DIVERGENCE AVEC LE PDF, DÉCLARÉE — 2 novembre 2026.
+   *
+   * `apps/api/src/labels/label-pdf.ts` porte `QR_COTE_MM = 13`, écrit en dur.
+   * Cette planche porte **14**, et il est DÉRIVÉ : le côté minimal pour que le
+   * pire cas légal (slug de 49 caractères, contenu en majuscules → version 7,
+   * 53 modules avec sa zone de silence) tienne encore à
+   * `LARGEUR_MODULE_MIN_MM`. `53 × 0,25 = 13,25` → 14.
+   *
+   * ⚠ **Elle est VOULUE et elle est rapportée**, pas tue : le PDF encode encore
+   * `shortUrl` — la forme COURTE que Jean a écartée pour les supports durables
+   * le 2 novembre — en minuscules et dans 13 mm. Les trois axes divergent, et
+   * `label-pdf.ts` est au backend. Demandé en passation.
+   *
+   * ⭐ Ce test échouera le jour où le backend s'alignera, et ce sera la bonne
+   * nouvelle : il faudra alors retirer cette déclaration plutôt que la mettre à
+   * jour. Une divergence résolue mais toujours déclarée est une ligne de plus
+   * qui ne dit plus le vrai.
+   */
+  it('🔴 divergence DÉCLARÉE : le côté du QR, 14 ici contre 13 au PDF', () => {
+    expect(QR_COTE_MM).toBe(14);
+    // ⚠ et il est DÉRIVÉ, pas recopié — le témoin est dans
+    // `etiquettes-cote-derive.spec.ts`, qui le recalcule depuis le seuil.
   });
 
   it('⚠ le QR DISPARAÎT du rendu quand il est abandonné, et l’abandon se DIT', () => {

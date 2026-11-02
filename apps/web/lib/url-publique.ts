@@ -113,7 +113,24 @@ export const lienApplication = (urlPublique: string) =>
  */
 export function identifiantDuSegment(segment: string): string {
   try {
-    return decodeURIComponent(segment);
+    /*
+     * ⭐⭐ LA REMISE EN MINUSCULES, 2 novembre 2026 — et elle est SANS PERTE.
+     *
+     * Les étiquettes impriment leur QR en MAJUSCULES depuis ce jour : le mode
+     * alphanumérique de la norme QR couvre `0-9 A-Z $%*+-./:` mais PAS les
+     * minuscules, et une adresse tout en capitales change de mode et gagne une
+     * version entière — 0,3171 mm par module au lieu de 0,2653 pour `zinda`.
+     *
+     * ⭐ Le résolveur doit donc accepter les DEUX casses, et le faire sans rien
+     * perdre. Il le peut : un slug est `[a-z][a-z0-9-]*` (DTO du backend) et un
+     * uuid est hexadécimal. `OAI:ZINDA:B2DC…`.toLowerCase() redonne donc
+     * EXACTEMENT l'identifiant canonique — vérifié, pas supposé.
+     *
+     * ⚠ Et la minuscule est la forme CANONIQUE partout ailleurs : les
+     * majuscules ne sortent jamais du QR imprimé. `casse-du-qr.spec.tsx` le
+     * garde par l'EFFET, en décodant les tracés réellement dessinés.
+     */
+    return decodeURIComponent(segment).toLowerCase();
   } catch {
     /*
      * ⚠ Un `%` orphelin fait LEVER `decodeURIComponent`. On rend alors le
@@ -164,6 +181,46 @@ export function adressePerenneDuQr(publicUrl: string | null | undefined): string
   const canonique = publicUrl?.trim();
   return canonique ? canonique : null;
 }
+
+/**
+ * ⭐⭐ LA MISE EN MAJUSCULES — et elle ne sort JAMAIS du QR IMPRIMÉ.
+ *
+ * ## ⭐ POURQUOI, et le chiffre
+ *
+ * Le mode ALPHANUMÉRIQUE de la norme QR couvre `0-9`, `A-Z`, l'espace et
+ * `$%*+-./:` — **pas les minuscules**, qui forcent le mode octet. Une adresse
+ * tout en capitales change donc de mode et gagne une version entière. Mesuré le
+ * 2 novembre 2026, carré de 14 mm :
+ *
+ * | Le contenu | Version | Module |
+ * |---|---|---|
+ * | `https://zinda.gafeso.org/p/oai:zinda:<uuid>` | 5 | 0,3111 mm |
+ * | **la même en MAJUSCULES** | **4** | **0,3415 mm** |
+ * | pire cas légal (slug de 49), minuscules | 9 | 🔴 0,2295 mm |
+ * | **pire cas légal, MAJUSCULES** | **7** | **0,2642 mm** |
+ *
+ * ⭐ C'est ce qui permet de garder le slug LIBRE : Jean a refusé qu'une
+ * contrainte d'impression décide du nommage d'un établissement — un slug naturel
+ * peut faire 26 caractères.
+ *
+ * ## ⚠⚠ SA BORNE, ET ELLE EST LA MOITIÉ DE LA DÉCISION
+ *
+ * **Les majuscules ne sortent jamais du QR imprimé.** Ni dans OAI-PMH, ni sur
+ * la fiche, ni dans un `aria-label`, ni dans aucune adresse publiée. La forme
+ * canonique reste MINUSCULE partout ailleurs — c'est elle que les moissonneurs
+ * ont stockée depuis P4-3, et deux représentations d'un identifiant publié
+ * divergent le jour où l'une change.
+ *
+ * ⭐ C'est pourquoi cette fonction est appelée à UN SEUL endroit — le composant
+ * d'étiquette, au moment de fabriquer la matrice — et jamais en amont. Un appel
+ * en amont contaminerait l'adresse affichée, l'`aria-label`, et tout ce qui
+ * dérive de la même valeur.
+ *
+ * ⚠ `casse-du-qr.spec.tsx` le garde par l'EFFET : il décode les tracés
+ * RÉELLEMENT DESSINÉS — celui de l'étiquette et celui de la fiche — et exige
+ * que le premier soit en capitales et le second non.
+ */
+export const pourLeQrDEtiquette = (adresse: string) => adresse.toUpperCase();
 
 /* ──────────── LES DEUX FORMES, RECONNUES — pour les épreuves ──────────── */
 

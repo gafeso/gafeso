@@ -10,6 +10,7 @@ import {
 } from '@/lib/code128';
 import { LIBELLES } from '@/lib/libelles';
 import { matriceQr, moduleQrMm, qrAssezGros } from '@/lib/qr';
+import { pourLeQrDEtiquette } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -77,7 +78,21 @@ export function Etiquette({
    * aucun geste à faire : c'est la dégradation silencieuse que le backend a
    * nommée, déplacée du QR vers son MOTIF.
    */
-  const matrice = urlNotice === null ? null : matriceQr(urlNotice);
+  /*
+   * ⭐⭐ LES MAJUSCULES SONT POSÉES **ICI**, et nulle part ailleurs.
+   *
+   * Le mode alphanumérique de la norme QR ne couvre pas les minuscules : une
+   * adresse en capitales gagne une version entière, donc des modules plus
+   * larges — 0,3415 mm au lieu de 0,3111 pour `zinda`, dans un carré de 14 mm.
+   *
+   * ⚠ Et c'est le DERNIER moment possible. Appeler `pourLeQrDEtiquette` en
+   * amont contaminerait l'adresse que l'écran affiche en clair, l'`aria-label`
+   * d'un autre QR, et tout ce qui dérive de la même valeur. La forme canonique
+   * reste minuscule partout ailleurs — `casse-du-qr.spec.tsx` le garde par
+   * l'effet.
+   */
+  const contenuDuQr = urlNotice === null ? null : pourLeQrDEtiquette(urlNotice);
+  const matrice = contenuDuQr === null ? null : matriceQr(contenuDuQr);
   const placeOk = barres === null || qrTient(barres.motif.length, p);
   const grandeurOk = matrice === null ? false : qrAssezGros(matrice.taille);
   const avecQr = matrice !== null && placeOk && grandeurOk;
@@ -92,7 +107,7 @@ export function Etiquette({
         /* La cote du QR est en MILLIMÈTRES, comme dans le PDF : c'est la seule
            façon que la décision d'abandon ait le même sens aux deux endroits. */
         <QrCode
-          valeur={urlNotice as string}
+          valeur={contenuDuQr as string}
           taille={QR_COTE_MM * 3.78}
           className="shrink-0 self-start"
         />

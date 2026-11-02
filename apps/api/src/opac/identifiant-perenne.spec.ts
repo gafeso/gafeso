@@ -36,6 +36,44 @@ describe('⚠ Les deux contraintes du brief, tenues par la FORME', () => {
     });
   });
 
+  /**
+   * 🔴 LA CASSE — et ce cas existe parce qu'un CONTRÔLE NÉGATIF a montré qu'il
+   * MANQUAIT.
+   *
+   * *2 novembre 2026.* J'avais normalisé la casse dans `analyserIdentifiant`,
+   * prouvé par un `curl` sans cookie (`OAI:ZINDA:<UUID>` → 200 là où c'était
+   * 404). Puis j'ai retiré la normalisation pour éprouver : **zéro cas n'est
+   * tombé.** La cause : `reconnaitreAdresse` met déjà le CHEMIN en minuscules,
+   * donc l'identifiant lui arrive normalisé — la normalisation d'ici est
+   * redondante POUR LE SCAN, et load-bearing pour la ROUTE de résolution
+   * (`opac.controller.ts`), qui reçoit le paramètre d'URL tel quel.
+   *
+   * C'est la cinquième lecture d'une mutation qui ne casse rien, la plus bête :
+   * **il n'y avait pas de test**. Le voici.
+   */
+  it('⭐ un identifiant en CAPITALES est analysé — c’est ce que le QR grave', () => {
+    // Le mode alphanumérique d'un QR ne connaît que les majuscules : l'adresse
+    // gravée est donc en capitales, et la route de résolution la reçoit ainsi.
+    expect(analyserIdentifiant('OAI:ZINDA:A8E29C6E-203C')).toEqual({
+      slug: 'zinda',
+      id: 'a8e29c6e-203c',
+    });
+    expect(analyserIdentifiant('Oai:Zinda:AbC')).toEqual({ slug: 'zinda', id: 'abc' });
+    // Et les espaces d'un copier-coller ne doivent pas le rendre illisible.
+    expect(analyserIdentifiant('  oai:zinda:abc  ')).toEqual({ slug: 'zinda', id: 'abc' });
+  });
+
+  it('⚠ la normalisation ne RÉÉCRIT rien : elle sert à CHERCHER', () => {
+    // `BiblioRecord.id` ne change jamais — c'est le `docId` des licences
+    // hors-ligne signées. Mesuré avant d'écrire ce correctif : zéro `id` et
+    // zéro `slug` non-minuscules dans les deux écoles. La mise en minuscules
+    // d'une valeur REÇUE retrouve donc la forme canonique, sans perte.
+    const canonique = construireIdentifiant('zinda', 'a8e29c6e');
+    expect(analyserIdentifiant(canonique.toUpperCase())).toEqual(
+      analyserIdentifiant(canonique),
+    );
+  });
+
   it('⚠ TÉMOIN D’ABSENCE — les formes voisines sont refusées', () => {
     // Un analyseur qui accepte tout serait indiscernable d'un analyseur juste,
     // et plus rassurant. La confusion PLAUSIBLE est celle d'un identifiant

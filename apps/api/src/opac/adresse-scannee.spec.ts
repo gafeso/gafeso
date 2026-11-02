@@ -122,6 +122,68 @@ describe('⭐ Une adresse scannée — forme PÉRENNE (/opac/resoudre/<identifia
     });
   });
 
+  /**
+   * 🔴 CE QUE L'ÉTIQUETTE GRAVE AUJOURD'HUI — et qui n'était reconnu par RIEN.
+   *
+   * *Mesuré le 2 novembre 2026, après que le front a basculé la gravure.*
+   *
+   * L'étiquette porte `/p/OAI:<SLUG>:<UUID>` : chemin COURT et CAPITALES, pour
+   * que le QR tienne dans une version plus basse (le mode alphanumérique d'un
+   * QR ne connaît que les majuscules, donc des modules plus gros dans le même
+   * carré). Les deux écarts se cumulaient avec ce reconnaisseur, qui ne
+   * connaissait que `/opac/resoudre/` en minuscules : un scan de planche
+   * fraîchement imprimée rendait « ce n'est pas un QR Gafeso ».
+   *
+   * ⚠ TROISIÈME OCCURRENCE de la même cause en un jour — le front l'a eue sur
+   * son préfixe public et sur son routeur, moi sur `analyserIdentifiant` puis
+   * ici sur le CHEMIN. Une comparaison sensible à la casse sur une valeur qu'un
+   * QR écrit en capitales.
+   */
+  it('⭐ la forme GRAVÉE `/p/<identifiant>` est reconnue, minuscules ET capitales', () => {
+    const idt = construireIdentifiant(SLUG, ID);
+    for (const u of [
+      `https://bib.uo.bf/p/${idt}`,
+      `https://bib.uo.bf/p/${idt.toUpperCase()}`,
+      `https://BIB.UO.BF/P/${idt.toUpperCase()}`,
+      `https://bib.uo.bf/p/${idt}/`,
+    ]) {
+      expect(reconnaitreAdresse(u, HOTES, SLUG), u).toEqual({ reconnue: true, recordId: ID });
+    }
+  });
+
+  it('⭐ et la forme LONGUE reste reconnue en capitales (affiches, entrepôts OAI)', () => {
+    const idt = construireIdentifiant(SLUG, ID).toUpperCase();
+    expect(reconnaitreAdresse(`https://bib.uo.bf/OPAC/RESOUDRE/${idt}`, HOTES, SLUG)).toEqual({
+      reconnue: true,
+      recordId: ID,
+    });
+  });
+
+  it('⭐ `/p/` d’une AUTRE école est refusée, son slug RAPPORTÉ — même en capitales', () => {
+    const idt = construireIdentifiant('autre-ecole', ID).toUpperCase();
+    expect(reconnaitreAdresse(`https://bib.uo.bf/P/${idt}`, HOTES, SLUG)).toEqual({
+      reconnue: false,
+      motif: 'autre-etablissement',
+      slugEtranger: 'autre-ecole',
+    });
+  });
+
+  it('⚠ TÉMOIN D’ABSENCE : `/p/` ne rend pas tout lisible pour autant', () => {
+    // La tolérance de casse et le chemin court ne doivent pas ouvrir la porte à
+    // n'importe quoi : ce sont deux formes NOMMÉES, pas un assouplissement.
+    for (const u of [
+      'https://bib.uo.bf/p/',
+      'https://bib.uo.bf/p/pas-un-identifiant',
+      `https://bib.uo.bf/pp/${construireIdentifiant(SLUG, ID)}`,
+      `https://bib.uo.bf/p/${construireIdentifiant(SLUG, ID)}/lire`,
+    ]) {
+      expect(reconnaitreAdresse(u, HOTES, SLUG), u).toEqual({
+        reconnue: false,
+        motif: 'illisible',
+      });
+    }
+  });
+
   it('⚠ un identifiant de forme étrangère (pas oai:<slug>:<id>) est ILLISIBLE', () => {
     for (const identifiant of [
       'pas-un-identifiant',

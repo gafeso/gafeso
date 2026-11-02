@@ -1,5 +1,5 @@
 import { encode } from 'uqr';
-import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM } from './code128';
+import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM, SILENCE } from './code128';
 
 /**
  * LE QR CODE, CALCULÉ LOCALEMENT — zéro requête.
@@ -41,7 +41,7 @@ import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM } from './code128';
  * c'est-à-dire chez le lecteur. On demande donc `border: 0` et on pose les
  * QUATRE modules soi-même.
  */
-export const SILENCE = 4;
+export { SILENCE };
 
 /* ──────── LA TAILLE D'UN MODULE IMPRIMÉ, et le seuil du produit ──────── */
 

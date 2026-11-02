@@ -213,6 +213,29 @@ export const CLES_DU_CONTRAT: string[] = [
    */
   'shortUrl',
   /**
+   * ⭐⭐ `etiquette` — CE QUE LE PDF GRAVE, servi à qui l'affiche.
+   *
+   * `{ adresseGravee, coteMm }`, forme décidée par Jean le 2 novembre 2026.
+   *
+   * ⚠ POURQUOI LA SERVIR ALORS QUE `publicUrl` + `identifiantPerenne`
+   * SUFFISENT À LA COMPOSER : parce que COMPOSER *est* la divergence. L'aperçu
+   * composait, le PDF dérivait, et les deux ont divergé sur trois axes —
+   * chaîne encodée, côté, casse — sans que rien ne le dise, sur un objet
+   * COLLÉ DANS UN LIVRE.
+   *
+   * ⚠ `coteMm` est CONSTANT par construction, mesuré : il garantit que la pire
+   * version admise reste au-dessus du seuil d'impression, donc il ne dépend
+   * pas de la chaîne. Ce qui varie par notice est la VERSION du QR, donc la
+   * largeur de module (`zinda` → v4, 0,3415 mm ; un slug de 28 caractères →
+   * v5, 0,3111 mm). Il est servi dans l'objet par notice quand même : grouper
+   * ce qu'une étiquette demande évite qu'un appelant aille chercher la
+   * géométrie ailleurs — c'est-à-dire qu'il la recopie.
+   *
+   * ⚠ `null` sans `APP_URL`, comme ses voisines : on ne devine pas une adresse
+   * qu'on imprimerait sur un livre.
+   */
+  'etiquette',
+  /**
    * ⭐ LA COUVERTURE — le gabarit et le domaine, RÉSOLUS par le serveur.
    *
    * Trois clients composent cette couverture (web, mobile, PDF). Leur laisser

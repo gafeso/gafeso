@@ -120,7 +120,60 @@ export const SILENCE_BARRES = 10;
  * marge 7 mm · gouttière 2,5 mm · 3 colonnes.
  */
 export const LARGEUR_MODULE_MIN_MM = 0.25;
-export const QR_COTE_MM = 13;
+
+/**
+ * La zone de silence NORMATIVE d'un QR, en modules, de chaque côté.
+ *
+ * ⚠ Elle vit ICI et non dans `lib/qr.ts` parce que `QR_COTE_MM` en dépend, et
+ * qu'une valeur lue à deux endroits finit par divergier — ce dépôt a payé ce
+ * motif six fois. `lib/qr.ts` la ré-exporte pour ses appelants.
+ */
+export const SILENCE = 4;
+
+/**
+ * ⭐⭐ LE PIRE CAS QU'UNE ÉTIQUETTE S'ENGAGE À IMPRIMER, en modules.
+ *
+ * Décision de Jean, 2 novembre 2026 : **le slug reste libre.** « Je refuse
+ * qu'une contrainte d'impression décide du nommage d'un établissement — un slug
+ * naturel peut faire 26 caractères. »
+ *
+ * Le pire cas est donc le slug le plus long que
+ * `provision-tenant.dto.ts` autorise — **49 caractères** —, dans l'adresse la
+ * plus longue qu'on imprime, et le slug y apparaît DEUX FOIS (l'hôte, puis
+ * l'identifiant). Mesuré le 2 novembre 2026, contenu en MAJUSCULES, ECC M :
+ * 161 caractères → **version 7**, soit `4 × 7 + 17 = 45` modules.
+ *
+ * ⚠ `etiquettes-cote-derive.spec.ts` le VÉRIFIE en encodant réellement ce pire
+ * cas : si une version de plus était nécessaire, il tombe en le disant.
+ */
+export const VERSION_MAX_ETIQUETTE = 7;
+export const MODULES_MAX_ETIQUETTE = 4 * VERSION_MAX_ETIQUETTE + 17 + 2 * SILENCE;
+
+/**
+ * ⭐⭐ LE CÔTÉ DU QR D'UNE ÉTIQUETTE — **DÉRIVÉ**, jamais recopié.
+ *
+ * ## ⚠ IL VALAIT 13, ÉCRIT EN DUR, ET C'ÉTAIT LA MAUVAISE FORME
+ *
+ * Jusqu'au 2 novembre 2026 : `export const QR_COTE_MM = 13;`. Le nombre était
+ * juste pour les adresses d'alors, et **rien ne le reliait au seuil qu'il
+ * existe pour respecter.** Le jour où `LARGEUR_MODULE_MIN_MM` monterait, le
+ * carré serait resté à 13 et les étiquettes auraient imprimé des modules sous
+ * le minimum — en silence, sur des livres.
+ *
+ * ⭐ Il est donc CALCULÉ : le côté minimal pour que le pire cas tienne encore
+ * au seuil, arrondi au millimètre supérieur. `53 × 0,25 = 13,25` → **14 mm**.
+ *
+ * ⚠ Et l'arrondi n'est pas une coquetterie : il donne la marge qui fait que
+ * TOUTES les étiquettes réelles gagnent en robustesse. `zinda` passe de
+ * 0,2653 à 0,3171 mm par module — c'est le vrai bénéfice de ce lot, et il vaut
+ * pour chaque livre dès demain, pas seulement pour le cas limite.
+ *
+ * ⚠ LA BORNE GÉOMÉTRIQUE, mesurée : la hauteur d'une étiquette (26 mm) moins le
+ * rembourrage laisse **23,00 mm**. `etiquettes-cote-derive.spec.ts` refuse un
+ * côté qui la dépasserait — sinon le QR sortirait de l'étiquette sans que
+ * personne le voie avant l'impression.
+ */
+export const QR_COTE_MM = Math.ceil(MODULES_MAX_ETIQUETTE * LARGEUR_MODULE_MIN_MM);
 export const QR_ECART_MM = 2;
 export interface Planche {
   largeurMm: number;

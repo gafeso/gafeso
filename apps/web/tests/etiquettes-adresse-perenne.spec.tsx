@@ -36,11 +36,13 @@ import { render, screen } from '@testing-library/react';
 
 import { Etiquette } from '@/components/etiquette';
 import { LIBELLES } from '@/lib/libelles';
-import { moduleQrMm, qrAssezGros, matriceQr, traceDesModules } from '@/lib/qr';
+import { moduleQrMm, qrAssezGros, matriceQr } from '@/lib/qr';
+import { contenuDuQr } from './aide-trace-qr';
 import {
   adresseCourtePerenne,
   estFormeCourte,
   estFormePerenne,
+  pourLeQrDEtiquette,
 } from '@/lib/url-publique';
 
 const ID = '9de9b299-cde5-4acc-9e76-0e800ad94281';
@@ -130,15 +132,17 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
    * VERSION 5 — la même que l'ancienne forme courte, alors qu'elle porte
    * l'identifiant pérenne entier.
    */
-  it('⭐ la forme IMPRIMÉE tient à 13 mm, et retombe en version 5', () => {
-    const courte = matriceQr(COURTE);
-    const imprimee = matriceQr(PERENNE);
+  it('⭐ la forme IMPRIMÉE tient dans 14 mm, et le contenu en capitales gagne une version', () => {
+    const imprimee = matriceQr(pourLeQrDEtiquette(PERENNE));
+    const minuscule = matriceQr(PERENNE);
     const longue = matriceQr(SERVIE);
-    expect(courte.version).toBe(5);
-    expect(imprimee.version).toBe(5);
+    // ⭐ les CAPITALES font passer en mode alphanumérique : une version de moins
+    expect(minuscule.version).toBe(5);
+    expect(imprimee.version).toBe(4);
     expect(longue.version).toBe(6);
-    expect(moduleQrMm(imprimee.taille)).toBeCloseTo(0.2889, 4);
-    expect(moduleQrMm(longue.taille)).toBeCloseTo(0.2653, 4);
+    // et dans un carré DÉRIVÉ de 14 mm
+    expect(moduleQrMm(imprimee.taille)).toBeCloseTo(0.3415, 4);
+    expect(moduleQrMm(minuscule.taille)).toBeCloseTo(0.3111, 4);
     expect(qrAssezGros(imprimee.taille)).toBe(true);
   });
 
@@ -149,12 +153,18 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
    *
    * ⚠ Version 7 = 45 modules + 8 de silence = 53 → 13/53 = 0,2453 mm.
    */
-  it('⚠ et il REFUSE la version 7 — 0,2453 mm', () => {
-    const taille7 = 4 * 7 + 17;
-    expect(moduleQrMm(taille7)).toBeCloseTo(0.2453, 4);
-    expect(qrAssezGros(taille7)).toBe(false);
-    // la borne structurelle, écrite : version ≤ 6 ⟺ taille ≤ 44
-    expect(qrAssezGros(4 * 6 + 17)).toBe(true);
+  /*
+   * ⭐ LE TÉMOIN D'ABSENCE : le seuil doit savoir dire NON. Dans un carré de
+   * 14 mm il refuse à partir de la version 8 — `4×8+17+8 = 57`, et
+   * `14/57 = 0,2456 mm`. Sans ce cas, un `qrAssezGros` toujours vrai serait
+   * indiscernable d'un seuil juste, et plus rassurant.
+   */
+  it('⚠ et il REFUSE la version 8 dans 14 mm — 0,2456 mm', () => {
+    const taille8 = 4 * 8 + 17;
+    expect(moduleQrMm(taille8)).toBeCloseTo(0.2456, 4);
+    expect(qrAssezGros(taille8)).toBe(false);
+    // la borne structurelle : version ≤ 7, ce qui est VERSION_MAX_ETIQUETTE
+    expect(qrAssezGros(4 * 7 + 17)).toBe(true);
   });
 });
 
@@ -167,15 +177,8 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
  * dessiné et on cherche laquelle des candidates produit exactement cette
  * matrice. Un repli ajouté n'importe où dans la chaîne serait vu ici.
  */
-function adresseEncodee(candidates: string[]): string | null {
-  const svg = document.querySelector('svg[viewBox$="45 45"], svg[viewBox$="49 49"], svg[viewBox$="53 53"]');
-  const d = svg?.querySelector('path')?.getAttribute('d');
-  if (!d) return null;
-  for (const c of candidates) {
-    if (traceDesModules(matriceQr(c)) === d) return c;
-  }
-  return null;
-}
+const adresseEncodee = (candidates: string[]) =>
+  contenuDuQr(candidates.flatMap((c) => [c, pourLeQrDEtiquette(c)]));
 
 describe('⭐⭐ l’épreuve qui REFUSE la forme courte dans les étiquettes', () => {
   const poser = (url: string | null) =>
@@ -192,7 +195,15 @@ describe('⭐⭐ l’épreuve qui REFUSE la forme courte dans les étiquettes', 
   it('⭐ encode la forme PÉRENNE, et elle est identifiée depuis le tracé', () => {
     poser(PERENNE);
     const encodee = adresseEncodee([PERENNE, COURTE]);
-    expect(encodee, 'aucune candidate ne produit le tracé dessiné').toBe(PERENNE);
+    /*
+     * ⚠ COMPARÉ À CASSE ÉGALE, et c'est une frontière entre deux épreuves :
+     * celle-ci porte sur la FORME de l'adresse, `casse-du-qr.spec.tsx` porte
+     * sur la casse. Les mêler ferait deux fichiers qui tombent ensemble sur un
+     * seul défaut, et aucun qui désigne lequel.
+     */
+    expect(encodee?.toLowerCase(), 'aucune candidate ne produit le tracé dessiné').toBe(
+      PERENNE,
+    );
   });
 
   /*
@@ -293,9 +304,10 @@ describe('⭐⭐ l’ÉCRAN encode la forme pérenne — l’épreuve sur le che
     expect(estFormeCourte(encodee as string)).toBe(false);
     expect(estFormePerenne(encodee as string)).toBe(true);
     // ⭐ et c'est bien la COURTE qui est imprimée, pas celle que l'API sert
-    expect(encodee).toBe(PERENNE);
-    expect(encodee).not.toBe(SERVIE);
-    expect(encodee).toContain('/p/oai:');
+    // (à casse égale : la casse appartient à `casse-du-qr.spec.tsx`)
+    expect(encodee?.toLowerCase()).toBe(PERENNE);
+    expect(encodee?.toLowerCase()).not.toBe(SERVIE);
+    expect(encodee?.toLowerCase()).toContain('/p/oai:');
   });
 
   it('⚠ et quand l’OPAC ne sert rien : aucun QR, et le refus se dit', async () => {

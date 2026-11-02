@@ -26,9 +26,24 @@ const T = LIBELLES.etiquettes;
  * | un aperçu du PDF du serveur | il DIVERGERA — deux rendus, deux mises en page, et c'est l'aperçu qu'on croira |
  * | **l'aperçu EST ce qui s'imprime** | aucune divergence possible : le même DOM |
  *
- * ⚠ Le PDF du serveur subsiste, et il ne porte PAS de QR code. Les deux sorties
- * ne sont donc pas interchangeables, et l'écran le DIT — taire l'écart ferait
- * croire à un aperçu du PDF.
+ * 🔴 **CETTE PAGE A AFFIRMÉ TROIS SEMAINES QUE LE PDF N'AVAIT PAS DE QR.**
+ * C'était vrai à l'écriture ; le backend en a ajouté un le 11 octobre 2026
+ * (`044362d`, « le QR d'un livre garde l'adresse courte »). Corrigé le
+ * 2 novembre, en MESURANT `apps/api/src/labels/label-pdf.ts` plutôt qu'en
+ * relisant ma propre phrase.
+ *
+ * ⚠ Les deux sorties divergent désormais sur TROIS axes, et c'est écrit à
+ * l'écran parce que taire l'écart ferait croire à un aperçu du PDF :
+ *
+ * | | cette planche | le PDF du serveur |
+ * |---|---|---|
+ * | ce que le QR encode | `/p/oai:<école>:<uuid>` — PÉRENNE | `shortUrl` — COURTE |
+ * | le côté du carré | 14 mm, DÉRIVÉ du seuil | 13 mm, écrit en dur |
+ * | la casse du contenu | MAJUSCULES (mode alphanumérique) | minuscules |
+ *
+ * ⭐ La divergence va dans le bon sens — c'est le PDF qui porte encore la forme
+ * que Jean a écartée pour les supports durables —, mais elle est RÉELLE et
+ * rapportée au backend plutôt que corrigée ici : le fichier est à eux.
  *
  * ## ⚠ POURQUOI SEULEMENT LA SÉLECTION COCHÉE
  *

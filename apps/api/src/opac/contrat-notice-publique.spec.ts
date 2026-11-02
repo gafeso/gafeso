@@ -91,6 +91,25 @@ const ORDRE_ANONYME = [
     // d'une version et r\u00e9tr\u00e9cir ses modules de 8 %, sans mesure de lisibilit\u00e9.
     // Les affiches et les PDF, eux, gardent `publicUrl`.
     'shortUrl',
+    /**
+     * ⭐ 02/11/2026 — 33 → 34. `etiquette` : ce que le PDF GRAVE, servi à qui
+     * l'affiche, depuis la dérivation UNIQUE que `label-pdf.ts` consomme déjà.
+     *
+     * ⚠ ET LE COMMENTAIRE DE `shortUrl` CI-DESSUS ÉTAIT DEVENU FAUX : il
+     * disait « à 13 mm, la forme pérenne ferait monter le QR d'une version et
+     * rétrécir ses modules de 8 %, sans mesure de lisibilité ». La décision a
+     * été INVERSÉE sur une mesure du front : la route `/p/` raccourcit assez
+     * pour que la forme pérenne tienne, et la forme COURTE meurt avec le
+     * domaine. Corrigé plus haut.
+     *
+     * ⚠ ET CE CONTRAT N'A PAS VU MA CLÉ ARRIVER, et c'est le vrai apport de ce
+     * lot : il appelle `recordDetail` SANS slug, donc la branche de retour
+     * anticipé — où la clé n'était pas posée. Le contrat gelé est resté VERT
+     * sur l'ajout d'une clé. Il ne gèle donc la forme que du cas ANONYME SANS
+     * domaine ; la branche avec slug n'est figée par rien. Dette nommée plutôt
+     * que découverte plus tard.
+     */
+    'etiquette',
     // \u2b50 12/10/2026 \u2014 31 \u2192 33. Le gabarit et le domaine de couverture,
     // R\u00c9SOLUS par le serveur : trois clients composent cette couverture, et
     // leur laisser la normalisation et le repli donnerait trois couvertures
