@@ -60,6 +60,17 @@ const EXCEPTIONS: ReadonlyArray<{
       'l’effet : 1 <header>, 1 <nav>, 1 <footer> dans l’HTML servi.',
   },
   {
+    route: '/p/[identifiant]',
+    nature: 'sans-session',
+    motif:
+      'AIGUILLAGE, pas une destination : elle redirige en 308 avant le premier ' +
+      'octet de contenu, et ne s’affiche qu’en cas de refus. Celui qui arrive ' +
+      'ici vient de SCANNER une étiquette, livre en main, sans session et ' +
+      'parfois sans JavaScript — une coque de lecteur l’inviterait à partir ' +
+      'ailleurs au lieu de l’amener à sa notice. Même motif que ' +
+      '`/opac/resoudre/[identifiant]`, dont elle partage la résolution.',
+  },
+  {
     route: '/affiche/[id]',
     nature: 'impression',
     motif:
@@ -202,7 +213,11 @@ describe('⭐⭐ la coque de l’espace lecteur — couverte, ou déclarée avec
      * écrit sans mesure est « une impression bien habillée », et il survit à la
      * vérification que personne ne fera. Le test l'a refusé tout de suite.
      */
-    expect(routes().length).toBe(21);
+    // ⚠ 22 le 2 novembre 2026 : `/p/[identifiant]`, l'adresse que les
+    // étiquettes impriment. Le compte a convoqué, et la question était la
+    // bonne — cette page doit-elle porter la coque du lecteur ? Non : c'est un
+    // aiguillage, et celui qui y arrive tient un livre, pas une session.
+    expect(routes().length).toBe(22);
     /*
      * ⚠ SIX, ET NON HUIT : `/mentions-legales` et `/confidentialite` ont quitté
      * cette liste le 15 octobre 2026 — elles portent désormais la coque commune.
@@ -216,6 +231,12 @@ describe('⭐⭐ la coque de l’espace lecteur — couverte, ou déclarée avec
       '/e/[slug]',
       '/inscription',
       '/login',
+      /*
+       * ⚠ SEPTIÈME le 2 novembre 2026 : `/p/[identifiant]`, l'adresse que les
+       * étiquettes impriment. AIGUILLAGE, et celui qui y arrive tient un livre
+       * — pas une session.
+       */
+      '/p/[identifiant]',
     ]);
   });
 });

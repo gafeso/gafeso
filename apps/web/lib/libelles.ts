@@ -22,6 +22,8 @@
 // place ses mots autrement (« Bild 2 von 3 ») n'a rien à recomposer, elle
 // réécrit la fonction.
 
+import { formaterDecimal } from './chiffres';
+
 export const LIBELLES = {
   /**
    * ⚠ LES TITRES D'ONGLET SONT DES TEXTES VISIBLES. Ils s'affichent dans
@@ -809,8 +811,49 @@ export const LIBELLES = {
      * encoderait celle-là — et seul le texte en clair le révèle.
      */
     aide: 'Scannez ce code pour ouvrir cette page sur un téléphone.',
-    /** Le libellé de l'adresse affichée sous le code. */
-    adresse: 'Adresse de cette page',
+    /**
+     * ⭐⭐ LA LÉGENDE DE L'ADRESSE — et il y en a DEUX, parce que le code
+     * n'encode pas toujours la même chose.
+     *
+     * 🔴 Une seule existait, `'Adresse de cette page'`, et elle était FAUSSE
+     * dès que l'API sert `publicUrl` : l'adresse de cette page est
+     * `/opac/<uuid>`, alors que le code porte le RÉSOLVEUR pérenne
+     * `/opac/resoudre/oai:<école>:<uuid>`. Trouvé par Jean au navigateur sur
+     * l'instance de démonstration, le 2 novembre 2026.
+     *
+     * ⚠ **Une légende qui décrit autre chose que ce qu'elle légende est un faux
+     * silencieux** : rien ne la démentit, puisque l'adresse est juste à côté et
+     * qu'elle a l'air d'être celle qu'on lit dans la barre.
+     *
+     * ⭐ Et la correction n'est PAS de figer « adresse pérenne » : le bloc
+     * RETOMBE sur la forme courte quand l'instance n'a pas configuré `APP_URL`.
+     * Une légende figée serait alors fausse dans l'autre sens. Elle est donc
+     * DÉRIVÉE de l'adresse réellement encodée — ce qui rend la divergence
+     * structurellement impossible, au lieu d'être une convention à tenir.
+     *
+     * ## 🔴 ET UN SECOND DÉFAUT, trouvé en MESURANT la correction du premier
+     *
+     * Ces textes étaient un INTITULÉ — « Adresse de cette page », en petites
+     * capitales, suivi de l'adresse. **L'adresse a été retirée du bloc le
+     * 12 octobre 2026** (l'`aria-label` du QR la porte désormais) et
+     * l'intitulé lui a SURVÉCU : un titre qui titre une valeur absente.
+     *
+     * ⚠ C'est « qu'est-ce qui reste écrit sans plus être vrai ? » dans sa forme
+     * la plus économique — personne ne relit un titre, et celui-ci était
+     * devenu faux DEUX fois : sur ce qu'il nommait, et sur le fait qu'il
+     * nommait quelque chose.
+     *
+     * ⭐ Ils sont donc des PHRASES sur le code, pas des titres d'une valeur :
+     * une phrase se lit seule, et elle ne promet rien en dessous. On ne
+     * réaffiche PAS l'adresse — ce serait défaire la décision du 12 octobre.
+     */
+    adressePerenne:
+      'Ce code mène à l’adresse pérenne du document : elle survit à un ' +
+      'changement de domaine ou d’hébergeur.',
+    /** ⚠ Le repli : sans `APP_URL`, le code porte l'adresse de CETTE page. */
+    adresseDeCettePage:
+      'Ce code mène à l’adresse de cette page, faute d’adresse pérenne ' +
+      'configurée sur cette instance.',
     imprimer: 'Imprimer l’affiche',
     /** ⚠ Le lien d'affiche s'ouvre dans un onglet : on le DIT. */
     imprimerAide: 'Ouvre une affiche A4 prête à imprimer, dans un nouvel onglet.',
@@ -911,11 +954,23 @@ export const LIBELLES = {
      * et l'adresse serait inatteignable.
      */
     qrEtiquette: (adresse: string) => `Code QR vers ${adresse}`,
-    adresseNonCanonique:
-      'Cette adresse vient de CE navigateur, pas de votre établissement : le ' +
-      'catalogue ne la fournit pas encore pour les étiquettes. Une étiquette se ' +
-      'colle dans un livre et ne se reprend pas — vérifiez-la avant d’imprimer ' +
-      'une planche entière.',
+    /**
+     * ⭐⭐ CE QU'ON DIT QUAND IL N'Y A PAS D'ADRESSE PÉRENNE À ENCODER.
+     *
+     * Décision de Jean, 2 novembre 2026 : un support DURABLE porte la forme
+     * pérenne. Il n'y a donc pas de second meilleur choix — l'écran n'imprime
+     * PAS un QR périssable, il dit pourquoi il n'en imprime aucun.
+     *
+     * ⚠ Et le texte nomme la SORTIE : imprimer la planche sans QR reste utile
+     * (la cote et le code-barres suffisent à ranger et à prêter). Un refus qui
+     * ne dit pas ce qui marche encore se lit comme une panne.
+     */
+    qrSansAdressePerenne:
+      'Aucun QR sur cette planche : le catalogue ne fournit pas encore ' +
+      'd’adresse pérenne pour ces notices. Une étiquette se colle dans un livre ' +
+      'et ne se reprend pas — une adresse courte survivrait mal à un changement ' +
+      'de domaine. La planche reste imprimable : la cote et le code-barres ' +
+      'suffisent à ranger et à prêter.',
     /**
      * ⚠ LES DEUX AUTRES PORTÉES NE SONT CONNUES QUE DU SERVEUR. « Par
      * localisation » et « nouveautés » désignent un ensemble que le front ne
@@ -945,6 +1000,32 @@ export const LIBELLES = {
      * pas savoir si c'est un défaut ou une décision.
      */
     qrAbandonne: 'QR omis : le code-barres garde la largeur',
+    /**
+     * ⚠ LE MOTIF IMPRIMÉ SUR L'ÉTIQUETTE quand aucune adresse pérenne n'est
+     * servie — COURT, parce qu'il s'imprime dans 13 mm. L'explication longue
+     * vit dans `qrSansAdressePerenne`, qui s'adresse à la personne devant
+     * l'écran.
+     *
+     * 🔴 Ma première écriture imprimait la phrase longue SUR l'étiquette. Le
+     * sélecteur du test est devenu ambigu — deux éléments portaient le même
+     * texte — et c'est ce qui l'a désigné : « ce qui est ambigu pour
+     * `getByRole` est ambigu pour une personne qui n'a pas l'écran », et ici
+     * c'était surtout absurde sur un carré de treize millimètres.
+     */
+    qrSansAdresse: 'QR omis : pas d’adresse pérenne',
+    /**
+     * ⚠⚠ LE SECOND MOTIF D'ABANDON, et il ne se confond pas avec le premier.
+     * Celui du dessus dit « le code-barres garde la largeur » — une question de
+     * PLACE. Celui-ci dit que le QR serait imprimé trop fin pour que
+     * l'imprimante le rende : une question de GRANDEUR. Les deux textes
+     * existent séparément parce qu'ils appellent deux gestes différents —
+     * réduire le nombre de colonnes pour le premier, raccourcir l'adresse de
+     * l'école pour le second.
+     */
+    qrTropFin: (mm: number) =>
+      `QR omis : ${formaterDecimal(mm, 3)} mm par module, sous le ` +
+      `minimum imprimable de 0,25 mm. L’adresse de cette école est trop longue ` +
+      `pour une étiquette de 13 mm.`,
     /** ⚠ Dit à quoi se règle le nombre de colonnes, puisqu'il DÉCIDE du QR. */
     colonnesEtQr: (colonnes: number) =>
       `Planche à ${colonnes} colonnes. Au-delà de trois, le QR peut être omis ` +

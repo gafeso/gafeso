@@ -105,4 +105,5 @@ refuser la route par l’API.
 | `/opac/auteurs` | tout le monde | l’index des auteurs |
 | `/opac/auteurs/[id]` | tout le monde | la fiche d’un auteur et ses documents |
 | `/opac/resoudre/[identifiant]` | qui vient de scanner un QR, et les moissonneurs OAI | résout l’identifiant pérenne `oai:<école>:<uuid>` et redirige en 308 vers la notice ; 404 explicite si le code n’est pas d’ici, et une page qui DIT « on n’a pas pu vérifier » quand le catalogue ne répond pas — un 404 servi sur une panne serait archivé par les moteurs, et l’étiquette reste collée dans le livre |
+| `/p/[identifiant]` | qui vient de scanner une ÉTIQUETTE collée dans un livre | la même résolution que `/opac/resoudre/<identifiant>`, à l’adresse que les étiquettes impriment depuis le 2 novembre 2026 ; 308 vers la notice, 404 explicite si le code n’est pas d’ici, et « on n’a pas pu vérifier » quand le catalogue ne répond pas — un 404 servi sur une étiquette collée dans un livre serait archivé par les moteurs |
 | `/profil` | tout compte | mon compte : informations, mot de passe, double authentification |

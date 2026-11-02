@@ -81,6 +81,16 @@ const PAGES_PUBLIQUES: Record<string, { nature: Nature; motif: string }> = {
       'l’affiche A4 imprimable exige « sans menu ni pied » — c’est la raison ' +
       'pour laquelle elle vit à la racine plutôt que sous `/opac`.',
   },
+  'p': {
+    nature: 'coque-propre',
+    motif:
+      '`/p/<identifiant>` est un AIGUILLAGE, pas une destination : elle ' +
+      'redirige en 308 avant le premier octet de contenu, et ne s’affiche ' +
+      'qu’en cas de refus. Lui donner la coque commune la ferait passer pour ' +
+      'une page où l’on arrive. Elle vit à la racine parce que chaque ' +
+      'caractère de chemin coûte DOUBLE dans le QR d’une étiquette — le slug ' +
+      'de l’école y apparaît deux fois.',
+  },
 };
 
 const coque = (segment: string) => {

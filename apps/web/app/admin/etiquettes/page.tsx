@@ -10,7 +10,7 @@ import { ID_CONTENU } from '@/components/lien-evitement';
 import { api, ApiError } from '@/lib/api';
 import { LIBELLES } from '@/lib/libelles';
 import { useMyFunctions } from '@/lib/functions';
-import { adresseCourteDuQr, adresseCourteEstServie } from '@/lib/url-publique';
+import { adresseCourtePerenne } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -54,22 +54,30 @@ interface NoticeAvecExemplaires {
   title: string;
   items: Exemplaire[];
   /**
-   * ⚠⚠ L'ADRESSE COURTE — `shortUrl`, PAS `publicUrl`. Décision du 11 octobre
-   * 2026 : l'étiquette porte la forme COURTE (`/opac/<id>`), l'affiche et le
-   * bloc « Partager » portent la forme PÉRENNE. Motif mesuré dans
-   * `adresseCourteDuQr` : le QR d'étiquette est un carré FIXE de 13 mm, et
-   * chaque caractère d'adresse rétrécit ses modules.
+   * ⚠⚠ L'ADRESSE PÉRENNE — et elle NE VIENT PAS de cette route.
    *
-   * 🔴 ET CE CHAMP N'EST PAS ENCORE SERVI. Mesuré par le chemin normal :
-   * `GET /cataloging/records/:id` ne porte AUCUN des trois champs d'adressage.
-   * Le champ précédent — `publicUrl?: string | null` — était déclaré ici sans
-   * que la réponse l'ait jamais porté : le repli s'appliquait donc TOUJOURS, en
-   * silence, sur des QR qu'on colle dans des livres.
+   * Mesuré le 2 novembre 2026, par le chemin normal :
+   * `GET /cataloging/records/:id` ne sert **aucune** clé d'adressage (35 clés,
+   * et la seule en `*Url` est `coverUrl`). C'est `GET /opac/records/:id` qui
+   * porte les trois — `identifiantPerenne`, `publicUrl`, `shortUrl` — et il les
+   * sert même à un appelant ANONYME.
    *
-   * ⚠ C'est pourquoi l'écran DIT l'adresse qu'il encode, et avertit quand elle
-   * vient du navigateur. Demandé au backend pour rc12 (`docs/passation.md`).
+   * ⭐ On la demande donc à la route qui la POSSÈDE, au lieu de la recomposer
+   * depuis l'hôte du navigateur. Recomposer `oai:<slug>:<uuid>` côté client
+   * serait une seconde implémentation d'une valeur que le backend publie déjà à
+   * des moissonneurs extérieurs — et celle-ci se COLLE DANS DES LIVRES.
+   *
+   * ⚠ Le coût est une requête de plus par notice, en parallèle. Le remède
+   * propre est que `/cataloging/records/:id` serve `publicUrl` comme l'OPAC :
+   * demandé en passation.
    */
-  shortUrl?: string | null;
+  /**
+   * ⚠ L'adresse COMPOSÉE — `<origine canonique>/p/<identifiant>`, deux-points
+   * bruts. Elle est calculée au chargement depuis les deux parties que
+   * `/opac/records/:id` sert, et jamais depuis l'origine du navigateur. Voir
+   * `adresseCourtePerenne` pour ce qui vient d'où.
+   */
+  adresseQr?: string | null;
 }
 
 export default function AperçuEtiquettesPage() {
@@ -100,11 +108,26 @@ export default function AperçuEtiquettesPage() {
        * une planche de vingt-quatre étiquettes ferait vingt-quatre
        * aller-retours en file, et c'est l'attente qui ferait abandonner.
        */
-      const [recs, tenant] = await Promise.all([
+      const [recs, adresses, tenant] = await Promise.all([
         Promise.all(ids.map((id) => api<NoticeAvecExemplaires>(`/cataloging/records/${id}`))),
+        /*
+         * ⚠ L'ADRESSE PÉRENNE VIENT DE L'OPAC, et son échec n'est PAS fatal :
+         * une notice dont l'adresse manque perd son QR et le DIT. Faire tomber
+         * la planche entière priverait la bibliothécaire de la cote et du
+         * code-barres, qui suffisent à ranger et à prêter.
+         */
+        Promise.all(
+          ids.map((id) =>
+            api<{ publicUrl?: string | null; identifiantPerenne?: string | null }>(
+              `/opac/records/${id}`,
+            )
+              .then((r) => adresseCourtePerenne(r.publicUrl, r.identifiantPerenne))
+              .catch(() => null),
+          ),
+        ),
         api<{ name: string }>('/tenancy/current'),
       ]);
-      setNotices(recs);
+      setNotices(recs.map((r, i) => ({ ...r, adresseQr: adresses[i] })));
       setEtablissement(tenant.name);
     } catch (e) {
       setErreur(e instanceof ApiError ? e.message : String(e));
@@ -194,18 +217,32 @@ export default function AperçuEtiquettesPage() {
             planche. Il s'adresse à la personne qui décide d'imprimer, pas au
             livre.
           */}
-          <p className="mt-3 break-all font-mono text-xs text-muted print:hidden">
-            {T.adresseDuQr}{' '}
-            {adresseCourteDuQr(etiquettes[0].notice.id, etiquettes[0].notice.shortUrl ?? null)}
-          </p>
-          {!etiquettes.every(({ notice }) => adresseCourteEstServie(notice.shortUrl)) && (
-            <p
-              role="status"
-              className="mt-1 max-w-prose rounded border border-ocre/40 bg-ocre/5 p-2 text-xs text-ocre print:hidden"
-            >
-              {T.adresseNonCanonique}
-            </p>
-          )}
+          {(() => {
+            /*
+             * ⭐ L'ADRESSE QUE LES QR ENCODENT, DITE EN CLAIR — et le refus dit
+             * quand il n'y en a pas. `print:hidden` : ce bloc s'adresse à la
+             * personne qui décide d'imprimer, pas au livre.
+             */
+            const perenne = etiquettes[0].notice.adresseQr ?? null;
+            const toutesServies = etiquettes.every(({ notice }) => Boolean(notice.adresseQr));
+            return (
+              <>
+                {perenne && (
+                  <p className="mt-3 break-all font-mono text-xs text-muted print:hidden">
+                    {T.adresseDuQr} {perenne}
+                  </p>
+                )}
+                {!toutesServies && (
+                  <p
+                    role="status"
+                    className="mt-1 max-w-prose rounded border border-ocre/40 bg-ocre/5 p-2 text-xs text-ocre print:hidden"
+                  >
+                    {T.qrSansAdressePerenne}
+                  </p>
+                )}
+              </>
+            );
+          })()}
           {/* ⚠ La planche est en MILLIMÈTRES, pas en colonnes CSS : une grille
               dont la largeur dépend de la fenêtre ferait varier la largeur de
               module, donc la décision d'abandon du QR, avec la taille du
@@ -221,7 +258,7 @@ export default function AperçuEtiquettesPage() {
                   cote={item.callNumber}
                   titre={notice.title}
                   etablissement={etablissement}
-                  urlNotice={adresseCourteDuQr(notice.id, notice.shortUrl ?? null)}
+                  urlNotice={notice.adresseQr ?? null}
                   colonnes={colonnes}
                 />
               </div>

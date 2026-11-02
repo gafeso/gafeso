@@ -273,6 +273,61 @@ if [ -n "${STOKEN:-}" ] && [ -n "${RID:-}" ]; then
   else
     ko "enregistrement d'appareil impossible"
   fi
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 🔴 LA LECTURE EN LIGNE SE PROUVE EN CROISANT L'ORIGINE, JAMAIS PAR UN 200
+  #
+  # *Ajouté le 22 octobre 2026, après la bascule de la démonstration sur
+  # Garage, et c'est un 200 qui nous a trompés — Jean comme moi.*
+  #
+  # Le journal de Caddy montrait `"status":200` sur `/digital-copies/*` :
+  # signature valide, objet présent, octets partis. Et le lecteur affichait
+  # une erreur. La cause était l'ABSENCE de `Access-Control-Allow-Origin` —
+  # MinIO en posait un par défaut, Garage non. Le navigateur recevait le PDF
+  # en entier et le JETAIT.
+  #
+  # ⚠ UN CONTRÔLE QUI REGARDE LE CODE DE RETOUR AURAIT DONC DÉCLARÉ LA
+  # LECTURE BONNE. C'est un faux dispositif : il s'exécute, il mesure une
+  # grandeur réelle, et il ne mesure pas celle qui décide qu'un étudiant
+  # peut lire. « Le chronomètre ne sait pas ce qu'il chronomètre. »
+  #
+  # Ce contrôle se met donc à la place du NAVIGATEUR : il envoie l'en-tête
+  # `Origin` de la page qui lit, et il exige que la réponse l'autorise.
+  # ══════════════════════════════════════════════════════════════════════
+  # L'origine de l'APPLICATION, dérivée de la cible (BASE se termine par /api).
+  ORIGINE="${BASE%/api}"
+  RURL=$(curl -s -H "Authorization: Bearer $STOKEN" "$BASE/opac/records/$RID/read" | jqv url)
+  if [ -z "$RURL" ]; then
+    ko "aucune URL de lecture rendue pour la notice $RID"
+  else
+    # ⚠ On relève le CODE et l'EN-TÊTE dans le MÊME appel : deux appels
+    # séparés mesureraient deux URL signées différentes, et l'une pourrait
+    # expirer entre les deux.
+    ENT=$(curl -s -D- -o /dev/null -H "Origin: $ORIGINE" "$RURL" 2>/dev/null)
+    LCODE=$(printf '%s' "$ENT" | awk 'NR==1{print $2}')
+    LACAO=$(printf '%s' "$ENT" | grep -i '^access-control-allow-origin:' \
+      | head -1 | cut -d: -f2- | tr -d ' \r')
+
+    if [ "$LCODE" != "200" ]; then
+      # Ici le 200 manque VRAIMENT : objet absent, signature refusée, ou
+      # stockage injoignable. Rien à voir avec CORS.
+      ko "l'URL signée ne sert pas le document (HTTP $LCODE) — objet absent, signature refusée, ou stockage injoignable"
+    elif [ -z "$LACAO" ]; then
+      # 🔴 LE CAS QUI NOUS A EUS. Les octets partent, le navigateur jette.
+      ko "LECTURE CASSÉE DANS LE NAVIGATEUR alors que le stockage répond 200 :
+      l'en-tête Access-Control-Allow-Origin MANQUE sur l'URL signée.
+      Les octets partent et le navigateur les JETTE — un contrôle qui ne
+      regarderait que le code de retour aurait déclaré la lecture bonne.
+      ➜ Ajoutez l'en-tête sur le chemin /digital-copies/* du reverse proxy
+        (voir docker/Caddyfile, bloc STORAGE_DOMAIN). MinIO en posait un par
+        défaut, Garage non : la bascule retire un en-tête que personne
+        n'avait eu à écrire."
+    elif [ "$LACAO" != "$ORIGINE" ] && [ "$LACAO" != "*" ]; then
+      ko "Access-Control-Allow-Origin vaut « $LACAO » et n'autorise PAS « $ORIGINE » — le navigateur jettera quand même le document"
+    else
+      ok "lecture en ligne servie ET autorisée au navigateur (HTTP 200, Access-Control-Allow-Origin: $LACAO)"
+    fi
+  fi
 else
   ko "prérequis manquants (jeton étudiant ou notice)"
 fi

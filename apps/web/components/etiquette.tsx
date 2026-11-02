@@ -9,6 +9,7 @@ import {
   traceDesBarres,
 } from '@/lib/code128';
 import { LIBELLES } from '@/lib/libelles';
+import { matriceQr, moduleQrMm, qrAssezGros } from '@/lib/qr';
 
 const T = LIBELLES.etiquettes;
 
@@ -32,8 +33,15 @@ export function Etiquette({
   cote: string | null;
   titre: string;
   etablissement: string;
-  /** L'adresse publique de la notice — ce que le QR encode. */
-  urlNotice: string;
+  /**
+   * L'adresse PÉRENNE de la notice — ce que le QR encode.
+   *
+   * ⚠ `null` quand le catalogue n'en sert pas : on n'imprime alors AUCUN QR.
+   * Décision de Jean du 2 novembre 2026 — un support durable porte la forme
+   * pérenne, et un repli sur la forme courte collerait dans un livre une
+   * adresse qui meurt avec le domaine.
+   */
+  urlNotice: string | null;
   /** Les colonnes de la planche : elles décident de la largeur, donc du QR. */
   colonnes?: number;
 }) {
@@ -55,8 +63,25 @@ export function Etiquette({
    * QR encode l'adresse de la notice, qui n'a rien à voir avec le code-barres.
    * Un test l'a dit : zéro SVG là où il en fallait un.
    */
-  const avecQr = barres === null || qrTient(barres.motif.length, p);
   const largeurMm = largeurEtiquetteMm(p);
+  /*
+   * ⭐⭐ TROIS RAISONS D'ABANDONNER LE QR, et chacune se DIT séparément.
+   *
+   * | | Ce qui manque | Le geste que ça appelle |
+   * |---|---|---|
+   * | pas d'adresse pérenne | la donnée | que le catalogue la serve |
+   * | le code-barres perdrait sa largeur | la PLACE | moins de colonnes |
+   * | le module passerait sous 0,25 mm | la GRANDEUR | un slug d'école plus court |
+   *
+   * ⚠ Les fondre en un seul « QR omis » laisserait la bibliothécaire sans
+   * aucun geste à faire : c'est la dégradation silencieuse que le backend a
+   * nommée, déplacée du QR vers son MOTIF.
+   */
+  const matrice = urlNotice === null ? null : matriceQr(urlNotice);
+  const placeOk = barres === null || qrTient(barres.motif.length, p);
+  const grandeurOk = matrice === null ? false : qrAssezGros(matrice.taille);
+  const avecQr = matrice !== null && placeOk && grandeurOk;
+  const moduleMm = matrice === null ? null : moduleQrMm(matrice.taille);
 
   return (
     <div
@@ -67,7 +92,7 @@ export function Etiquette({
         /* La cote du QR est en MILLIMÈTRES, comme dans le PDF : c'est la seule
            façon que la décision d'abandon ait le même sens aux deux endroits. */
         <QrCode
-          valeur={urlNotice}
+          valeur={urlNotice as string}
           taille={QR_COTE_MM * 3.78}
           className="shrink-0 self-start"
         />
@@ -119,7 +144,11 @@ export function Etiquette({
                 `X-Gafeso-Qr-Abandonnes` pour la même raison. */}
             {!avecQr && (
               <p className="mt-0.5 text-center text-[6px] leading-none">
-                {T.qrAbandonne}
+                {matrice === null
+                  ? T.qrSansAdresse
+                  : !grandeurOk && moduleMm !== null
+                    ? T.qrTropFin(moduleMm)
+                    : T.qrAbandonne}
               </p>
             )}
           </div>

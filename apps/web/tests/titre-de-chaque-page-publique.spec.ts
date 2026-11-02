@@ -120,6 +120,21 @@ const TITRE_PROPRE = [
    */
   '/opac/resoudre/[identifiant]',
   /*
+   * ⚠ `/p/[identifiant]`, 2 novembre 2026 — MÊME motif, et c'est la même
+   * fonction qui les sert : un objet de métadonnées VIDE, délibérément.
+   *
+   * ⭐ C'est l'adresse que les ÉTIQUETTES impriment désormais. Elle est dans
+   * les préfixes publics du middleware depuis le même jour, et vérifiée par un
+   * appel SANS COOKIE — 308 pour les quatre écritures possibles. Sans ça, un
+   * lecteur qui scanne une étiquette, livre en main, tombait sur /login.
+   *
+   * ⚠ Et ce garde ne pouvait pas l'attraper tout seul : sa population DÉRIVE
+   * des listes publiques du middleware. Une page qui devrait y être et n'y est
+   * pas lui est invisible — c'est la leçon du 9 octobre, et c'est pourquoi la
+   * déclaration publique se fait AVANT, pas après.
+   */
+  '/p/[identifiant]',
+  /*
    * ⚠ L'ASSISTANT D'INSTALLATION, 8 octobre 2026 — et il est ici pour un motif
    * qui lui est propre : son titre ne nomme AUCUNE école, parce que sur une
    * instance neuve il n'en existe pas encore. Hériter du gabarit racine ferait

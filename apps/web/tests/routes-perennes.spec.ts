@@ -57,7 +57,15 @@ const PERENNES = [
     porte:
       'l’identifiant pérenne `oai:<école>:<uuid>`, publié depuis P4-3 dans les ' +
       'en-têtes OAI et `dc:identifier` — des moissonneurs extérieurs l’ont ' +
-      'peut-être stocké',
+      'peut-être stocké, et les QR émis avant le 2 novembre 2026',
+  },
+  {
+    route: '/p/[identifiant]',
+    fichier: 'app/p/[identifiant]/page.tsx',
+    porte:
+      'l’adresse pérenne COURTE, celle que les ÉTIQUETTES impriment depuis le ' +
+      '2 novembre 2026 — douze caractères de chemin en moins, ce qui vaut SIX ' +
+      'caractères de slug dans un QR de 13 mm',
   },
 ] as const;
 
@@ -125,14 +133,28 @@ describe('⭐⭐ les adresses IMPRIMÉES restent valides POUR TOUJOURS', () => {
     ).toBe(false);
   });
 
-  it('⚠ témoin de COMPTE : deux routes pérennes, et pas une de moins', () => {
-    // Une entrée ne se RETIRE jamais : si ce compte baisse, quelqu'un a décidé
-    // qu'une adresse imprimée pouvait cesser de répondre.
+  it('⚠ témoin de COMPTE : TROIS routes pérennes, et pas une de moins', () => {
+    /*
+     * Une entrée ne se RETIRE jamais : si ce compte baisse, quelqu'un a décidé
+     * qu'une adresse imprimée pouvait cesser de répondre.
+     *
+     * ⭐ Il est passé de DEUX à TROIS le 2 novembre 2026, et c'est le bon sens
+     * de variation : `/p/<identifiant>` a été AJOUTÉE parce que l'adresse
+     * pérenne était trop longue pour un QR de 13 mm — douze caractères de
+     * chemin valent six caractères de slug. **On n'a rien retiré** :
+     * `/opac/resoudre/…` reste servie, par le même code partagé.
+     *
+     * ⚠ Ce témoin m'a convoqué au moment où j'ajoutais la route, et c'est
+     * exactement ce qu'on lui demande : « un compte exact ne dit pas que le
+     * code est juste, il oblige à revenir le regarder ».
+     */
     expect(
       PERENNES.length,
       'une route pérenne a été RETIRÉE de la liste — c’est précisément ce que ' +
-        'ce fichier existe pour empêcher',
-    ).toBe(2);
+        'ce fichier existe pour empêcher. Si vous en AJOUTEZ une, montez ce ' +
+        'compte et écrivez pourquoi : une adresse pérenne de plus est une ' +
+        'promesse de plus, tenue indéfiniment.',
+    ).toBe(3);
     for (const p of PERENNES) {
       expect(p.porte.length, `${p.route} n’a pas de motif écrit`).toBeGreaterThan(40);
     }

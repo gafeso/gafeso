@@ -46,6 +46,25 @@ const HORS_BARRE: Record<string, { pour: string; quoi: string }> = {
    * dans un livre, ou depuis un moissonneur OAI. Une entrée de menu n'aurait
    * aucun sens — personne ne tape un identifiant pérenne à la main.
    */
+  /*
+   * ⚠ `/p/[identifiant]`, 2 novembre 2026 — la MÊME résolution, à une adresse
+   * plus COURTE, parce que le QR d'une étiquette est un carré fixe de 13 mm et
+   * que le slug de l'école apparaît DEUX fois dans l'adresse pérenne. Douze
+   * caractères de chemin économisés valent six caractères de slug tenables.
+   *
+   * ⭐ Les DEUX restent servies pour toujours : on n'enlève jamais une adresse
+   * pérenne, on en ajoute une plus courte. La résolution est partagée, pas
+   * recopiée.
+   */
+  '/p/[identifiant]': {
+    pour: 'qui vient de scanner une ÉTIQUETTE collée dans un livre',
+    quoi:
+      'la même résolution que `/opac/resoudre/<identifiant>`, à l’adresse que ' +
+      'les étiquettes impriment depuis le 2 novembre 2026 ; 308 vers la notice, ' +
+      '404 explicite si le code n’est pas d’ici, et « on n’a pas pu vérifier » ' +
+      'quand le catalogue ne répond pas — un 404 servi sur une étiquette collée ' +
+      'dans un livre serait archivé par les moteurs',
+  },
   '/opac/resoudre/[identifiant]': {
     pour: 'qui vient de scanner un QR, et les moissonneurs OAI',
     quoi: 'résout l’identifiant pérenne `oai:<école>:<uuid>` et redirige en 308 vers la notice ; 404 explicite si le code n’est pas d’ici, et une page qui DIT « on n’a pas pu vérifier » quand le catalogue ne répond pas — un 404 servi sur une panne serait archivé par les moteurs, et l’étiquette reste collée dans le livre',
@@ -249,7 +268,11 @@ describe('la carte des écrans', () => {
     // ⚠ 54 le 8 octobre 2026 : les deux pages légales publiques et leur écran
     // de rédaction. Le compte a convoqué trois fois de suite aujourd'hui, et
     // chaque fois la question était la bonne — cet écran a-t-il une porte ?
-    expect(ecransSurLeDisque().length).toBe(57);
+    // ⚠ 58 le 2 novembre 2026 : `/p/[identifiant]`. Le compte a convoqué, et la
+    // question était la bonne — cet écran a-t-il une porte ? Oui, et ce n'est
+    // pas un lien : c'est un QR CODE COLLÉ DANS UN LIVRE. C'est la seule porte
+    // du produit qu'on ne peut pas corriger après coup.
+    expect(ecransSurLeDisque().length).toBe(58);
   });
 
   it('le document sur disque est à jour', () => {

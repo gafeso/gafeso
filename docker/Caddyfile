@@ -132,8 +132,80 @@
 	# Un seul `reverse_proxy` pour les deux ne peut donc pas exister.
 	@signe path /digital-copies/*
 	handle @signe {
-		reverse_proxy garage:3900 {
-			header_up Host garage:3900
+		# 🔴 CORS — SANS CET EN-TÊTE, AUCUN NAVIGATEUR N'ACCEPTE LE DOCUMENT.
+		#
+		# Mesuré sur la démonstration les 22 octobre et 2 novembre 2026 : le
+		# journal de Caddy montre `"status":200` sur `/digital-copies/*`. Garage
+		# SERT le document — signature valide, objet présent, octets partis — et
+		# le navigateur le JETTE :
+		#   « blocked by CORS policy: No 'Access-Control-Allow-Origin' header »
+		#
+		# ⚠ MinIO posait cet en-tête DE LUI-MÊME ; Garage non. Il n'a donc jamais
+		# figuré dans aucun commit — il était fourni par la dépendance. Aucune
+		# relecture ne pouvait voir cette suppression, puisque rien n'avait été
+		# supprimé. TOUTE installation neuve sur Garage sert, sans cet en-tête,
+		# des documents qu'aucun navigateur n'acceptera.
+		#
+		# ⚠ ET LE CODE DE RETOUR NE PEUT PAS LE DIRE. Le lecteur fait un `fetch()`
+		# SIMPLE (mesuré : `pdf-reader.tsx:188` — aucun en-tête personnalisé,
+		# aucun `credentials`, aucun `Range`), donc AUCUN prévol : la requête part,
+		# Garage répond 200, et c'est le NAVIGATEUR qui refuse de livrer la réponse
+		# au script. Vu du serveur, tout va bien — c'est ce qui a coûté douze jours.
+		#
+		# ═══ POURQUOI L'EN-TÊTE EST POSÉ ICI, PAR CADDY ═══
+		# Décidé par Jean le 2 novembre 2026 : PAS par une commande S3 passée à la
+		# main après l'installation. Une étape de provisionnement oubliable est
+		# exactement ce qui a coûté ces douze jours — elle n'existe pas ici.
+		#
+		# ═══ L'ORIGINE N'EST JAMAIS `*`, ET ELLE N'EST JAMAIS FIXE ═══
+		#
+		# ⚠ MA PREMIÈRE VERSION POSAIT `https://{$PUBLIC_DOMAIN}` EN DUR, et elle
+		# était FAUSSE pour le multi-établissement — mesuré : la table `domains`
+		# porte plusieurs hôtes par installation. Une école qui lit depuis SON
+		# domaine recevait un en-tête nommant un AUTRE hôte, donc le navigateur
+		# jetait le document quand même. Le correctif ne marchait que pour l'unique
+		# école dont le domaine égale PUBLIC_DOMAIN.
+		#
+		# L'origine est donc REPRISE DE LA REQUÊTE, et seulement si c'est un hôte
+		# de tenant connu. Origine inconnue → AUCUN en-tête (pas `*`, pas un repli).
+		# `*` autoriserait n'importe quel site à lire une URL signée interceptée
+		# pendant son TTL ; c'est précisément ce qu'on refuse.
+		#
+		# ⚠ CE QUE CADDY NE PEUT PAS FAIRE : lire la table `domains`. La liste des
+		# hôtes autorisés est donc DÉCLARATIVE — PUBLIC_DOMAIN et ses
+		# sous-domaines, qui est la forme recommandée pour le multi-établissement
+		# (voir docker-compose.prod.yml, service caddy). Une école sur un domaine
+		# ENTIÈREMENT distinct doit être ajoutée ici : elle a de toute façon déjà
+		# dû l'être pour son certificat.
+		@origine_tenant header Origin https://{$PUBLIC_DOMAIN}
+		@origine_sous_domaine header Origin *.{$PUBLIC_DOMAIN}
+
+		header @origine_tenant {
+			Access-Control-Allow-Origin "{http.request.header.Origin}"
+			Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+			Access-Control-Allow-Headers "Range"
+			Access-Control-Expose-Headers "Content-Length, Content-Range, Accept-Ranges"
+			# ⚠ OBLIGATOIRE dès lors que l'en-tête DÉPEND de la requête : sans lui,
+			# un cache servirait à une école l'en-tête calculé pour une autre.
+			Vary Origin
+		}
+		header @origine_sous_domaine {
+			Access-Control-Allow-Origin "{http.request.header.Origin}"
+			Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+			Access-Control-Allow-Headers "Range"
+			Access-Control-Expose-Headers "Content-Length, Content-Range, Accept-Ranges"
+			Vary Origin
+		}
+
+		@prevol method OPTIONS
+		handle @prevol {
+			respond 204
+		}
+
+		handle {
+			reverse_proxy garage:3900 {
+				header_up Host garage:3900
+			}
 		}
 	}
 

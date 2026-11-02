@@ -87,6 +87,23 @@ const PUBLIC_PREFIXES = [
    * 9 octobre 2026. Mesuré sans cookie, pas supposé.
    */
   '/affiche/',
+  /**
+   * ⚠⚠ `/p/<identifiant>` — L'ADRESSE QUE LES ÉTIQUETTES IMPRIMENT depuis le
+   * 2 novembre 2026, et c'est la plus irréversible du produit : elle est
+   * COLLÉE DANS DES LIVRES.
+   *
+   * Elle vit à la RACINE, hors du préfixe `/opac`, parce que chaque caractère
+   * de chemin coûte DOUBLE dans son QR — le slug de l'école y apparaît deux
+   * fois. Elle doit donc être déclarée ici, sans quoi elle rend **307 vers
+   * /login** : un lecteur qui scanne une étiquette, livre en main, tomberait
+   * sur un écran de connexion.
+   *
+   * ⚠ C'est exactement le défaut des pages légales du 9 octobre, sur une
+   * adresse qu'on ne peut PAS corriger après impression. Et le garde des pages
+   * publiques ne pouvait pas l'attraper : sa population DÉRIVE de cette liste,
+   * donc une page qui devrait y être et n'y est pas lui est invisible.
+   */
+  '/p/',
 ];
 
 /**

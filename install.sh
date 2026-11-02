@@ -239,7 +239,7 @@ wait_for_docker_daemon() {
 }
 
 check_prereqs() {
-  step "1/6 · Vérification des prérequis"
+  step "1/7 · Vérification des prérequis"
   command -v git >/dev/null 2>&1 || apt_offer git git
   command -v openssl >/dev/null 2>&1 || apt_offer openssl openssl
   command -v curl >/dev/null 2>&1 || apt_offer curl curl
@@ -468,7 +468,7 @@ load_config() {
 }
 
 collect_answers() {
-  step "2/6 · Configuration"
+  step "2/7 · Configuration"
 
   # Domaine ou localhost
   ask DOMAIN "Domaine principal (ou 'localhost' pour un essai local)" "${DOMAIN:-localhost}"
@@ -686,7 +686,7 @@ check_dns() {
 
 # ── Écriture de .env.prod ────────────────────────────────────────────────
 write_env() {
-  step "3/6 · Génération des secrets et de $ENV_FILE"
+  step "3/7 · Génération des secrets et de $ENV_FILE"
   if [ -f "$ENV_FILE" ] && [ "$FORCE" != 1 ]; then
     die "$ENV_FILE existe déjà. Une installation semble présente. Utilisez --force pour l'écraser (les DONNÉES en volumes ne sont pas touchées)."
   fi
@@ -807,7 +807,7 @@ EOF
 
 # ── Démarrage de la pile + attente des healthchecks ──────────────────────
 compose_up() {
-  step "4/6 · Construction et démarrage de la pile"
+  step "4/7 · Construction et démarrage de la pile"
   CLEANUP_HINT="Installation interrompue. Pour repartir de zéro : dc down -v puis rm -f $ENV_FILE."
   local build_flag=""
   [ "$DO_BUILD" = 1 ] && build_flag="--build"
@@ -838,8 +838,41 @@ compose_up() {
 }
 
 # ── Provisioning du premier établissement ────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# 🔴 L'INSTALLATION NE SE DÉCLARE PAS TERMINÉE SANS AVOIR LU UN DOCUMENT
+#
+# Décidé par Jean le 2 novembre 2026, et le motif est mesuré : la bascule du
+# 21 octobre a été déclarée réussie, et la démonstration n'a servi AUCUN
+# document pendant DOUZE JOURS — tous les contrôles étaient verts, parce que
+# `health`, `totalHits` et « copies numériques » interrogent tous LA BASE.
+#
+# ⚠ CE N'EST PAS UNE ÉTAPE À PENSER À LANCER. Elle est DANS `main()`, et son
+# échec arrête l'installateur : « une étape de provisionnement oubliable est
+# exactement ce qui nous a coûté douze jours ». C'est pour cela qu'elle n'est
+# pas une ligne de « À faire ensuite ».
+# ═══════════════════════════════════════════════════════════════════════
+autocontrole() {
+  step "6/7 · Lecture d'un document, de bout en bout"
+  # ⚠ Les chemins d'install.sh sont RELATIFS (il exige la racine du dépôt comme
+  # répertoire courant, voir main()). On passe EXPLICITEMENT le fichier
+  # d'environnement et le compose réellement utilisés : un `--config` ou un
+  # `ENV_FILE` personnalisé ne doit pas faire contrôler une AUTRE installation.
+  if GAFESO_ENV_FILE="$(cd "$(dirname "$ENV_FILE")" && pwd)/$(basename "$ENV_FILE")" \
+     GAFESO_COMPOSE="$(cd "$(dirname "$COMPOSE_FILE")" && pwd)/$(basename "$COMPOSE_FILE")" \
+     ./scripts/autocontrole-lecture.sh; then
+    ok "Un document déposé a été relu et accepté par un navigateur."
+  else
+    printf '\n'
+    die "L'installation n'est PAS terminée : aucun document ne peut être lu.
+  La cause exacte est nommée juste au-dessus. L'installation s'arrête ici
+  DÉLIBÉRÉMENT — une instance qui démarre sans pouvoir servir un document
+  sert un catalogue dont chaque fiche promet un fichier introuvable, et ce
+  défaut ne se voit pas avant qu'un lecteur essaie."
+  fi
+}
+
 provision() {
-  step "5/6 · Provisioning de « $SCHOOL_NAME »"
+  step "5/7 · Provisioning de « $SCHOOL_NAME »"
   local out
   out="$(dc exec -T \
     -e PROVISION_SLUG="$SCHOOL_SLUG" \
@@ -922,6 +955,7 @@ main() {
   check_dns         # dernier point de contrôle juste avant de lancer Caddy/ACME
   compose_up
   provision
+  autocontrole
   recap
 }
 

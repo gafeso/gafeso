@@ -1,4 +1,5 @@
 import { encode } from 'uqr';
+import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM } from './code128';
 
 /**
  * LE QR CODE, CALCULÉ LOCALEMENT — zéro requête.
@@ -41,6 +42,62 @@ import { encode } from 'uqr';
  * QUATRE modules soi-même.
  */
 export const SILENCE = 4;
+
+/* ──────── LA TAILLE D'UN MODULE IMPRIMÉ, et le seuil du produit ──────── */
+
+/**
+ * ⭐⭐ LA GRANDEUR QUI DÉCIDE QU'UN QR D'ÉTIQUETTE EST IMPRIMABLE — et elle ne
+ * se devine pas : elle se calcule.
+ *
+ * Le carré d'une étiquette est FIXE (`QR_COTE_MM`), zone de silence comprise.
+ * Plus l'adresse est longue, plus la version monte, plus il y a de modules dans
+ * le même carré — donc plus chaque module RÉTRÉCIT. Mesuré le 2 novembre 2026,
+ * sur une notice réelle, dans 13 mm :
+ *
+ * | L'adresse encodée | Car. | Version | Modules + silence | Module |
+ * |---|---|---|---|---|
+ * | `…/opac/<uuid>` — COURTE | 66 | 5 | 37 + 8 = 45 | **0,2889 mm** |
+ * | `…/opac/resoudre/oai:<slug>:<uuid>` | 85 | 6 | 41 + 8 = 49 | **0,2653 mm** |
+ * | la même, deux-points PERCENT-ENCODÉS | 89 | 6 | 41 + 8 = 49 | **0,2653 mm** |
+ *
+ * ⚠ ET LE SEUIL N'EST PAS INVENTÉ ICI. `LARGEUR_MODULE_MIN_MM = 0,25` est la
+ * largeur minimale que le produit se donne DÉJÀ pour un code imprimé, et elle
+ * est partagée avec le backend. L'appliquer au QR est la même règle, sur l'autre
+ * code de la même étiquette.
+ *
+ * ⚠ LA BORNE, ET ELLE EST RÉELLE : ce seuil dit qu'un module est IMPRIMABLE, pas
+ * qu'un téléphone le LIT. La lecture par un appareil demande une planche
+ * imprimée et des appareils — elle appartient à la recette, et aucun test de ce
+ * dépôt ne peut l'affirmer.
+ *
+ * ## 🔴 LE CAS QUI CASSE, et il est LÉGAL
+ *
+ * La borne structurelle : `13 / (taille + 8) ≥ 0,25` ⟺ `taille ≤ 44` ⟺
+ * **version ≤ 6**. La version 7 tombe à 0,2453 mm.
+ *
+ * Or le slug d'une école apparaît DEUX FOIS dans l'adresse pérenne — dans
+ * l'hôte ET dans l'identifiant. Mesuré par balayage :
+ *
+ * | L'écriture | Dernier slug qui tient | Casse à |
+ * |---|---|---|
+ * | deux-points bruts | **15 caractères** | 16 |
+ * | percent-encodée (`%3A`) | **13 caractères** | 14 |
+ *
+ * ⚠ Et `provision-tenant.dto.ts` autorise **2 à 49 caractères**. Une école au
+ * nom long est donc légale, et son étiquette n'est pas imprimable à 13 mm —
+ * c'est exactement ce que cette fonction existe pour ATTRAPER, au lieu de
+ * dessiner un QR trop fin pour l'imprimante.
+ */
+export const moduleQrMm = (modules: number, coteMm = QR_COTE_MM) =>
+  coteMm / (modules + 2 * SILENCE);
+
+/**
+ * ⚠ Le QR est-il assez GROS pour être imprimé ? C'est une question distincte de
+ * `qrTient`, qui demande s'il laisse la place au CODE-BARRES. Les deux doivent
+ * être vraies, et confondre les deux laisserait passer un cas chacune.
+ */
+export const qrAssezGros = (modules: number, coteMm = QR_COTE_MM) =>
+  moduleQrMm(modules, coteMm) >= LARGEUR_MODULE_MIN_MM;
 
 export interface Matrice {
   /** Le côté, en modules. Vaut toujours `4 × version + 17`. */

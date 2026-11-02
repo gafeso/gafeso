@@ -197,6 +197,12 @@ donc nommer l'option :
 docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --remove-orphans
 ```
 
+🔴 **PAS PENDANT UNE BASCULE DE STOCKAGE.** Depuis rc14, MinIO n'est plus décrit
+par le compose : il est lui aussi un ORPHELIN, et cette option le supprimerait —
+c'est-à-dire qu'elle supprimerait le retour arrière de la migration. Voir
+l'interdit en toutes lettres dans « LA BASCULE DE LA DÉMONSTRATION ». Cette
+commande vaut une fois la bascule TERMINÉE et CONTRÔLÉE.
+
 Le **volume** `<projet>_redis_data` n'est PAS supprimé par cette option, et c'est
 voulu : une suppression de données ne se fait pas en passant. Il peut être
 retiré à la main une fois le conteneur parti et l'absence vérifiée
@@ -469,6 +475,16 @@ la suivante.**
 ⚠ **Rien n'est supprimé par cette procédure.** Le volume MinIO reste intact du
 début à la fin : c'est lui, le retour arrière de l'étape ⑨.
 
+🔴 **JAMAIS `--remove-orphans`, DU DÉBUT À LA FIN DE CETTE PROCÉDURE.**
+Depuis rc14, MinIO n'est plus décrit par le compose : il EST un orphelin, au
+sens de Docker. L'option le SUPPRIMERAIT — donc elle supprimerait le seul
+retour arrière dont vous disposez, au moment précis où vous en avez besoin.
+
+⚠ **Et cette page la recommande ailleurs** (section « Retirer un service d'un
+fichier NE l'arrête pas », à propos du conteneur Redis retiré) : cette
+recommandation vaut UNE FOIS LA BASCULE TERMINÉE ET CONTRÔLÉE, jamais pendant.
+Un conseil juste dans un contexte est un piège dans l'autre.
+
 ⚠ **ET LES DONNÉES EXPORTÉES NE VONT PAS DANS LE DÉPÔT**, même dans un dossier
 ignoré — un dossier du dépôt est à portée de `git add -A`. Toutes les commandes
 ci-dessous écrivent dans `~/sauvegardes-gafeso/`, hors du dépôt.
@@ -633,6 +649,29 @@ docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --bu
 docker compose --env-file .env.prod -f docker/docker-compose.prod.yml logs garage-init
 ```
 
+🔴 **ET L'IMAGE `api`, QUI N'EST CONSTRUITE PAR AUCUNE AUTRE ÉTAPE.** Rencontré
+en vrai le 2 novembre 2026 : l'étape ⑥ lance le script de migration DANS
+l'image `api`, qui était restée en **rc13** — donc sans ce fichier :
+
+```
+Cannot find module '/app/scripts/migration-minio-vers-garage.mjs'
+```
+
+On la CONSTRUIT sans la DÉMARRER (`build`, pas `up`) : les écritures doivent
+rester arrêtées jusqu'à l'étape ⑧.
+
+```bash
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml build api
+docker compose --env-file .env.prod -f docker/docker-compose.prod.yml \
+  run --rm --no-deps --entrypoint sh api -c 'ls scripts/migration-minio-vers-garage.mjs'
+```
+
+**Attendu** : la seconde commande AFFICHE le chemin. Si elle dit
+« No such file », l'image n'a pas été reconstruite et l'étape ⑥ échouera avec
+le message ci-dessus.
+
+⛔ **POINT D'ARRÊT** : ne passez pas à ⑤ sans ce fichier.
+
 **Attendu**, quatre lignes dans l'ordre :
 ```
 layout : applique (zone dc1, … Go)
@@ -778,6 +817,28 @@ docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d --bu
 curl -sS https://$API_DOMAIN/health
 ```
 
+🔴 **ET CADDY DOIT RELIRE SON FICHIER — AUCUNE AUTRE ÉTAPE NE LE FAIT.**
+Mesuré le 2 novembre 2026, et les deux formes évidentes ÉCHOUENT :
+
+| La forme | Ce qu'elle fait |
+|---|---|
+| `compose up -d caddy` | répond **« Running »** SANS RIEN FAIRE — le Caddyfile est un VOLUME monté, donc invisible à compose, qui ne voit aucune raison de recréer le conteneur |
+| `caddy reload` | **échoue** — l'API d'administration est fermée |
+| ⭐ `docker restart` | **la seule qui applique** |
+
+```bash
+docker restart "$(docker ps --format '{{.Names}}' | grep -- -caddy-1$)"
+curl -sS -D- -o /dev/null "https://$STORAGE_DOMAIN/" | grep -i '^server:' || echo '(aucun en-tete Server)'
+```
+
+**Attendu** : **AUCUN `Server: MinIO`**. Cet en-tête est la signature de MinIO ;
+tant qu'il apparaît, Caddy route encore vers l'ancien stockage et tout ce que
+vous contrôlerez ensuite portera sur MinIO, pas sur Garage.
+
+⛔ **POINT D'ARRÊT** : si vous lisez `Server: MinIO`, le redémarrage n'a pas
+pris. Ne poursuivez pas : les contrôles suivants seraient justes et porteraient
+sur le mauvais stockage.
+
 **Attendu** : `{"status":"ok","version":"<l'étiquette que vous déployez>","commit":"…"}`.
 
 ⚠ **CETTE LIGNE PORTAIT `v1.0.0-rc14` EN DUR JUSQU'AU 22 OCTOBRE 2026, et
@@ -809,7 +870,24 @@ s'arrête en nommant le nombre. Un `docker compose ps` montrerait `api` en éche
 pas une API qui sert un catalogue dont chaque fiche promet un fichier
 introuvable.
 
-Les trois contrôles qui comptent, dans l'ordre :
+🔴 **PUIS L'AUTO-CONTRÔLE DE LECTURE — c'est LUI qui dit si la bascule a
+réussi.** Les trois contrôles manuels ci-dessous restent utiles, mais ce sont
+eux qui ont été verts pendant douze jours : ils interrogent la base, ou l'œil.
+
+```bash
+./scripts/autocontrole-lecture.sh
+```
+
+**Attendu** : « lecture de bout en bout » — un objet déposé, relu par l'URL
+PUBLIQUE en croisant l'origine comme un navigateur, d'empreinte identique,
+puis supprimé. Il sort en échec en NOMMANT la cause, et il distingue « les
+octets ne sont pas partis » de « les octets sont partis et le navigateur les
+jette ».
+
+⛔ **POINT D'ARRÊT** : s'il échoue, la bascule n'est pas réussie, quel que soit
+ce que montrent les contrôles suivants. Lisez la cause qu'il nomme.
+
+Les trois contrôles qui comptent ensuite, dans l'ordre :
 
 ```bash
 # 1. une couverture, en lecture ANONYME (c'est le chemin du navigateur)
@@ -831,10 +909,25 @@ qu'avant la bascule.
 
 #### ⑨ LE RETOUR ARRIÈRE, si l'un des contrôles échoue
 
+🔴 **MinIO NE REDÉMARRE PAS TOUT SEUL : il n'est plus dans le compose.**
+Mesuré le 2 novembre 2026. Depuis rc14 le compose ne le décrit plus — un
+`compose up -d` ne peut donc pas le relancer, et le retour arrière tombait sur
+un stockage ÉTEINT. Il faut le nommer explicitement :
+
+```bash
+docker start "$ANCIEN_MINIO"
+docker ps --filter "name=$ANCIEN_MINIO" --format '{{.Names}} {{.Status}}'
+```
+
+**Attendu** : le conteneur est `Up`. (`$ANCIEN_MINIO` a été posé à l'étape ① ;
+si votre terminal a changé, reprenez-le avec
+`docker ps -a --format '{{.Names}}' | grep -i minio`.)
+
 ```bash
 cp .env.prod.avant-garage .env.prod
 eval "$(scripts/version-du-depot.sh --exporter)" || exit 1
 docker compose --env-file .env.prod -f docker/docker-compose.prod.yml up -d
+docker restart "$(docker ps --format '{{.Names}}' | grep -- -caddy-1$)"
 curl -sS https://$API_DOMAIN/health
 ```
 
@@ -1834,6 +1927,39 @@ chaîne entière tient.
 mais l'étagère mobile restera vide pour ceux-là. Le script le dit en fin de
 course ; `OFFLINE_CONTENT_KEK` et MinIO sont les deux premières choses à
 regarder.
+
+## 🔴 FIN DE TOUTE MISE À JOUR — l'auto-contrôle de lecture
+
+*Décidé par Jean le 2 novembre 2026, pour la même raison que son jumeau à
+l'installation.*
+
+Quelle que soit la montée de version — une étiquette, un correctif, un
+changement de stockage —, le DERNIER geste est :
+
+```bash
+./scripts/autocontrole-lecture.sh
+```
+
+**Attendu** : « lecture de bout en bout ». Il dépose un objet d'essai, le relit
+par son URL PUBLIQUE **en croisant l'origine comme un navigateur**, compare son
+empreinte, et le supprime.
+
+⚠ **POURQUOI CE CONTRÔLE ET PAS `/health`.** `health`, `totalHits` et le compte
+des copies numériques interrogent tous **la base**. Ils étaient verts pendant
+les douze jours où la démonstration ne servait AUCUN document. Un contrôle qui
+se contenterait de récupérer l'URL signée aurait vu `200` et déclaré la lecture
+bonne — les octets partaient, et le navigateur les jetait faute d'en-tête CORS.
+
+⚠ **Il ne laisse rien derrière lui** : un objet nu, préfixé `_autocontrole/`,
+supprimé en sortant — y compris en échec. Aucune notice, aucun compte, rien
+dans le catalogue de vos lecteurs.
+
+⚠ **Et à l'installation, il n'est pas optionnel** : `install.sh` l'exécute en
+étape 6/7 et REFUSE de déclarer l'installation terminée s'il échoue. Une étape
+de vérification qu'on peut oublier est exactement ce qui a coûté ces douze
+jours.
+
+---
 
 ## Migrations Prisma — ajouter un changement de schéma
 

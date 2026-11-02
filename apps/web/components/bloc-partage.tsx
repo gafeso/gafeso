@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { QrCode } from '@/components/qr-code';
 import { LIBELLES } from '@/lib/libelles';
-import { adresseDuQr, lienApplication } from '@/lib/url-publique';
+import { adresseDuQr, estFormePerenne, lienApplication } from '@/lib/url-publique';
 
 const T = LIBELLES.partage;
 
@@ -77,8 +77,12 @@ export function BlocPartage({
           />
           <div className="min-w-0 flex-1">
             <p className="text-sm">{T.aide}</p>
-            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted">
-              {T.adresse}
+            <p className="mt-2 text-xs text-muted">
+              {/* ⭐ LA LÉGENDE EST DÉRIVÉE DE LA CIBLE, jamais figée : le code porte
+                  le résolveur pérenne quand l’API sert `publicUrl`, et
+                  l’adresse de cette page sinon. Une légende constante serait
+                  fausse dans l’un des deux cas — et elle l’était. */}
+                {estFormePerenne(url) ? T.adressePerenne : T.adresseDeCettePage}
             </p>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
