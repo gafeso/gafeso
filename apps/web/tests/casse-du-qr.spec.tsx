@@ -37,7 +37,7 @@ import { render, screen } from '@testing-library/react';
 import { BlocPartage } from '@/components/bloc-partage';
 import { Etiquette } from '@/components/etiquette';
 import { normaliserPrefixePerenne } from '@/middleware';
-import { identifiantDuSegment, pourLeQrDEtiquette } from '@/lib/url-publique';
+import { identifiantDuSegment } from '@/lib/url-publique';
 import { contenuDuQr } from './aide-trace-qr';
 
 const UUID = 'b2dcaa10-07f9-49ec-80ff-15e32359ee4d';
@@ -45,8 +45,17 @@ const ORIGINE = 'https://biblio.univ-exemple.bf';
 const IDENTIFIANT = `oai:exemple:${UUID}`;
 /** La forme CANONIQUE — minuscule, celle que les moissonneurs ont stockée. */
 const CANONIQUE = `${ORIGINE}/p/${IDENTIFIANT}`;
-/** Ce que l'étiquette IMPRIME. */
-const IMPRIMÉE = pourLeQrDEtiquette(CANONIQUE);
+/**
+ * ⭐ Ce que l'étiquette IMPRIME — **tel que l'API le SERT** dans
+ * `etiquette.adresseGravee`, depuis le 3 novembre 2026.
+ *
+ * ⚠ Ce n'est plus le front qui transforme : `pourLeQrDEtiquette` a été
+ * supprimée avec `adresseCourtePerenne`, parce que deux dérivations qui
+ * s'accordent ne sont pas une source unique. La propriété gardée ici reste la
+ * même, et elle compte autant : les capitales ne doivent pas REMONTER depuis la
+ * valeur servie vers la fiche, l'`aria-label` ou une adresse publiée.
+ */
+const IMPRIMÉE = CANONIQUE.toUpperCase();
 const CASSES = [CANONIQUE, IMPRIMÉE] as const;
 
 describe('⭐⭐ l’ÉTIQUETTE imprime en MAJUSCULES', () => {
@@ -57,7 +66,7 @@ describe('⭐⭐ l’ÉTIQUETTE imprime en MAJUSCULES', () => {
         cote="004 GAF"
         titre="Gafeso — Guide d’utilisation"
         etablissement="Université d’Exemple"
-        urlNotice={CANONIQUE}
+        etiquette={{ adresseGravee: IMPRIMÉE, coteMm: 14 }}
       />,
     );
     const encodé = contenuDuQr(CASSES);
@@ -78,7 +87,7 @@ describe('⭐⭐ l’ÉTIQUETTE imprime en MAJUSCULES', () => {
         cote="004 GAF"
         titre="T"
         etablissement="E"
-        urlNotice={CANONIQUE}
+        etiquette={{ adresseGravee: IMPRIMÉE, coteMm: 14 }}
       />,
     );
     const encodé = contenuDuQr(CASSES);
@@ -204,17 +213,25 @@ describe('⭐⭐ le chemin que l’étiquette imprime est atteignable', () => {
  * séparée de son emploi : « un test qui restate la constante ne voit pas
  * qu'elle est devenue inutile ».
  */
-describe('la mise en majuscules est une TRANSFORMATION, pas la forme canonique', () => {
-  it('elle est réversible sans perte sur les identifiants du produit', () => {
-    // slug `[a-z][a-z0-9-]*` (DTO du backend), uuid hexadécimal
+describe('la casse gravée est RÉVERSIBLE — c’est ce qui l’autorise', () => {
+  /*
+   * ⚠ Ce bloc éprouvait la transformation du front. Elle a été SUPPRIMÉE le
+   * 3 novembre 2026 : l'API sert l'adresse déjà gravée. Ce qui reste à prouver
+   * est la propriété qui rend les capitales admissibles — que la remise en
+   * minuscules redonne l'identifiant canonique EXACT, pour tous les slugs que
+   * le DTO du backend autorise.
+   */
+  it('⭐ la remise en minuscules redonne l’identifiant canonique, sans perte', () => {
     for (const slug of ['zinda', 'horizon', 'gafeso-univ', 'a1-b2-c3']) {
-      const id = `oai:${slug}:${UUID}`;
-      expect(pourLeQrDEtiquette(id).toLowerCase()).toBe(id);
+      const id = `oai:${slug}:${UUID.toLowerCase()}`;
+      expect(id.toUpperCase().toLowerCase()).toBe(id);
+      // et c'est bien le chemin du résolveur qui le fait
+      expect(identifiantDuSegment(id.toUpperCase())).toBe(id);
     }
   });
 
-  it('⚠ et elle ne touche QUE la casse — aucune autre réécriture', () => {
-    expect(pourLeQrDEtiquette(CANONIQUE)).toHaveLength(CANONIQUE.length);
-    expect(pourLeQrDEtiquette(CANONIQUE).toLowerCase()).toBe(CANONIQUE);
+  it('⚠ et la casse ne change QUE la casse — même longueur, même contenu', () => {
+    expect(IMPRIMÉE).toHaveLength(CANONIQUE.length);
+    expect(IMPRIMÉE.toLowerCase()).toBe(CANONIQUE);
   });
 });

@@ -38,12 +38,7 @@ import { Etiquette } from '@/components/etiquette';
 import { LIBELLES } from '@/lib/libelles';
 import { moduleQrMm, qrAssezGros, matriceQr } from '@/lib/qr';
 import { contenuDuQr } from './aide-trace-qr';
-import {
-  adresseCourtePerenne,
-  estFormeCourte,
-  estFormePerenne,
-  pourLeQrDEtiquette,
-} from '@/lib/url-publique';
+import { estFormeCourte, estFormePerenne } from '@/lib/url-publique';
 
 const ID = '9de9b299-cde5-4acc-9e76-0e800ad94281';
 const BASE = 'https://biblio.univ-exemple.bf';
@@ -58,44 +53,16 @@ const IDENTIFIANT = `oai:exemple:${ID}`;
  */
 const PERENNE = `${BASE}/p/${IDENTIFIANT}`;
 const T = LIBELLES.etiquettes;
+/** ⚠ Donnée d'essai : le côté est SERVI, et aucune bibliothèque ne le déclare. */
+const COTE_SERVI = 14;
 
-describe('⭐ adresseCourtePerenne — composée, et SANS repli', () => {
-  it('⭐ compose l’origine CANONIQUE et l’identifiant, en deux-points bruts', () => {
-    expect(adresseCourtePerenne(SERVIE, IDENTIFIANT)).toBe(PERENNE);
-    // ⚠ les deux-points restent BRUTS : c'est la décision ①, 4 caractères gagnés
-    expect(adresseCourtePerenne(SERVIE, IDENTIFIANT)).toContain('oai:exemple:');
-    expect(adresseCourtePerenne(SERVIE, IDENTIFIANT)).not.toContain('%3A');
-  });
-
-  /*
-   * ⚠ L'ORIGINE vient de la `publicUrl` SERVIE, jamais du navigateur : une
-   * impression faite depuis un poste de développement graverait `localhost`
-   * dans un livre.
-   */
-  it('⚠ prend l’origine de l’adresse SERVIE, pas celle du navigateur', () => {
-    const a = adresseCourtePerenne('https://canonique.bf/opac/resoudre/x', IDENTIFIANT);
-    expect(a).toBe(`https://canonique.bf/p/${IDENTIFIANT}`);
-  });
-
-  it('⚠ une publicUrl inanalysable ne donne PAS une adresse fabriquée', () => {
-    expect(adresseCourtePerenne('pas une url', IDENTIFIANT)).toBeNull();
-  });
-
-  /*
-   * ⭐⭐ LE TÉMOIN QUI PORTE LA DÉCISION : absente, on rend `null` — jamais la
-   * forme courte. Un repli serait un « second meilleur choix » là où la
-   * décision dit qu'il n'y en a pas, et il collerait dans un livre une adresse
-   * qui meurt avec le domaine.
-   */
-  it('⚠ rend null plutôt qu’une forme courte quand une partie manque', () => {
-    expect(adresseCourtePerenne(null, IDENTIFIANT)).toBeNull();
-    expect(adresseCourtePerenne(SERVIE, null)).toBeNull();
-    expect(adresseCourtePerenne(undefined, undefined)).toBeNull();
-    // ⚠ les cas qui ressemblent le plus à une valeur sans en être une
-    expect(adresseCourtePerenne('', IDENTIFIANT)).toBeNull();
-    expect(adresseCourtePerenne(SERVIE, '   ')).toBeNull();
-  });
-});
+/*
+ * ⚠ LE BLOC SUR LA COMPOSITION LOCALE A ÉTÉ RETIRÉ le 3 novembre 2026.
+ * `adresseCourtePerenne` et `pourLeQrDEtiquette` n'existent plus : l'API sert
+ * `etiquette: { adresseGravee, coteMm }`, et la validation de ce bloc est
+ * gardée par `etiquettes-cote-servi.spec.tsx`. Ce fichier garde ce qui lui
+ * reste et qui compte : la FORME de l'adresse, et le REFUS de la forme courte.
+ */
 
 describe('les deux formes se reconnaissent, dans les deux sens', () => {
   it('estFormeCourte discrimine', () => {
@@ -133,7 +100,9 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
    * l'identifiant pérenne entier.
    */
   it('⭐ la forme IMPRIMÉE tient dans 14 mm, et le contenu en capitales gagne une version', () => {
-    const imprimee = matriceQr(pourLeQrDEtiquette(PERENNE));
+    // ⚠ `.toUpperCase()` est une DONNÉE D'ESSAI : c'est l'API qui grave depuis
+    // le 3 novembre 2026, et le front ne transforme plus rien.
+    const imprimee = matriceQr(PERENNE.toUpperCase());
     const minuscule = matriceQr(PERENNE);
     const longue = matriceQr(SERVIE);
     // ⭐ les CAPITALES font passer en mode alphanumérique : une version de moins
@@ -141,9 +110,9 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
     expect(imprimee.version).toBe(4);
     expect(longue.version).toBe(6);
     // et dans un carré DÉRIVÉ de 14 mm
-    expect(moduleQrMm(imprimee.taille)).toBeCloseTo(0.3415, 4);
-    expect(moduleQrMm(minuscule.taille)).toBeCloseTo(0.3111, 4);
-    expect(qrAssezGros(imprimee.taille)).toBe(true);
+    expect(moduleQrMm(imprimee.taille, COTE_SERVI)).toBeCloseTo(0.3415, 4);
+    expect(moduleQrMm(minuscule.taille, COTE_SERVI)).toBeCloseTo(0.3111, 4);
+    expect(qrAssezGros(imprimee.taille, COTE_SERVI)).toBe(true);
   });
 
   /*
@@ -161,10 +130,10 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
    */
   it('⚠ et il REFUSE la version 8 dans 14 mm — 0,2456 mm', () => {
     const taille8 = 4 * 8 + 17;
-    expect(moduleQrMm(taille8)).toBeCloseTo(0.2456, 4);
-    expect(qrAssezGros(taille8)).toBe(false);
+    expect(moduleQrMm(taille8, COTE_SERVI)).toBeCloseTo(0.2456, 4);
+    expect(qrAssezGros(taille8, COTE_SERVI)).toBe(false);
     // la borne structurelle : version ≤ 7, ce qui est VERSION_MAX_ETIQUETTE
-    expect(qrAssezGros(4 * 7 + 17)).toBe(true);
+    expect(qrAssezGros(4 * 7 + 17, COTE_SERVI)).toBe(true);
   });
 });
 
@@ -178,7 +147,7 @@ describe('⭐⭐ le module imprimé, et le seuil du produit', () => {
  * matrice. Un repli ajouté n'importe où dans la chaîne serait vu ici.
  */
 const adresseEncodee = (candidates: string[]) =>
-  contenuDuQr(candidates.flatMap((c) => [c, pourLeQrDEtiquette(c)]));
+  contenuDuQr(candidates.flatMap((c) => [c, c.toUpperCase()]));
 
 describe('⭐⭐ l’épreuve qui REFUSE la forme courte dans les étiquettes', () => {
   const poser = (url: string | null) =>
@@ -188,7 +157,7 @@ describe('⭐⭐ l’épreuve qui REFUSE la forme courte dans les étiquettes', 
         cote="004 GAF"
         titre="Gafeso — Guide d’utilisation"
         etablissement="Université d’Exemple"
-        urlNotice={url}
+        etiquette={url === null ? null : { adresseGravee: url.toUpperCase(), coteMm: COTE_SERVI }}
       />,
     );
 
@@ -284,8 +253,22 @@ describe('⭐⭐ l’ÉCRAN encode la forme pérenne — l’épreuve sur le che
          * trouverait rien et retomberait sur « aucun QR », ce qui ressemble à
          * un refus correct. La doublure doit offrir la tentation.
          */
+        /*
+         * ⚠ LA DOUBLURE SERT CE QUE LA ROUTE SERT, mesuré le 3 novembre 2026 :
+         * le bloc `etiquette` tout fait, et les trois anciennes clés qui
+         * subsistent. Elle garde `shortUrl` exprès — c'est la TENTATION, et
+         * sans elle le contrôle négatif « la page reprend shortUrl » serait
+         * impossible.
+         */
         if (chemin === `/opac/records/${ID}`)
-          return { publicUrl, identifiantPerenne: publicUrl ? IDENTIFIANT : null, shortUrl: COURTE };
+          return {
+            etiquette: publicUrl
+              ? { adresseGravee: PERENNE.toUpperCase(), coteMm: COTE_SERVI }
+              : null,
+            publicUrl,
+            identifiantPerenne: publicUrl ? IDENTIFIANT : null,
+            shortUrl: COURTE,
+          };
         if (chemin === '/tenancy/current') return { name: 'Université d’Exemple' };
         throw new Error(`requête non couverte — ${chemin}`);
       },

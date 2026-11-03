@@ -51,6 +51,31 @@ const PDF = lire('apps/api/src/labels/label-pdf.ts');
 const FRONT_GEO = lire('apps/web/lib/code128.ts');
 const FRONT_URL = lire('apps/web/lib/url-publique.ts');
 
+/**
+ * ⭐⭐ DÉPOUILLE LES COMMENTAIRES — un garde textuel mesure du CODE, ou rien.
+ *
+ * *Posé le 3 novembre 2026, parce que mon contrôle négatif NE MORDAIT PAS.* Le
+ * front a renommé `coteMm` partout dans ses bibliothèques et mon garde est
+ * resté VERT : les cinq occurrences restantes de `lib/code128.ts` sont toutes
+ * dans des commentaires qui RACONTENT que le côté a quitté ce fichier.
+ *
+ * ⚠ C'est mon propre défaut de la veille, rejoué sur autre chose — le garde de
+ * version satisfait par le commentaire qui le nomme, le contrôle de
+ * disparition satisfait par le texte qui explique le retrait. La forme est
+ * toujours la même : **une vérification satisfaisable par de la prose.**
+ *
+ * ⚠ Et le dépouilleur est un INSTRUMENT NEUF : il porte ses deux témoins
+ * ci-dessous. Un précédent mangeait 2 262 caractères d'un fichier parce qu'une
+ * accolade suivie d'un JSDoc lui ressemblait à un bloc.
+ */
+export function sansCommentaires(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    // ⚠ `(?<!:)` épargne `https://…` : sans lui, un `//` d'URL emporterait la
+    // fin de la ligne, donc du CODE.
+    .replace(/(?<!:)\/\/[^\n]*/g, ' ');
+}
+
 describe('⚠ TÉMOIN DE LECTURE — les cinq sources sont lues, et non vides', () => {
   it('chacune porte un ancrage qui lui est propre', () => {
     // ⚠ Posé sur la SOURCE, jamais sur les trouvailles : un fichier
@@ -59,8 +84,38 @@ describe('⚠ TÉMOIN DE LECTURE — les cinq sources sont lues, et non vides', 
     expect(SOURCE_API).toContain('adresseGraveeSurEtiquette');
     expect(SERVICE).toContain('shortUrl');
     expect(PDF).toContain('qrPngPourEtiquette');
-    expect(FRONT_GEO).toContain('QR_COTE_MM');
+    // ⚠ CE TÉMOIN A ÉTÉ CHANGÉ le 3 novembre 2026. Il exigeait
+    // `QR_COTE_MM` — le nom que le front a eu RAISON de supprimer en
+    // basculant. Un témoin dont la condition de succès est l'existence de la
+    // forme fautive punit celui qui fait bien, et s'aggrave à mesure que le
+    // code se conforme. L'ancrage porte sur une constante que ce fichier garde
+    // légitimement : la largeur de module, qui est à LUI.
+    expect(FRONT_GEO).toContain('LARGEUR_MODULE_MIN_MM');
     expect(FRONT_URL).toContain('/p/');
+  });
+
+  /**
+   * ⚠ LE DÉPOUILLEUR PORTE SES DEUX TÉMOINS — c'est un instrument neuf, et un
+   * instrument neuf porte la faute qu'il traque jusqu'à preuve du contraire.
+   */
+  it('⭐ le dépouilleur retire la PROSE et garde le CODE', () => {
+    const bloc = [
+      '/** coteMm a quitté ce fichier — voir l’API. */',
+      'const a = 1; // coteMm était ici',
+      'const lu = etiquette.coteMm;',
+      "const u = 'https://x/p/ID'; // commentaire",
+    ].join('\n');
+    const net = sansCommentaires(bloc);
+    // PRÉSENCE : la seule consommation réelle survit.
+    expect(net).toContain('etiquette.coteMm');
+    // ABSENCE : les trois mentions de prose disparaissent — c'est la confusion
+    // PLAUSIBLE, et c'est exactement elle qui a rendu mon garde vert.
+    expect(net).not.toContain('a quitté ce fichier');
+    expect(net).not.toContain('était ici');
+    expect((net.match(/coteMm/g) ?? []).length, 'une seule occurrence doit rester').toBe(1);
+    // ⚠ ET L'URL SURVIT ENTIÈRE : un dépouilleur naïf couperait à `https://`
+    // et emporterait du code.
+    expect(net).toContain("'https://x/p/ID'");
   });
 });
 
@@ -200,19 +255,32 @@ describe('🔴 LE FRONT CONSOMME LA VALEUR SERVIE, il ne la redéclare pas', () 
   const ligneFront = FRONT_GEO.split('\n').find((l) => /^export const QR_COTE_MM\b/.test(l));
   const frontADejaBascule = ligneFront === undefined;
 
-  it('⚠ OÙ EN EST LE FRONT — ce cas MESURE, il ne juge pas', () => {
-    // Il existe pour que le `skip` ci-dessous ne survive pas à sa raison : le
-    // jour où le front basculera, ce message changera et les deux cas
-    // suivants s'activeront d'eux-mêmes.
-    const etat = frontADejaBascule
-      ? 'a BASCULÉ — il ne déclare plus de côté'
-      : `déclare encore : ${ligneFront?.trim()}`;
-    expect(typeof etat).toBe('string');
-    // eslint-disable-next-line no-console
-    console.log(`    [état du front] ${etat}`);
+  /**
+   * 🔴 LE `skip` A ÉTÉ RETIRÉ — SA CONDITION DÉRIVAIT DE CE QU'IL GARDAIT.
+   *
+   * *Mesuré le 3 novembre 2026, en contrôle négatif.* Ces cas étaient
+   * `skipIf(!frontADejaBascule)` le temps que le front bascule — une dette
+   * nommée plutôt que tue, et c'était juste. **Mais `frontADejaBascule` est
+   * calculé sur l'absence de déclaration locale** : le jour où quelqu'un
+   * redéclarerait un côté chez le front, les deux cas ne TOMBERAIENT pas, ils
+   * se SKIPERAIENT. Mesuré : « 10 passed | 2 skipped », verdict vert.
+   *
+   * ⚠ C'est « un garde dont la population dérive de la chose mal configurée ne
+   * peut pas la voir », appliqué à une condition de SKIP. Le garde était
+   * complet sur sa population, et sa population se vidait du défaut même.
+   *
+   * Le front a basculé — 0 déclaration de `QR_COTE_MM` dans `apps/web` — donc
+   * la condition a cessé d'exister. Ce cas-ci l'AFFIRME désormais : une
+   * régression du front fait tomber, elle ne désarme plus.
+   */
+  it('🔴 le front a bien basculé — cette affirmation remplace l’ancien `skip`', () => {
+    expect(
+      ligneFront,
+      `le front redéclare un côté : ${ligneFront?.trim()} — la seconde dérivation est de retour`,
+    ).toBeUndefined();
   });
 
-  it.skipIf(!frontADejaBascule)(
+  it(
     '🔴 le front ne déclare AUCUN côté local — sinon la divergence est de retour',
     () => {
       expect(
@@ -222,10 +290,35 @@ describe('🔴 LE FRONT CONSOMME LA VALEUR SERVIE, il ne la redéclare pas', () 
     },
   );
 
-  it.skipIf(!frontADejaBascule)('🔴 et il CONSOMME `etiquette.coteMm` servi par l’API', () => {
+  /**
+   * 🔴 CE CAS NE MORDAIT PAS — il était satisfait par de la PROSE.
+   *
+   * *Mesuré par le front le 3 novembre 2026 : il a renommé `coteMm` partout
+   * dans ses bibliothèques, et ce garde est resté VERT.* Les occurrences
+   * restantes de `lib/code128.ts` sont toutes dans des commentaires qui
+   * expliquent que le côté a quitté ce fichier — et le motif `|coteMm` les
+   * prenait pour une consommation.
+   *
+   * ⚠ ET CE GARDE RESTE LE PLUS FAIBLE DES DEUX, même dépouillé : il lit un
+   * NOM. Le garde d'EFFET est chez le front, et aucune prose ne le satisfait :
+   *
+   *     apps/web/tests/etiquettes-cote-servi.spec.tsx
+   *     « ⭐⭐ le côté SERVI atteint le rendu — deux valeurs, deux tailles »
+   *
+   * Il rend l'étiquette avec deux côtés servis différents et exige que le QR
+   * DESSINÉ suive — `expect(grand / petit).toBeCloseTo(22 / 14, 5)`. Si le
+   * composant refige le côté, ce cas-là tombe, quoi que disent les
+   * commentaires de part et d'autre.
+   *
+   * ⚠ Le renvoi est écrit ICI exprès, pour que personne ne réécrive demain une
+   * vérification satisfaisable par un commentaire en croyant suffire.
+   */
+  it('🔴 et il CONSOMME `etiquette.coteMm` servi par l’API', () => {
+    const codeFront = sansCommentaires(FRONT_GEO) + sansCommentaires(FRONT_URL);
     expect(
-      /etiquette\s*[?.]*\.?\s*coteMm|coteMm/.test(FRONT_GEO + FRONT_URL),
-      'le front doit LIRE coteMm dans la réponse de l’API',
+      /\bcoteMm\b/.test(codeFront),
+      'le front doit LIRE coteMm dans la réponse de l’API — et dans du CODE, ' +
+        'pas dans un commentaire qui raconte la bascule',
     ).toBe(true);
   });
 

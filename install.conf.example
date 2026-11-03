@@ -6,7 +6,7 @@
 #
 # Même chemin de code que l'installation interactive : ces variables
 # REMPLACENT simplement les questions. Les SECRETS ne sont PAS ici — ils sont
-# générés automatiquement par install.sh (Postgres, JWT, MinIO, clé admin,
+# générés automatiquement par install.sh (Postgres, JWT, stockage objet, clé admin,
 # mot de passe super-admin). Ce fichier n'est donc pas sensible, mais il est
 # tout de même ignoré par git (voir .gitignore).
 

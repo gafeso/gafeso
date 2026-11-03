@@ -10,7 +10,7 @@ import { ID_CONTENU } from '@/components/lien-evitement';
 import { api, ApiError } from '@/lib/api';
 import { LIBELLES } from '@/lib/libelles';
 import { useMyFunctions } from '@/lib/functions';
-import { adresseCourtePerenne } from '@/lib/url-publique';
+import { etiquetteServie, type EtiquetteServie } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -87,12 +87,11 @@ interface NoticeAvecExemplaires {
    * demandé en passation.
    */
   /**
-   * ⚠ L'adresse COMPOSÉE — `<origine canonique>/p/<identifiant>`, deux-points
-   * bruts. Elle est calculée au chargement depuis les deux parties que
-   * `/opac/records/:id` sert, et jamais depuis l'origine du navigateur. Voir
-   * `adresseCourtePerenne` pour ce qui vient d'où.
+   * ⭐⭐ LE BLOC `etiquette` SERVI par `/opac/records/:id` —
+   * `{ adresseGravee, coteMm }`. Plus rien n'est composé ici : c'est la
+   * dérivation unique du backend, lue telle quelle.
    */
-  adresseQr?: string | null;
+  etiquette?: EtiquetteServie | null;
 }
 
 export default function AperçuEtiquettesPage() {
@@ -133,16 +132,14 @@ export default function AperçuEtiquettesPage() {
          */
         Promise.all(
           ids.map((id) =>
-            api<{ publicUrl?: string | null; identifiantPerenne?: string | null }>(
-              `/opac/records/${id}`,
-            )
-              .then((r) => adresseCourtePerenne(r.publicUrl, r.identifiantPerenne))
+            api<{ etiquette?: unknown }>(`/opac/records/${id}`)
+              .then((r) => etiquetteServie(r.etiquette))
               .catch(() => null),
           ),
         ),
         api<{ name: string }>('/tenancy/current'),
       ]);
-      setNotices(recs.map((r, i) => ({ ...r, adresseQr: adresses[i] })));
+      setNotices(recs.map((r, i) => ({ ...r, etiquette: adresses[i] })));
       setEtablissement(tenant.name);
     } catch (e) {
       setErreur(e instanceof ApiError ? e.message : String(e));
@@ -238,8 +235,8 @@ export default function AperçuEtiquettesPage() {
              * quand il n'y en a pas. `print:hidden` : ce bloc s'adresse à la
              * personne qui décide d'imprimer, pas au livre.
              */
-            const perenne = etiquettes[0].notice.adresseQr ?? null;
-            const toutesServies = etiquettes.every(({ notice }) => Boolean(notice.adresseQr));
+            const perenne = etiquettes[0].notice.etiquette?.adresseGravee ?? null;
+            const toutesServies = etiquettes.every(({ notice }) => Boolean(notice.etiquette));
             return (
               <>
                 {perenne && (
@@ -273,7 +270,7 @@ export default function AperçuEtiquettesPage() {
                   cote={item.callNumber}
                   titre={notice.title}
                   etablissement={etablissement}
-                  urlNotice={notice.adresseQr ?? null}
+                  etiquette={notice.etiquette ?? null}
                   colonnes={colonnes}
                 />
               </div>

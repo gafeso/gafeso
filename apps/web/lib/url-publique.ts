@@ -142,85 +142,7 @@ export function identifiantDuSegment(segment: string): string {
   }
 }
 
-/**
- * ⭐⭐ L'ADRESSE DU QR D'UNE ÉTIQUETTE — la PÉRENNE, et il n'y a pas de repli.
- *
- * ## ⚠ CE FICHIER A PORTÉ LA DÉCISION INVERSE PENDANT TROIS SEMAINES
- *
- * Du 11 octobre au 2 novembre 2026, l'étiquette portait la forme COURTE
- * (`/opac/<uuid>`), et le motif écrit ici était juste : chaque caractère
- * d'adresse rétrécit les modules d'un carré de 13 mm.
- *
- * **Ce qui manquait n'était pas la mesure, c'était le SEUIL.** On savait que la
- * grandeur décroît ; on ne l'avait pas comparée à la largeur minimale que le
- * produit se donne déjà. Comparée, le 2 novembre 2026 :
- *
- * | L'adresse | Module à 13 mm | ≥ 0,25 mm ? |
- * |---|---|---|
- * | courte | 0,2889 mm | ✓ |
- * | **pérenne** | **0,2653 mm** | **✓** |
- *
- * ⭐ Les deux tiennent. Le rétrécissement était réel et il ne franchissait
- * aucune limite — voir `moduleQrMm` pour la mesure complète et son balayage.
- *
- * ## ⭐ ET LA DÉCISION NE VIENT PAS DE LA MESURE, elle vient du SUPPORT
- *
- * Jean, 2 novembre 2026 : *« ce qui est imprimé sur un support DURABLE doit
- * porter la forme PÉRENNE. La forme courte meurt avec le domaine ; une
- * étiquette collée sur un livre doit survivre à un changement de domaine ou
- * d'hébergeur. »*
- *
- * ⚠ C'est pourquoi cette fonction rend **`null`** plutôt qu'une adresse courte
- * quand le catalogue ne sert rien. Un repli sur la forme courte serait un
- * SECOND MEILLEUR CHOIX là où la décision dit qu'il n'y en a pas — et il
- * produirait, en silence, exactement l'artefact qu'on veut empêcher : un QR
- * périssable collé dans un livre. L'appelant ABANDONNE le QR et le DIT.
- */
-export function adressePerenneDuQr(publicUrl: string | null | undefined): string | null {
-  // ⚠ Une chaîne vide n'est pas une adresse — même garde qu'`adresseDuQr`.
-  const canonique = publicUrl?.trim();
-  return canonique ? canonique : null;
-}
 
-/**
- * ⭐⭐ LA MISE EN MAJUSCULES — et elle ne sort JAMAIS du QR IMPRIMÉ.
- *
- * ## ⭐ POURQUOI, et le chiffre
- *
- * Le mode ALPHANUMÉRIQUE de la norme QR couvre `0-9`, `A-Z`, l'espace et
- * `$%*+-./:` — **pas les minuscules**, qui forcent le mode octet. Une adresse
- * tout en capitales change donc de mode et gagne une version entière. Mesuré le
- * 2 novembre 2026, carré de 14 mm :
- *
- * | Le contenu | Version | Module |
- * |---|---|---|
- * | `https://zinda.gafeso.org/p/oai:zinda:<uuid>` | 5 | 0,3111 mm |
- * | **la même en MAJUSCULES** | **4** | **0,3415 mm** |
- * | pire cas légal (slug de 49), minuscules | 9 | 🔴 0,2295 mm |
- * | **pire cas légal, MAJUSCULES** | **7** | **0,2642 mm** |
- *
- * ⭐ C'est ce qui permet de garder le slug LIBRE : Jean a refusé qu'une
- * contrainte d'impression décide du nommage d'un établissement — un slug naturel
- * peut faire 26 caractères.
- *
- * ## ⚠⚠ SA BORNE, ET ELLE EST LA MOITIÉ DE LA DÉCISION
- *
- * **Les majuscules ne sortent jamais du QR imprimé.** Ni dans OAI-PMH, ni sur
- * la fiche, ni dans un `aria-label`, ni dans aucune adresse publiée. La forme
- * canonique reste MINUSCULE partout ailleurs — c'est elle que les moissonneurs
- * ont stockée depuis P4-3, et deux représentations d'un identifiant publié
- * divergent le jour où l'une change.
- *
- * ⭐ C'est pourquoi cette fonction est appelée à UN SEUL endroit — le composant
- * d'étiquette, au moment de fabriquer la matrice — et jamais en amont. Un appel
- * en amont contaminerait l'adresse affichée, l'`aria-label`, et tout ce qui
- * dérive de la même valeur.
- *
- * ⚠ `casse-du-qr.spec.tsx` le garde par l'EFFET : il décode les tracés
- * RÉELLEMENT DESSINÉS — celui de l'étiquette et celui de la fiche — et exige
- * que le premier soit en capitales et le second non.
- */
-export const pourLeQrDEtiquette = (adresse: string) => adresse.toUpperCase();
 
 /* ──────────── LES DEUX FORMES, RECONNUES — pour les épreuves ──────────── */
 
@@ -240,61 +162,59 @@ export const estFormePerenne = (adresse: string) =>
   /(\/opac\/resoudre\/|\/p\/)oai(:|%3A)/i.test(adresse);
 
 /**
- * ⭐⭐ L'ADRESSE QUE LES ÉTIQUETTES IMPRIMENT — la pérenne **COURTE**, en
- * deux-points BRUTS.
+ * ⭐⭐ CE QUE L'API SERT POUR UNE ÉTIQUETTE — on le LIT, on ne le refait pas.
  *
- * ## ⭐ DEUX DÉCISIONS DE JEAN, 2 novembre 2026, et chacune a son chiffre
+ * ## ⚠ CE QUE CE BLOC REMPLACE, et pourquoi c'était à remplacer
  *
- * **① les deux-points BRUTS, pas le percent-encodé.** La session mobile a
- * prouvé que le scanner accepte les deux formes ; `%3A` coûte 4 caractères pour
- * rien. Mesuré : le slug tenable passe de 13 à 15 caractères.
+ * Jusqu'au 3 novembre 2026, ce fichier portait DEUX dérivations locales :
+ * `adresseCourtePerenne`, qui recomposait `<origine>/p/<identifiant>`, et
+ * `pourLeQrDEtiquette`, qui la passait en capitales. Elles s'accordaient avec
+ * celles du backend **parce qu'elles composaient les mêmes parties servies** —
+ * pas par construction. C'était le sursis que Jean a nommé : *« deux
+ * dérivations qui s'accordent, gardées contre le désaccord. Ce n'est pas la
+ * suppression. »*
  *
- * **② une route canonique COURTE**, `/p/<identifiant>`, servie par le web.
- * `/opac/resoudre/…` reste acceptée POUR TOUJOURS — on n'enlève jamais une
- * adresse pérenne, on en ajoute une plus courte.
+ * ⭐ `GET /opac/records/:id` sert désormais le bloc entier :
  *
- * Mesuré le 2 novembre 2026, ECC M, carré de 13 mm, deux-points bruts :
+ * ```json
+ * "etiquette": { "adresseGravee": "HTTPS://<hôte>/P/OAI:<SLUG>:<UUID>", "coteMm": 14 }
+ * ```
  *
- * | Le gabarit | Slug le plus long qui tient | `zinda` |
- * |---|---|---|
- * | `/opac/resoudre/oai:<s>:<u>` | 15 car. | 85 car., v6, 0,2653 mm |
- * | **`/p/oai:<s>:<u>`** | **21 car.** | **73 car., v5, 0,2889 mm** |
+ * Mesuré sur le serveur de développement AVANT d'écrire une ligne :
+ * `HTTP://LOCALHOST:3005/P/OAI:ZINDA:B2DCAA10-…`, `coteMm` entier à 14.
  *
- * ⚠ Le slug apparaît DEUX FOIS — dans l'hôte, puis dans l'identifiant — donc
- * chaque caractère de chemin économisé vaut un demi-caractère de slug.
+ * ## ⚠⚠ AUCUN REPLI, MÊME PAS SILENCIEUX
  *
- * ## ⚠ POURQUOI ON COMPOSE, ET CE QUI VIENT D'OÙ
+ * Un bloc absent ou mal formé rend **`null`**, et l'étiquette abandonne alors
+ * son QR en le DISANT. Recomposer l'adresse ici réintroduirait la seconde
+ * dérivation qu'on vient de supprimer ; retomber sur l'ancien côté graverait
+ * une géométrie que l'API ne garantit plus. Les deux seraient des divergences
+ * qui attendent leur heure.
  *
- * L'API ne connaît pas encore `/p/`. On compose donc le CHEMIN — mais les deux
- * parties viennent d'ELLE :
- *
- * | La partie | Sa source | Pourquoi pas autrement |
- * |---|---|---|
- * | l'origine | `new URL(publicUrl).origin` | jamais celle du navigateur : une impression depuis un poste de développement graverait `localhost` dans un livre |
- * | l'identifiant | `identifiantPerenne`, **verbatim** | le recomposer depuis l'hôte serait une seconde implémentation d'une valeur publiée à des moissonneurs extérieurs |
- *
- * ⚠ Et `encodeURIComponent` n'est PAS appliqué, délibérément : les deux-points
- * sont légaux dans un segment de chemin (RFC 3986, `pchar`), et les encoder
- * annulerait la décision ①. Le résolveur encaisse les deux écritures.
- *
- * ⚠ Rend `null` dès qu'une partie manque — pas de repli sur la forme courte,
- * pour la raison écrite dans `adressePerenneDuQr`.
+ * ⭐ Et le côté est **CONSTANT par construction** — précision du backend, qui
+ * corrige ce que nous croyions tous les deux : `coteMm` ne dépend PAS du slug.
+ * C'est la VERSION du QR qui varie, donc le module. Mesuré : `zinda` → v4,
+ * 0,3415 mm ; un slug de 28 caractères → v5, 0,3111 mm — très au-dessus du
+ * seuil tous les deux.
  */
-export function adresseCourtePerenne(
-  publicUrl: string | null | undefined,
-  identifiantPerenne: string | null | undefined,
-): string | null {
-  const base = publicUrl?.trim();
-  const id = identifiantPerenne?.trim();
-  if (!base || !id) return null;
-  try {
-    return `${new URL(base).origin}/p/${id}`;
-  } catch {
-    /*
-     * ⚠ Une `publicUrl` qui n'est pas une URL analysable ne donne pas d'origine.
-     * On rend `null` plutôt qu'une adresse fabriquée : un QR qui mène ailleurs
-     * ne se remarque jamais, et celui-ci est collé dans un livre.
-     */
-    return null;
-  }
+export interface EtiquetteServie {
+  /** La chaîne EXACTE que le QR doit porter — déjà en capitales. */
+  adresseGravee: string;
+  /** Le côté du carré en millimètres, dérivé côté API. */
+  coteMm: number;
+}
+
+/**
+ * Le bloc `etiquette` d'une réponse de notice, ou `null`.
+ *
+ * ⚠ Les deux champs sont validés SÉPARÉMENT : une adresse vide n'est pas une
+ * adresse, et un `coteMm` absent, nul ou négatif ne décrit aucun carré. Un bloc
+ * à moitié servi rend `null` plutôt qu'une étiquette à moitié juste.
+ */
+export function etiquetteServie(bloc: unknown): EtiquetteServie | null {
+  if (bloc === null || typeof bloc !== 'object') return null;
+  const { adresseGravee, coteMm } = bloc as Partial<EtiquetteServie>;
+  if (typeof adresseGravee !== 'string' || adresseGravee.trim() === '') return null;
+  if (typeof coteMm !== 'number' || !Number.isFinite(coteMm) || coteMm <= 0) return null;
+  return { adresseGravee: adresseGravee.trim(), coteMm };
 }

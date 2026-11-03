@@ -1,7 +1,6 @@
 import { QrCode } from '@/components/qr-code';
 import {
   PLANCHE,
-  QR_COTE_MM,
   SILENCE_BARRES,
   barresCode128,
   largeurEtiquetteMm,
@@ -10,7 +9,7 @@ import {
 } from '@/lib/code128';
 import { LIBELLES } from '@/lib/libelles';
 import { matriceQr, moduleQrMm, qrAssezGros } from '@/lib/qr';
-import { pourLeQrDEtiquette } from '@/lib/url-publique';
+import type { EtiquetteServie } from '@/lib/url-publique';
 
 const T = LIBELLES.etiquettes;
 
@@ -27,7 +26,7 @@ export function Etiquette({
   cote,
   titre,
   etablissement,
-  urlNotice,
+  etiquette,
   colonnes = PLANCHE.colonnes,
 }: {
   barcode: string;
@@ -35,14 +34,15 @@ export function Etiquette({
   titre: string;
   etablissement: string;
   /**
-   * L'adresse PÉRENNE de la notice — ce que le QR encode.
+   * ⭐⭐ LE BLOC `etiquette` SERVI PAR L'API — `{ adresseGravee, coteMm }`.
    *
-   * ⚠ `null` quand le catalogue n'en sert pas : on n'imprime alors AUCUN QR.
-   * Décision de Jean du 2 novembre 2026 — un support durable porte la forme
-   * pérenne, et un repli sur la forme courte collerait dans un livre une
-   * adresse qui meurt avec le domaine.
+   * ⚠ `null` quand l'API ne le sert pas : on n'imprime alors AUCUN QR, et
+   * l'étiquette le DIT. Pas de repli, même pas silencieux — recomposer
+   * l'adresse ici réintroduirait la dérivation qu'on vient de supprimer, et
+   * retomber sur l'ancien côté graverait une géométrie que l'API ne garantit
+   * plus. Décision de Jean, 3 novembre 2026.
    */
-  urlNotice: string | null;
+  etiquette: EtiquetteServie | null;
   /** Les colonnes de la planche : elles décident de la largeur, donc du QR. */
   colonnes?: number;
 }) {
@@ -91,12 +91,23 @@ export function Etiquette({
    * reste minuscule partout ailleurs — `casse-du-qr.spec.tsx` le garde par
    * l'effet.
    */
-  const contenuDuQr = urlNotice === null ? null : pourLeQrDEtiquette(urlNotice);
+  /*
+   * ⭐⭐ LA CHAÎNE ET LE CÔTÉ VIENNENT DE L'API, tels quels.
+   *
+   * `adresseGravee` est DÉJÀ en capitales — c'est le backend qui grave, et son
+   * `adresseGraveeSurEtiquette` est la dérivation unique depuis le 3 novembre
+   * 2026. La repasser en majuscules ici serait une seconde transformation, donc
+   * une seconde dérivation : exactement ce qu'on a supprimé.
+   */
+  const contenuDuQr = etiquette?.adresseGravee ?? null;
+  const coteMm = etiquette?.coteMm ?? null;
   const matrice = contenuDuQr === null ? null : matriceQr(contenuDuQr);
-  const placeOk = barres === null || qrTient(barres.motif.length, p);
-  const grandeurOk = matrice === null ? false : qrAssezGros(matrice.taille);
-  const avecQr = matrice !== null && placeOk && grandeurOk;
-  const moduleMm = matrice === null ? null : moduleQrMm(matrice.taille);
+  const placeOk = barres === null || coteMm === null || qrTient(barres.motif.length, coteMm, p);
+  const grandeurOk =
+    matrice === null || coteMm === null ? false : qrAssezGros(matrice.taille, coteMm);
+  const avecQr = matrice !== null && coteMm !== null && placeOk && grandeurOk;
+  const moduleMm =
+    matrice === null || coteMm === null ? null : moduleQrMm(matrice.taille, coteMm);
 
   return (
     <div
@@ -108,7 +119,7 @@ export function Etiquette({
            façon que la décision d'abandon ait le même sens aux deux endroits. */
         <QrCode
           valeur={contenuDuQr as string}
-          taille={QR_COTE_MM * 3.78}
+          taille={(coteMm as number) * 3.78}
           className="shrink-0 self-start"
         />
       ) : null}

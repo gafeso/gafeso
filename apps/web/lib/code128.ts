@@ -131,49 +131,32 @@ export const LARGEUR_MODULE_MIN_MM = 0.25;
 export const SILENCE = 4;
 
 /**
- * ⭐⭐ LE PIRE CAS QU'UNE ÉTIQUETTE S'ENGAGE À IMPRIMER, en modules.
+ * ⭐⭐ LE CÔTÉ DU QR N'EST PLUS DÉCLARÉ ICI — il est SERVI par l'API.
  *
- * Décision de Jean, 2 novembre 2026 : **le slug reste libre.** « Je refuse
- * qu'une contrainte d'impression décide du nommage d'un établissement — un slug
- * naturel peut faire 26 caractères. »
+ * ## ⚠ CE QUI VIVAIT LÀ, ET POURQUOI C'EST PARTI
  *
- * Le pire cas est donc le slug le plus long que
- * `provision-tenant.dto.ts` autorise — **49 caractères** —, dans l'adresse la
- * plus longue qu'on imprime, et le slug y apparaît DEUX FOIS (l'hôte, puis
- * l'identifiant). Mesuré le 2 novembre 2026, contenu en MAJUSCULES, ECC M :
- * 161 caractères → **version 7**, soit `4 × 7 + 17 = 45` modules.
+ * Ce fichier a porté `QR_COTE_MM` sous trois formes successives :
  *
- * ⚠ `etiquettes-cote-derive.spec.ts` le VÉRIFIE en encodant réellement ce pire
- * cas : si une version de plus était nécessaire, il tombe en le disant.
+ * | | |
+ * |---|---|
+ * | jusqu'au 2 nov. 2026 | `= 13`, ÉCRIT EN DUR — rien ne le reliait au seuil |
+ * | le 2 nov. 2026 | `ceil(MODULES_MAX × LARGEUR_MODULE_MIN_MM)` = 14, dérivé |
+ * | **depuis le 3 nov. 2026** | **plus rien : on lit `etiquette.coteMm`** |
+ *
+ * ⭐ La deuxième forme était juste et ne suffisait pas : le backend dérivait de
+ * son côté par la même formule. Deux dérivations qui s'accordent ne sont pas
+ * une source unique — elles sont un sursis, et c'est le mot de Jean. L'API sert
+ * désormais `etiquette: { adresseGravee, coteMm }`, et c'est la seule source.
+ *
+ * ⚠ **Et le côté est devenu une valeur d'EXÉCUTION.** Tout ce qui en dépend le
+ * reçoit donc en ARGUMENT — `qrTient`, `moduleQrMm`, `qrAssezGros`, le composant
+ * d'étiquette. Aucune valeur par défaut : un défaut serait un repli silencieux,
+ * et un repli sur l'ancien côté graverait une géométrie que l'API ne garantit
+ * plus. Sans bloc servi, il n'y a pas de QR — et l'étiquette le DIT.
+ *
+ * ⚠ `LARGEUR_MODULE_MIN_MM` reste ici : c'est le seuil du CODE-BARRES, que
+ * `qrTient` compare, et il vaut encore 0,25 des deux côtés.
  */
-export const VERSION_MAX_ETIQUETTE = 7;
-export const MODULES_MAX_ETIQUETTE = 4 * VERSION_MAX_ETIQUETTE + 17 + 2 * SILENCE;
-
-/**
- * ⭐⭐ LE CÔTÉ DU QR D'UNE ÉTIQUETTE — **DÉRIVÉ**, jamais recopié.
- *
- * ## ⚠ IL VALAIT 13, ÉCRIT EN DUR, ET C'ÉTAIT LA MAUVAISE FORME
- *
- * Jusqu'au 2 novembre 2026 : `export const QR_COTE_MM = 13;`. Le nombre était
- * juste pour les adresses d'alors, et **rien ne le reliait au seuil qu'il
- * existe pour respecter.** Le jour où `LARGEUR_MODULE_MIN_MM` monterait, le
- * carré serait resté à 13 et les étiquettes auraient imprimé des modules sous
- * le minimum — en silence, sur des livres.
- *
- * ⭐ Il est donc CALCULÉ : le côté minimal pour que le pire cas tienne encore
- * au seuil, arrondi au millimètre supérieur. `53 × 0,25 = 13,25` → **14 mm**.
- *
- * ⚠ Et l'arrondi n'est pas une coquetterie : il donne la marge qui fait que
- * TOUTES les étiquettes réelles gagnent en robustesse. `zinda` passe de
- * 0,2653 à 0,3171 mm par module — c'est le vrai bénéfice de ce lot, et il vaut
- * pour chaque livre dès demain, pas seulement pour le cas limite.
- *
- * ⚠ LA BORNE GÉOMÉTRIQUE, mesurée : la hauteur d'une étiquette (26 mm) moins le
- * rembourrage laisse **23,00 mm**. `etiquettes-cote-derive.spec.ts` refuse un
- * côté qui la dépasserait — sinon le QR sortirait de l'étiquette sans que
- * personne le voie avant l'impression.
- */
-export const QR_COTE_MM = Math.ceil(MODULES_MAX_ETIQUETTE * LARGEUR_MODULE_MIN_MM);
 export const QR_ECART_MM = 2;
 export interface Planche {
   largeurMm: number;
@@ -207,13 +190,17 @@ export function largeurEtiquetteMm(p: Planche = PLANCHE): number {
 /**
  * Le QR tient-il SANS rendre le code-barres illisible ?
  *
+ * ⚠ `coteMm` est SERVI par l'API (`etiquette.coteMm`), jamais une constante
+ * locale : c'est la source unique depuis le 3 novembre 2026. Il est donc un
+ * ARGUMENT, sans valeur par défaut — un défaut serait un repli silencieux.
+ *
  * ⚠ `modules` est le nombre de MODULES du motif, pas une largeur en pixels.
  * Le backend a nommé ce piège : confondre les deux donnerait un seuil trois
  * fois trop permissif, « et le défaut ne se verrait qu'à la douchette ».
  */
-export function qrTient(modules: number, p: Planche = PLANCHE): boolean {
+export function qrTient(modules: number, coteMm: number, p: Planche = PLANCHE): boolean {
   const boxPleinMm = largeurEtiquetteMm(p) - 2 * p.padMm;
-  const boxAvecQrMm = boxPleinMm - (QR_COTE_MM + QR_ECART_MM);
+  const boxAvecQrMm = boxPleinMm - (coteMm + QR_ECART_MM);
   if (boxAvecQrMm <= 0) return false;
   return boxAvecQrMm / modules >= LARGEUR_MODULE_MIN_MM;
 }

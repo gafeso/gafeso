@@ -73,6 +73,28 @@ function service(
   };
 }
 
+/**
+ * ⚠ Le même service, mais avec un DOMAINE d'école résolvable — c'est ce qui
+ * fait prendre la branche AVEC slug. `service()` n'en a pas, et c'est
+ * précisément pourquoi il ne pouvait figer que l'autre.
+ */
+function serviceAvecDomaine() {
+  const findUnique = vi.fn(async () => structuredClone(LIGNE) as Record<string, unknown>);
+  const db = { biblioRecord: { findUnique } } as never;
+  return {
+    db,
+    service: new OpacService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { tenant: { findUnique: async () => ({ domains: [{ domain: 'bib.zinda.bf' }] }) } } as never,
+      { provenance: async () => null } as never,
+      { enregistrer: async () => true } as never,
+      { get: () => 'http://localhost:3000' } as unknown as ConfigService,
+    ),
+  };
+}
+
 /** L'ordre EXACT servi à un visiteur anonyme, relevé sur l'API en service. */
 const ORDRE_ANONYME = [
   'id', 'marcData', 'marcFormat', 'profile', 'recordType', 'title',
@@ -86,10 +108,24 @@ const ORDRE_ANONYME = [
   // demande : il doit mener à une page, et il doit dire DE QUOI il parle même
   // quand le serveur a déménagé.
     'publicUrl', 'identifiantPerenne',
-    // \u2b50 11/10/2026 (soir) \u2014 30 \u2192 31. `shortUrl` = `/opac/<id>`, celle que
-    // les \u00c9TIQUETTES encodent : \u00e0 13 mm, la forme p\u00e9renne ferait monter le QR
-    // d'une version et r\u00e9tr\u00e9cir ses modules de 8 %, sans mesure de lisibilit\u00e9.
-    // Les affiches et les PDF, eux, gardent `publicUrl`.
+    // ⭐ 11/10/2026 (soir) — 30 → 31. `shortUrl` = `/opac/<id>`.
+    //
+    // ⚠ SON MOTIF D'ORIGINE EST PÉRIMÉ, et il est REMPLACÉ ici plutôt
+    // qu'annoté à côté — 2 novembre 2026. Il disait : « celle que les
+    // ÉTIQUETTES encodent : à 13 mm la forme pérenne ferait monter le QR
+    // d'une version et rétrécir ses modules de 8 %, sans mesure de
+    // lisibilité ». La décision a été INVERSÉE sur une mesure du front : la
+    // route `/p/` raccourcit assez pour que la forme pérenne tienne, et la
+    // forme COURTE meurt avec le domaine.
+    //
+    // `shortUrl` reste servie — on n'enlève jamais une adresse qu'un QR a pu
+    // graver — mais ce n'est plus elle que l'étiquette encode : c'est
+    // `etiquette.adresseGravee`, juste en dessous.
+    //
+    // ⚠ Et j'avais d'abord écrit la correction À CÔTÉ du texte faux, dans le
+    // bloc suivant. « Corriger en ajoutant à côté ne corrige rien » : le
+    // lecteur croit la première affirmation, et celle qui le détrompe arrive
+    // trop tard. Le texte faux est donc parti.
     'shortUrl',
     /**
      * ⭐ 02/11/2026 — 33 → 34. `etiquette` : ce que le PDF GRAVE, servi à qui
@@ -148,6 +184,52 @@ describe('contrat de /opac/records/:id — la forme servie est figée', () => {
     const { db, service: s } = service();
     const r = await s.recordDetail(db, 'rec-1', false);
     expect(Object.keys(r)).toEqual(ORDRE_ANONYME);
+  });
+
+  /**
+   * 🔴 LA BRANCHE AVEC SLUG — celle que TOUS les lecteurs empruntent, et que
+   * RIEN ne figeait.
+   *
+   * *Dette que j'avais NOMMÉE le 2 novembre 2026 ; Jean a exigé qu'elle soit
+   * FERMÉE, pas notée : « un garde dont la population exclut silencieusement
+   * le cas qui compte ».*
+   *
+   * ## ⚠ CE QUE LA MESURE A TROUVÉ, ET C'ÉTAIT PIRE QUE « NON GELÉ »
+   *
+   * Les deux branches rendaient les MÊMES 36 clés **DANS UN ORDRE
+   * DIFFÉRENT** :
+   *
+   *   sans slug : … publicUrl, identifiantPerenne, shortUrl, etiquette …
+   *   avec slug : … identifiantPerenne, publicUrl, shortUrl, etiquette …
+   *
+   * Or ce fichier dit, en tête, que « l'ordre est la seule chose qui distingue
+   * *j'ai figé le contrat* de *j'ai reconstruit un objet qui ressemble* ».
+   * Deux ordres, c'étaient deux contrats — et le seul gelé était celui du cas
+   * ANONYME SANS DOMAINE, que personne ne rencontre en service.
+   *
+   * L'ordre d'affectation a donc été ALIGNÉ dans `opac.service.ts`, et les
+   * deux branches sont figées ici. On ne gèle pas deux formes : on en supprime
+   * une.
+   */
+  it('🔴 AVEC SLUG : les MÊMES clés, dans le MÊME ordre que sans slug', async () => {
+    const { db, service: s } = serviceAvecDomaine();
+    const r = await s.recordDetail(db, 'rec-1', false, 'zinda');
+    expect(Object.keys(r)).toEqual(ORDRE_ANONYME);
+  });
+
+  it('⭐ et les VALEURS, elles, sont peuplées — sinon ce gel ne mesurerait rien', async () => {
+    // ⚠ Un gel de CLÉS passerait sur une branche qui les met toutes à `null`.
+    // Ces assertions-ci disent que la branche fait son travail, et c'est ce qui
+    // distingue « la forme est figée » de « la forme est figée ET servie ».
+    const { db, service: s } = serviceAvecDomaine();
+    const r = (await s.recordDetail(db, 'rec-1', false, 'zinda')) as Record<string, unknown>;
+    expect(r.identifiantPerenne).toBe('oai:zinda:rec-1');
+    expect(String(r.publicUrl)).toContain('/opac/resoudre/');
+    expect(String(r.shortUrl)).toContain('/opac/rec-1');
+    expect(r.etiquette).toMatchObject({
+      adresseGravee: expect.stringContaining('/P/OAI:ZINDA:REC-1'),
+      coteMm: 14,
+    });
   });
 
   it('⚠ MEMBRE : la branche que protège I7, et que le filet ne voit pas', async () => {

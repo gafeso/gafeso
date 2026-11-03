@@ -17,6 +17,9 @@
  * sous-ensemble comprises. Sans cet accord, on validerait une planche à l'écran
  * et une autre sortirait.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -25,7 +28,6 @@ import { LIBELLES } from '@/lib/libelles';
 import {
   LARGEUR_MODULE_MIN_MM,
   PLANCHE,
-  QR_COTE_MM,
   SILENCE_BARRES,
   barresCode128,
   largeurEtiquetteMm,
@@ -80,6 +82,8 @@ describe('l’encodeur Code 128', () => {
   });
 });
 
+const SOURCE_GEO = readFileSync(join(__dirname, '..', 'lib', 'code128.ts'), 'utf8');
+
 describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
   /**
    * L'invariant vient du backend, et il a corrigé un défaut de ce lot : mon
@@ -92,7 +96,7 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
    */
   it('à TROIS colonnes, le QR tient pour tous les codes du fonds', () => {
     for (const modules of [57, 112, 123, 145]) {
-      expect(qrTient(modules, { ...PLANCHE, colonnes: 3 }), `${modules} modules`).toBe(true);
+      expect(qrTient(modules, 14, { ...PLANCHE, colonnes: 3 }), `${modules} modules`).toBe(true);
     }
   });
 
@@ -102,10 +106,10 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
    * juste — et c'est exactement le défaut que j'avais.
    */
   it('⚠ à QUATRE colonnes, un code de 123 modules fait ABANDONNER le QR', () => {
-    expect(qrTient(123, { ...PLANCHE, colonnes: 4 })).toBe(false);
+    expect(qrTient(123, 14, { ...PLANCHE, colonnes: 4 })).toBe(false);
     // Et le seuil est bien celui du backend : 0,25 mm par module.
     const l = largeurEtiquetteMm({ ...PLANCHE, colonnes: 4 });
-    expect((l - 2 * PLANCHE.padMm - 15) / 123).toBeLessThan(LARGEUR_MODULE_MIN_MM);
+    expect((l - 2 * PLANCHE.padMm - 16) / 123).toBeLessThan(LARGEUR_MODULE_MIN_MM);
   });
 
   it('⚠ les cotes de la planche sont celles du PDF — sauf UNE, déclarée', () => {
@@ -136,10 +140,21 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
    * jour. Une divergence résolue mais toujours déclarée est une ligne de plus
    * qui ne dit plus le vrai.
    */
-  it('🔴 divergence DÉCLARÉE : le côté du QR, 14 ici contre 13 au PDF', () => {
-    expect(QR_COTE_MM).toBe(14);
-    // ⚠ et il est DÉRIVÉ, pas recopié — le témoin est dans
-    // `etiquettes-cote-derive.spec.ts`, qui le recalcule depuis le seuil.
+  /**
+   * ⭐⭐ LA DIVERGENCE EST FERMÉE — 3 novembre 2026.
+   *
+   * Ce cas a déclaré, le 2 novembre, un écart VOULU : 14 mm ici contre 13 au
+   * PDF. Il n'a plus d'objet — l'API sert `etiquette.coteMm` et les deux
+   * sorties le lisent. Mesuré par l'effet sur la même notice : la matrice du
+   * PDF vaut 39,685 points, soit 14,0000 mm, et le tracé web porte la même
+   * chaîne gravée.
+   *
+   * ⚠ Une divergence résolue mais toujours déclarée serait une ligne de plus
+   * qui ne dit plus le vrai. Le côté ne se vérifie donc plus ici : c'est
+   * `etiquettes-cote-servi.spec.tsx` qui garde la consommation.
+   */
+  it('⭐ le côté n’est plus une constante de ce workspace', () => {
+    expect(SOURCE_GEO.split('\n').find((l) => /^export const QR_COTE_MM\b/.test(l))).toBeUndefined();
   });
 
   it('⚠ le QR DISPARAÎT du rendu quand il est abandonné, et l’abandon se DIT', () => {
@@ -149,7 +164,7 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
         cote="SCI"
         titre="T"
         etablissement="E"
-        urlNotice={URL_NOTICE}
+        etiquette={{ adresseGravee: URL_NOTICE as string, coteMm: 14 }}
         colonnes={4}
       />,
     );
@@ -164,7 +179,7 @@ describe('⭐⭐ LA PLACE DU QR EST DEMANDÉE, PAS PRISE', () => {
         cote="SCI"
         titre="T"
         etablissement="E"
-        urlNotice={URL_NOTICE}
+        etiquette={{ adresseGravee: URL_NOTICE as string, coteMm: 14 }}
         colonnes={3}
       />,
     );
@@ -186,7 +201,7 @@ describe('l’étiquette rendue', () => {
       cote="SCI MAT"
       titre="Mathématiques appliquées et développement local"
       etablissement="Université d’Exemple"
-      urlNotice={URL_NOTICE}
+      etiquette={{ adresseGravee: URL_NOTICE as string, coteMm: 14 }}
     />,
   );
 
@@ -226,7 +241,7 @@ describe('l’étiquette rendue', () => {
         cote="SCI"
         titre="T"
         etablissement="E"
-        urlNotice={URL_NOTICE}
+        etiquette={{ adresseGravee: URL_NOTICE as string, coteMm: 14 }}
       />,
     );
     expect(casse).toContain('BIB-é0123');
@@ -242,7 +257,7 @@ describe('l’étiquette rendue', () => {
         cote={null}
         titre="T"
         etablissement="E"
-        urlNotice={URL_NOTICE}
+        etiquette={{ adresseGravee: URL_NOTICE as string, coteMm: 14 }}
       />,
     );
     expect(sansCote).not.toMatch(/—|s\.\s?d\.|sans cote/i);

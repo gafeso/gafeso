@@ -12,6 +12,14 @@
 #   ./install.sh --force              # ré-écrase un .env.prod existant
 #   ./install.sh --skip-dns-check     # poursuivre malgré un DNS non conforme
 #   ./install.sh --install-docker     # autoriser l'installation de Docker sans question
+#   ./install.sh --dry-run            # À BLANC : tout jusqu'à la porte du démarrage
+#
+# ⚠ LE MODE À BLANC EST UN PRÉFIXE STRICT DE L'INSTALLATION RÉELLE, pas une
+# variante : il exécute les mêmes fonctions, dans le même ordre, et S'ARRÊTE une
+# ligne avant `check_dns`. Il ne fait RIEN que l'installation réelle ne fasse.
+# Il écrit son `.env.prod` dans un dossier temporaire qu'il supprime en sortant,
+# donc il ne touche pas à une installation existante et ne laisse rien qui
+# ferait refuser un lancement réel ensuite. Aucun secret n'est affiché.
 #   ./install.sh --help
 #
 # Docker absent ? Le script propose de l'installer via le script officiel
@@ -23,7 +31,7 @@
 # Le script les rappelle en tête et les vérifie avant de démarrer Caddy : sans
 # eux, Let's Encrypt ne peut pas délivrer les certificats.
 #
-# L'utilisateur ne choisit AUCUN secret : Postgres, JWT, MinIO, clé API admin
+# L'utilisateur ne choisit AUCUN secret : Postgres, JWT, stockage objet, clé API admin
 # et mot de passe super-admin sont tirés au hasard, forts, et affichés UNE
 # fois. Idempotent : refuse d'écraser une installation existante sans --force.
 # ═════════════════════════════════════════════════════════════════════════
@@ -47,6 +55,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 COMPOSE_FILE="docker/docker-compose.prod.yml"
 ENV_FILE=".env.prod"
+DRY_RUN=0
 
 # slugify() / slug_is_valid() — dérivation de l'identifiant d'établissement.
 # Testées par scripts/lib/slugify.test.sh.
@@ -109,6 +118,7 @@ parse_args() {
       --no-build) DO_BUILD=0 ;;
       --skip-dns-check) SKIP_DNS_CHECK=1 ;;
       --install-docker) INSTALL_DOCKER=1 ;;
+      --dry-run) DRY_RUN=1 ;;
       -h|--help) usage ;;
       *) die "Argument inconnu : $1 (voir --help)" ;;
     esac
@@ -157,7 +167,12 @@ gen_secret() { openssl rand -base64 "${1:-32}" | tr -d '\n=' | tr '+/' '-_'; }
 #    ne gère pas les valeurs multilignes → on écrit le PEM sur UNE ligne avec les
 #    retours échappés « \n » ; le service les reconvertit (skPem.replace(/\\n/g)).
 gen_content_kek() { openssl rand -base64 32 | tr -d '\n'; }
-gen_license_key() { openssl genpkey -algorithm ed25519 | awk 'BEGIN{ORS="\\n"}1'; }
+# ⚠ UNE SEULE dérivation de l'aplatissement, consommée par le GÉNÉRATEUR et par
+# le chemin des valeurs HÉRITÉES. Un fichier d'environnement lu par docker
+# compose ne sait pas représenter une valeur sur plusieurs lignes : les retours
+# deviennent des `\n` littéraux, et l'API les relit ainsi depuis toujours.
+aplatir_pem() { awk 'BEGIN{ORS="\\n"}1'; }
+gen_license_key() { openssl genpkey -algorithm ed25519 | aplatir_pem; }
 
 # Relit une valeur déjà présente dans un .env.prod existant (mode --force) :
 # ces deux clés sont liées aux DONNÉES (contenus chiffrés, licences déjà émises)
@@ -239,7 +254,7 @@ wait_for_docker_daemon() {
 }
 
 check_prereqs() {
-  step "1/7 · Vérification des prérequis"
+  step "2/7 · Vérification des prérequis"
   command -v git >/dev/null 2>&1 || apt_offer git git
   command -v openssl >/dev/null 2>&1 || apt_offer openssl openssl
   command -v curl >/dev/null 2>&1 || apt_offer curl curl
@@ -468,7 +483,7 @@ load_config() {
 }
 
 collect_answers() {
-  step "2/7 · Configuration"
+  step "1/7 · Configuration"
 
   # Domaine ou localhost
   ask DOMAIN "Domaine principal (ou 'localhost' pour un essai local)" "${DOMAIN:-localhost}"
@@ -695,7 +710,37 @@ write_env() {
   JWT_SECRET="$(gen_secret 40)"
   ADMIN_API_KEY="$(gen_secret 32)"
   MEILI_MASTER_KEY="$(gen_secret 32)"
-  MINIO_ROOT_PASSWORD="$(gen_secret 24)"
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 LES IDENTIFIANTS DU STOCKAGE SONT AU FORMAT QUE **GARAGE** EXIGE
+  #
+  # ⚠ MESURÉ le 3 novembre 2026, dans le dépôt PUBLIC : cette ligne produisait
+  # `gen_secret 24`, c'est-à-dire du **base64url**, et l'identifiant retombait
+  # sur `gafeso`. Or `scripts/lib/garage-initialiser.mjs` EXIGE :
+  #     clé    : /^GK[0-9a-f]{24}$/
+  #     secret : /^[0-9a-f]{64}$/
+  # Donc `garage-init` REFUSAIT, et toute installation NEUVE s'arrêtait là.
+  # (Correctement, en nommant le format attendu — c'était la seule bonne
+  # nouvelle, et c'est ce refus qui a rendu le défaut trouvable.)
+  #
+  # ⚠ `install.sh` ne contenait PAS UNE SEULE FOIS le mot « garage » sur ses
+  # 962 lignes : la bascule avait mis à jour le compose, DEPLOY.md et
+  # l'auto-contrôle — pas l'installateur.
+  #
+  # ⚠ ET LE NOM DES VARIABLES RESTE `MINIO_ROOT_*`, délibérément. Tranché par
+  # Jean : le renommer toucherait le contrat d'environnement de TOUTES les
+  # installations existantes, et « une variable renommée en silence est pire
+  # qu'une variable mal nommée ». Le nom est HÉRITÉ de MinIO et ne le désigne
+  # plus : il porte la clé et le secret GARAGE. Renommage inscrit en dette
+  # V1.1 avec son chemin de migration — voir docs/backlog-backend.md.
+  #
+  # ⚠ Ces deux générateurs et le validateur sont DEUX SOURCES qui doivent
+  # s'accorder. `apps/api/src/common/format-des-identifiants-garage.spec.ts`
+  # les CONFRONTE en
+  # EXÉCUTANT ces lignes-ci et en appliquant les expressions lues dans le
+  # validateur — il tombe si l'un bouge sans l'autre.
+  # ═══════════════════════════════════════════════════════════════════════
+  MINIO_ROOT_USER="GK$(openssl rand -hex 12)"
+  MINIO_ROOT_PASSWORD="$(openssl rand -hex 32)"
 
   # Clés du cœur offline : générées UNIQUEMENT si absentes (une clé fournie via
   # install.conf, ou déjà présente dans un .env.prod réécrit avec --force, est
@@ -705,6 +750,28 @@ write_env() {
   OFFLINE_LICENSE_PRIVATE_KEY="${OFFLINE_LICENSE_PRIVATE_KEY:-$(read_env_value OFFLINE_LICENSE_PRIVATE_KEY)}"
   [ -n "$OFFLINE_CONTENT_KEK" ] || OFFLINE_CONTENT_KEK="$(gen_content_kek)"
   [ -n "$OFFLINE_LICENSE_PRIVATE_KEY" ] || OFFLINE_LICENSE_PRIVATE_KEY="$(gen_license_key)"
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 UNE VALEUR HÉRITÉE MULTILIGNE ÉCRIVAIT UN .env.prod ILLISIBLE
+  #
+  # *Trouvé le 3 novembre 2026 par le mode à blanc lui-même, à sa première
+  # exécution sous `test:base` — qui injecte `.env` dans l'environnement :*
+  #
+  #   failed to read /tmp/…/.env.prod: line 67: key cannot contain a space
+  #
+  # Un PEM est multiligne par nature, et c'est la forme sous laquelle un
+  # exploitant ou une CI l'exporte. `gen_license_key` aplatissait déjà le PEM
+  # qu'il ENGENDRE ; le chemin de la valeur HÉRITÉE ne le faisait pas. Deux
+  # chemins pour une même valeur, dont un seul respectait la convention.
+  #
+  # ⚠ Reproduit en expérience CONTRÔLÉE, avec une fausse clé, jamais avec la
+  # vraie : exporter trois lignes suffit à casser toute installation.
+  # ═══════════════════════════════════════════════════════════════════════
+  case "$OFFLINE_LICENSE_PRIVATE_KEY" in
+    *"$(printf '\n')"*)
+      OFFLINE_LICENSE_PRIVATE_KEY="$(printf '%s' "$OFFLINE_LICENSE_PRIVATE_KEY" | aplatir_pem)"
+      info "Clé de licence héritée sur plusieurs lignes : aplatie en \\n (forme attendue par l'API)."
+      ;;
+  esac
 
   # Identifiants d'infrastructure. Ordre de priorité, du plus fort au plus faible :
   #   1. valeur fournie par l'environnement / install.conf ;
@@ -712,7 +779,7 @@ write_env() {
   #   3. défaut « gafeso » pour une installation neuve.
   #
   # Le point 2 est essentiel : ces identifiants nomment la BASE, le RÔLE
-  # PostgreSQL, les CLÉS MinIO et le préfixe des VOLUMES. Les réécrire sur une
+  # PostgreSQL, les CLÉS DU STOCKAGE et le préfixe des VOLUMES. Les réécrire sur une
   # installation en service pointerait vers une base et des volumes qui
   # n'existent pas — service à terre, données apparemment disparues.
   local COMPOSE_PROJECT_NAME_VALUE="${COMPOSE_PROJECT_NAME:-$(read_env_value COMPOSE_PROJECT_NAME)}"
@@ -722,7 +789,38 @@ write_env() {
   COMPOSE_PROJECT_NAME_VALUE="${COMPOSE_PROJECT_NAME_VALUE:-gafeso-prod}"
   POSTGRES_USER_VALUE="${POSTGRES_USER_VALUE:-gafeso}"
   POSTGRES_DB_VALUE="${POSTGRES_DB_VALUE:-gafeso}"
-  MINIO_ROOT_USER_VALUE="${MINIO_ROOT_USER_VALUE:-gafeso}"
+  # ⚠ LE REPLI « gafeso » EST RETIRÉ : il ne respecte pas /^GK[0-9a-f]{24}$/,
+  # donc il garantissait le refus de `garage-init`. Si aucune valeur n'est
+  # héritée d'un `.env.prod` existant, on en ENGENDRE une valide plutôt que de
+  # poser une chaîne que le validateur rejettera.
+  MINIO_ROOT_USER_VALUE="${MINIO_ROOT_USER_VALUE:-GK$(openssl rand -hex 12)}"
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # 🔴 LES DEUX SECRETS DE GARAGE — réclamés par le compose, jamais écrits
+  #
+  # *Mesuré le 3 novembre 2026 PAR L'EFFET, en donnant à `docker compose
+  # config` l'environnement EXACT que cet installateur produisait :*
+  #
+  #   error while interpolating services.garage.environment.GARAGE_RPC_SECRET:
+  #   required variable GARAGE_RPC_SECRET is missing a value
+  #
+  # Le compose les exige en `${VAR:?message}` — donc **aucun conteneur ne
+  # démarrait** sur une installation neuve. Même aveuglement que les
+  # identifiants au format MinIO : la bascule vers Garage a mis à jour le
+  # compose, `garage.toml`, `DEPLOY.md` et l'auto-contrôle, pas l'installateur.
+  # Signalés par la lecture : 4. Trouvés en confrontant les variables
+  # RÉCLAMÉES par le compose à celles ÉCRITES ici : 5.
+  #
+  # ⚠ ILS SE PRÉSERVENT, comme les clés du cœur offline. `rpc_secret`
+  # authentifie le nœud et `admin_token` est ce que `garage-init` présente à
+  # l'API d'administration : les réécrire sur une installation en service
+  # couperait l'accès au stockage — donc aux documents — sur une pile qui a
+  # l'air saine.
+  # ═════════════════════════════════════════════════════════════════════════
+  local GARAGE_RPC_SECRET_VALUE="${GARAGE_RPC_SECRET:-$(read_env_value GARAGE_RPC_SECRET)}"
+  local GARAGE_ADMIN_TOKEN_VALUE="${GARAGE_ADMIN_TOKEN:-$(read_env_value GARAGE_ADMIN_TOKEN)}"
+  GARAGE_RPC_SECRET_VALUE="${GARAGE_RPC_SECRET_VALUE:-$(openssl rand -hex 32)}"
+  GARAGE_ADMIN_TOKEN_VALUE="${GARAGE_ADMIN_TOKEN_VALUE:-$(openssl rand -hex 32)}"
 
   # Une réinstallation --force sur une base historique doit le DIRE : sinon
   # l'exploitant croit être passé à gafeso alors que son infra reste nommée
@@ -781,10 +879,18 @@ SEARCH_ENGINE=${SEARCH_ENGINE}
 MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
 $([ "$SEARCH_ENGINE" = elasticsearch ] && echo "ELASTIC_NODE=${ELASTIC_NODE}")
 
-# ── MinIO ──
+# ── Stockage objet (Garage) ──
+# ⚠ Les deux variables MINIO_ROOT_* portent la clé et le secret GARAGE. Le nom
+# est HÉRITÉ et conservé délibérément : le renommer casserait le contrat
+# d'environnement de toute installation existante. Dette V1.1.
 MINIO_ROOT_USER=${MINIO_ROOT_USER_VALUE}
 MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
 MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+
+# Secrets de Garage. Le compose les exige sans valeur par défaut : sans eux,
+# aucun conteneur ne démarre. Conservés à l'identique sur une réinstallation.
+GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET_VALUE}
+GARAGE_ADMIN_TOKEN=${GARAGE_ADMIN_TOKEN_VALUE}
 
 # ── Email (vide = emails journalisés, pas envoyés) ──
 SMTP_HOST=${SMTP_HOST}
@@ -811,11 +917,37 @@ compose_up() {
   CLEANUP_HINT="Installation interrompue. Pour repartir de zéro : dc down -v puis rm -f $ENV_FILE."
   local build_flag=""
   [ "$DO_BUILD" = 1 ] && build_flag="--build"
+
   info "docker compose up -d $build_flag (première fois : construction des images, plusieurs minutes)…"
   dc up -d $build_flag
 
   info "Attente des services (healthchecks)…"
-  local services="db meilisearch minio api web caddy"
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 LA POPULATION EST **DÉRIVÉE** DU COMPOSE, PLUS ÉCRITE À LA MAIN
+  #
+  # ⚠ Elle valait `db meilisearch minio api web caddy`. Mesuré : `minio` n'est
+  # plus dans le compose depuis rc14, donc `dc ps -q minio` rendait VIDE,
+  # l'état passait à « absent », `all_ok` restait à 0 **pour toujours**, et
+  # l'installation mourait au bout de 900 s sur « Délai dépassé ». Et `garage`
+  # n'y figurait PAS, donc sa santé n'était jamais attendue.
+  #
+  # ⭐ LE CORRECTIF N'EST PAS DE CORRIGER LA LISTE — c'est le défaut qu'on
+  # traque depuis deux jours : une population DÉCLARÉE là où il faut une
+  # population DÉRIVÉE. Dérivée du compose, elle ne peut plus diverger du réel.
+  #
+  # ⚠ `garage-init` est EXCLU, et c'est la seule exclusion : c'est un conteneur
+  # d'initialisation qui SORT après son travail (`exited 0`), donc il ne sera
+  # jamais `healthy` ni `running`. L'attendre bloquerait pour toujours — le
+  # défaut qu'on vient de corriger, à l'envers.
+  # ═══════════════════════════════════════════════════════════════════════
+  local services
+  services="$(dc config --services 2>/dev/null | grep -v '^garage-init$' | tr '\n' ' ')"
+  if [ -z "${services// /}" ]; then
+    die "Impossible de lire les services du compose (dc config --services).
+  Sans cette liste, l'attente des healthchecks ne mesurerait RIEN : elle
+  passerait immédiatement sur une population vide."
+  fi
+  info "services attendus (dérivés du compose) :$services"
   local timeout=900 elapsed=0
   while :; do
     local all_ok=1 line=""
@@ -851,6 +983,70 @@ compose_up() {
 # exactement ce qui nous a coûté douze jours ». C'est pour cela qu'elle n'est
 # pas une ligne de « À faire ensuite ».
 # ═══════════════════════════════════════════════════════════════════════
+poser_version() {
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 LA VERSION SE POSE AVANT LE BUILD — elle est figée DANS l'image
+  #
+  # *Mesuré le 3 novembre 2026 : cet installateur construisait les images
+  # (`--build`) sans jamais poser `GAFESO_VERSION` ni `GAFESO_COMMIT`.* Toute
+  # installation auto-hébergée rendait donc « non étiquetée » sur /health
+  # **pour toujours**, et un commit VIDE — alors que c'est le numéro que le
+  # support lira le jour d'une panne. C'est le défaut du 6 octobre repris à
+  # l'identique : « une dégradation honnête fait passer la panne pour une
+  # fonctionnalité », le repli étant correct et la CONDITION fautive.
+  #
+  # ⚠ ON EMPLOIE LA DÉRIVATION PARTAGÉE, on n'en écrit pas une seconde.
+  # `scripts/version-du-depot.sh` est la même que celle de DEPLOY.md : elle
+  # sait refuser un arbre modifié, distingue suivi et non suivi, et n'invente
+  # jamais d'étiquette approchante.
+  # ═══════════════════════════════════════════════════════════════════════
+  local V
+  if V="$(scripts/version-du-depot.sh --exporter 2>/dev/null)"; then
+    eval "$V"
+    export GAFESO_VERSION GAFESO_COMMIT
+    info "Version construite : $GAFESO_VERSION ($GAFESO_COMMIT)"
+  else
+    # Le script a REFUSÉ — arbre modifié. On ne force pas et on ne devine pas :
+    # il écrit lui-même les trois issues, on le laisse les dire.
+    warn "La version du dépôt n'a pas pu être posée :"
+    scripts/version-du-depot.sh --exporter >/dev/null || true
+    # ⚠ GAFESO_VERSION n'est PAS posée : le compose porte le défaut
+    # « non étiquetée », et une seule source vaut mieux qu'une chaîne recopiée.
+    # GAFESO_COMMIT, lui, n'a aucun défaut — vide, il ne dirait rien.
+    export GAFESO_COMMIT='arbre-modifie'
+    info "L'image dira « non étiquetée » sur /health. C'est EXACT : ce code ne"
+    info "correspond à aucune version publiée."
+  fi
+}
+
+# ═════════════════════════════════════════════════════════════════════════
+# Le `.env.prod` écrit satisfait-il le compose ? — DANS LE CHEMIN PARTAGÉ.
+#
+# ⚠ Elle n'est PAS une étape du mode à blanc : l'installation réelle la joue
+# aussi, et c'est ce qui fait du mode à blanc un PRÉFIXE et non une branche
+# parallèle — « deux chemins qui s'accordent s'accordent par coïncidence ».
+#
+# ⚠ Sans elle, le défaut mesuré le 3 novembre 2026 se manifestait au `up` :
+#   required variable GARAGE_RPC_SECRET is missing a value
+# Le même refus, posé ICI, nomme la cause avant que rien ne soit lancé.
+#
+# ⚠ TROIS ISSUES, pas deux : Docker absent ou hors service n'est pas la même
+# chose qu'un environnement incomplet, et les confondre renverrait l'exploitant
+# chercher une variable alors que son démon ne tourne pas.
+# ═════════════════════════════════════════════════════════════════════════
+verifier_compose() {
+  info "Vérification : le fichier d'environnement satisfait-il le compose ?"
+  local sortie
+  if ! docker info >/dev/null 2>&1; then
+    die "INDÉCIDABLE : Docker ne répond pas. Impossible de dire si l'environnement est complet."
+  fi
+  if ! sortie="$(dc config -q 2>&1)"; then
+    printf '%s\n' "$sortie" | sed 's/^/    /' >&2
+    die "Le compose REFUSE cet environnement (voir ci-dessus). Rien n'a été lancé."
+  fi
+  ok "L'environnement est complet : le compose se résout."
+}
+
 autocontrole() {
   step "6/7 · Lecture d'un document, de bout en bout"
   # ⚠ Les chemins d'install.sh sont RELATIFS (il exige la racine du dépôt comme
@@ -899,7 +1095,10 @@ recap() {
   printf '%sAccès%s\n' "$BOLD" "$RST"
   printf '  Application (vitrine + OPAC) : %s%s%s\n' "$CYN" "$APP_URL" "$RST"
   printf '  API directe                  : %s%s%s\n' "$CYN" "${API_DOMAIN}" "$RST"
-  printf '  Stockage (couvertures)       : %s%s%s\n' "$CYN" "${STORAGE_DOMAIN}" "$RST"
+  # ⚠ « couvertures » SOUS-DISAIT : ce domaine sert aussi les documents
+  # numériques — c'est lui que l'application mobile lit pour télécharger, et
+  # c'est son absence de CORS qui a coûté douze jours de lecture muette.
+  printf '  Stockage (documents, images) : %s%s%s\n' "$CYN" "${STORAGE_DOMAIN}" "$RST"
 
   printf '\n%s⚠ Identifiants générés — À NOTER MAINTENANT (non réaffichés)%s\n' "$YLW$BOLD" "$RST"
   # Le super-admin PLATEFORME n'a PAS d'interface web : c'est une API (gestion
@@ -931,7 +1130,13 @@ recap() {
   printf '  %sRien à créer pour commencer : téléversez un document, il est accessible.%s\n' "$DIM" "$RST"
 
   printf '\n%sDonnées%s\n' "$BOLD" "$RST"
-  printf '  Volumes Docker : %s_db_data, %s_minio_data, %s_meili_data…\n' "$vol_prefix" "$vol_prefix" "$vol_prefix"
+  # ⚠ DÉRIVÉS DU COMPOSE, et non écrits : la ligne annonçait « %s_minio_data »,
+  # un volume qui N'EXISTE PLUS (les volumes du stockage sont `garage_meta` et
+  # `garage_data`). Un auto-hébergeur qui sauvegardait ce volume sauvegardait
+  # du VIDE — et c'est la première page qu'il lit.
+  local volumes
+  volumes="$(dc config --volumes 2>/dev/null | sed "s/^/${vol_prefix}_/" | paste -sd, - | sed 's/,/, /g')"
+  printf '  Volumes Docker : %s\n' "${volumes:-<illisibles : dc config --volumes a échoué>}"
   printf '  Configuration  : %s/%s (chmod 600 — contient les secrets)\n' "$REPO_ROOT" "$ENV_FILE"
 
   printf '\n%sÀ faire ensuite%s\n' "$BOLD" "$RST"
@@ -942,8 +1147,37 @@ recap() {
   printf '\n'
 }
 
+# ═════════════════════════════════════════════════════════════════════════
+# Ce que le mode à blanc a prouvé, ce qu'il n'a pas pu prouver, et ce qu'il
+# NE LAISSE PAS derrière lui.
+# ═════════════════════════════════════════════════════════════════════════
+bilan_a_blanc() {
+  printf '\n%s%s── Mode à blanc : rien n'"'"'a été lancé ──%s\n' "$BOLD" "$CYN" "$RST"
+  ok "Prérequis vérifiés, secrets engendrés, environnement écrit et RÉSOLU par le compose."
+  info "Version qui aurait été construite : ${GAFESO_VERSION:-non étiquetée} (${GAFESO_COMMIT:-inconnu})"
+  printf '\n%sCE QUI N'"'"'A PAS ÉTÉ ÉPROUVÉ, et il faut un vrai serveur pour ça :%s\n' "$DIM" "$RST"
+  printf '%s  · les DNS et les certificats Let'"'"'s Encrypt (check_dns non joué) ;%s\n' "$DIM" "$RST"
+  printf '%s  · la construction des images, les migrations, le provisionnement ;%s\n' "$DIM" "$RST"
+  printf '%s  · l'"'"'auto-contrôle de lecture d'"'"'un document de bout en bout.%s\n' "$DIM" "$RST"
+  # ⚠ LE FICHIER PORTE DE VRAIS SECRETS : il est supprimé, et son chemin n'est
+  # pas conservé. Aucune valeur n'a été affichée.
+  if [ -n "${DRY_RUN_TMP:-}" ] && [ -d "$DRY_RUN_TMP" ]; then
+    rm -rf -- "$DRY_RUN_TMP"
+    ok "Dossier temporaire supprimé — aucun $(basename "$ENV_FILE") résiduel, rien ne bloquera une installation réelle."
+  fi
+}
+
 main() {
   parse_args "$@"
+  # ⚠ LA SEULE DIFFÉRENCE DU MODE À BLANC : où le fichier est écrit. Aucune
+  # fonction n'est modifiée, aucune branche n'est ajoutée dans `write_env` —
+  # c'est `ENV_FILE` qui change, et `dc()` le suit. Une épreuve garde cette
+  # propriété : `format-du-mode-a-blanc.spec.ts`.
+  if [ "$DRY_RUN" = 1 ]; then
+    DRY_RUN_TMP="$(mktemp -d)"
+    ENV_FILE="$DRY_RUN_TMP/$(basename "$ENV_FILE")"
+    trap 'rm -rf -- "${DRY_RUN_TMP:-}"' EXIT INT TERM
+  fi
   printf '%s%sGafeso — installateur%s\n' "$BOLD" "$CYN" "$RST"
   [ -f "$COMPOSE_FILE" ] || die "Lancez ce script depuis la racine du dépôt Gafeso."
   [ -n "$CONFIG_FILE" ] && load_config
@@ -952,6 +1186,9 @@ main() {
   announce_dns      # AVANT tout travail : le client peut créer ses DNS pendant l'installation
   check_prereqs
   write_env
+  poser_version     # partagée AUSSI : sinon le mode à blanc ne l'éprouve pas
+  verifier_compose  # partagée : le mode à blanc s'arrête APRÈS elle
+  [ "$DRY_RUN" = 1 ] && { bilan_a_blanc; return 0; }
   check_dns         # dernier point de contrôle juste avant de lancer Caddy/ACME
   compose_up
   provision

@@ -1,5 +1,5 @@
 import { encode } from 'uqr';
-import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM, SILENCE } from './code128';
+import { LARGEUR_MODULE_MIN_MM, SILENCE } from './code128';
 
 /**
  * LE QR CODE, CALCULÉ LOCALEMENT — zéro requête.
@@ -88,7 +88,7 @@ export { SILENCE };
  * c'est exactement ce que cette fonction existe pour ATTRAPER, au lieu de
  * dessiner un QR trop fin pour l'imprimante.
  */
-export const moduleQrMm = (modules: number, coteMm = QR_COTE_MM) =>
+export const moduleQrMm = (modules: number, coteMm: number) =>
   coteMm / (modules + 2 * SILENCE);
 
 /**
@@ -96,7 +96,7 @@ export const moduleQrMm = (modules: number, coteMm = QR_COTE_MM) =>
  * `qrTient`, qui demande s'il laisse la place au CODE-BARRES. Les deux doivent
  * être vraies, et confondre les deux laisserait passer un cas chacune.
  */
-export const qrAssezGros = (modules: number, coteMm = QR_COTE_MM) =>
+export const qrAssezGros = (modules: number, coteMm: number) =>
   moduleQrMm(modules, coteMm) >= LARGEUR_MODULE_MIN_MM;
 
 export interface Matrice {

@@ -35,14 +35,19 @@ import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 
 import { Etiquette } from '@/components/etiquette';
-import { LARGEUR_MODULE_MIN_MM, QR_COTE_MM } from '@/lib/code128';
+import { LARGEUR_MODULE_MIN_MM } from '@/lib/code128';
 import { matriceQr, moduleQrMm } from '@/lib/qr';
-import { pourLeQrDEtiquette } from '@/lib/url-publique';
 import { contenuDuQr } from './aide-trace-qr';
 
 const UUID = 'b2dcaa10-07f9-49ec-80ff-15e32359ee4d';
 const ORIGINE = 'https://biblio.univ-exemple.bf';
 const CANONIQUE = `${ORIGINE}/p/oai:exemple:${UUID}`;
+/**
+ * ⚠ LE CÔTÉ EST UNE DONNÉE D'ESSAI, pas une constante du produit : il est servi
+ * par `etiquette.coteMm` depuis le 3 novembre 2026, et
+ * `etiquettes-cote-servi.spec.tsx` garde qu'aucune bibliothèque ne le déclare.
+ */
+const COTE_SERVI = 14;
 
 /**
  * ⭐ L'ALPHABET DENSE, DÉRIVÉ DE L'ENCODEUR — jamais écrit.
@@ -104,17 +109,19 @@ describe("⭐ l'alphabet dense est MESURÉ sur l'encodeur", () => {
  * on identifie la chaîne qu'il porte. Une transformation glissée n'importe où
  * dans la chaîne d'appel serait vue ici.
  */
-function chaineGravee(urlNotice: string): string {
+function chaineGravee(adresse: string): string {
+  // ⚠ L'API sert l'adresse DÉJÀ gravée : on la donne telle qu'elle arrivera.
+  const gravee = adresse.toUpperCase();
   render(
     <Etiquette
       barcode="BIB-000229"
       cote="004 GAF"
       titre="Gafeso — Guide d’utilisation"
       etablissement="Université d’Exemple"
-      urlNotice={urlNotice}
+      etiquette={{ adresseGravee: gravee, coteMm: COTE_SERVI }}
     />,
   );
-  const encodé = contenuDuQr([urlNotice, pourLeQrDEtiquette(urlNotice)]);
+  const encodé = contenuDuQr([gravee, adresse]);
   expect(encodé, 'aucune candidate ne produit le tracé dessiné').not.toBeNull();
   return encodé as string;
 }
@@ -128,7 +135,7 @@ describe("⭐⭐ ce qu'une étiquette GRAVE tient dans l'alphabet dense", () => 
       `🔴 la chaîne gravée porte ${fautifs.length} caractère(s) hors du mode ` +
         `alphanumérique : ${fautifs.map((c) => `« ${c} »`).join(', ')}. Le QR ` +
         `retombe en mode OCTET, perd une version entière, et la mesure du ` +
-        `module à ${QR_COTE_MM} mm ne vaut plus rien.`,
+        `module à ${COTE_SERVI} mm ne vaut plus rien.`,
     ).toEqual([]);
   });
 
@@ -142,9 +149,9 @@ describe("⭐⭐ ce qu'une étiquette GRAVE tient dans l'alphabet dense", () => 
     const propre = matriceQr(gravee);
     const souillee = matriceQr(`${gravee}?PRINT=1`);
     expect(souillee.version).toBeGreaterThan(propre.version);
-    expect(moduleQrMm(propre.taille)).toBeGreaterThan(moduleQrMm(souillee.taille));
+    expect(moduleQrMm(propre.taille, COTE_SERVI)).toBeGreaterThan(moduleQrMm(souillee.taille, COTE_SERVI));
     // et le module propre tient le seuil
-    expect(moduleQrMm(propre.taille)).toBeGreaterThanOrEqual(LARGEUR_MODULE_MIN_MM);
+    expect(moduleQrMm(propre.taille, COTE_SERVI)).toBeGreaterThanOrEqual(LARGEUR_MODULE_MIN_MM);
   });
 
   /*

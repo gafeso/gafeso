@@ -954,14 +954,28 @@ export class OpacService {
       // couverture est composable même sans domaine déclaré.
       return;
     }
-    reponse.identifiantPerenne = construireIdentifiant(slug, id);
     const appUrl = this.config.get<string>('APP_URL')?.trim() ?? '';
     // ⚠ Sans `APP_URL`, on ne DEVINE pas : `null` est une réponse, une adresse
     // fabriquée n'en est pas une. Un QR qui mène ailleurs ne se remarque jamais.
     const domaine = appUrl ? await this.domainePrincipal(slug) : null;
+    /**
+     * 🔴 L'ORDRE D'AFFECTATION EST CELUI DE LA BRANCHE SANS SLUG, et ce n'est
+     * pas cosmétique — 3 novembre 2026.
+     *
+     * ⚠ MESURÉ : `identifiantPerenne` était posé AVANT `publicUrl` ici, et
+     * APRÈS dans la branche sans slug. Les deux branches rendaient donc les
+     * MÊMES 36 clés DANS UN ORDRE DIFFÉRENT — et le contrat gelé ne figeait
+     * que la branche sans slug, c'est-à-dire celle qu'AUCUN lecteur n'emprunte.
+     *
+     * Or ce contrat existe pour une raison écrite dans son propre fichier :
+     * « l'ordre est la seule chose qui distingue *j'ai figé le contrat* de
+     * *j'ai reconstruit un objet qui ressemble* ». Deux ordres, c'étaient deux
+     * contrats.
+     */
     reponse.publicUrl = appUrl
       ? adressePubliqueDeLaNotice(appUrl, domaine, id, slug)
       : null;
+    reponse.identifiantPerenne = construireIdentifiant(slug, id);
     // ⭐ L'ADRESSE COURTE, pour l'étiquette : voir son motif au contrat. Une
     // seule lecture du domaine pour les deux — c'est la même école.
     reponse.shortUrl = appUrl ? adresseCourteDeLaNotice(appUrl, domaine, id) : null;
