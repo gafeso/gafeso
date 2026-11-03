@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import {
   DEFAULT_DESCRIPTION_PROFILE,
   DEFENSE_RECORD_TYPES,
@@ -96,12 +96,41 @@ describe('profil de notice — l’appartenance des champs', () => {
  * qui pose `recordType` pose aussi `profile`.
  */
 describe('profil de notice — aucune écriture ne pose le type sans le profil', () => {
-  const FICHIERS = [
-    'cataloging/cataloging.service.ts',
-    'cataloging/digital-copy.service.ts',
-    'categories/categories.service.ts',
-    'authors/authors.service.ts',
-  ];
+  /**
+   * ⭐ LA POPULATION EST DÉRIVÉE, PLUS ÉCRITE À LA MAIN.
+   *
+   * *Changée le 3 novembre 2026, par le balayage de clôture de la V1.* Elle
+   * portait quatre chemins écrits à la main. Mesuré au moment du changement :
+   * la liste écrite coïncidait EXACTEMENT avec la population dérivée — zéro
+   * manquant, zéro entrée morte. Le défaut était donc LATENT, et c'est
+   * exactement le danger de cette famille : un cinquième service qui écrirait
+   * `biblioRecord` demain serait absent de la liste, et son absence serait
+   * SILENCIEUSE. Le garde dirait vert sur un fichier qu'il ne regarde pas.
+   *
+   * ⚠ Le changement est donc prouvé NEUTRE aujourd'hui et protecteur demain.
+   */
+  const FICHIERS = (() => {
+    const racine = join(__dirname, '..');
+    const trouves: string[] = [];
+    const parcourir = (dossier: string) => {
+      for (const e of readdirSync(dossier, { withFileTypes: true })) {
+        const chemin = join(dossier, e.name);
+        if (e.isDirectory()) parcourir(chemin);
+        else if (e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts')) {
+          // ⚠ Commentaires DÉPOUILLÉS : un fichier qui PARLE de
+          // `biblioRecord.update` dans sa prose n'écrit rien.
+          const code = readFileSync(chemin, 'utf-8')
+            .replace(/\/\*[\s\S]*?\*\//g, ' ')
+            .replace(/(?<!:)\/\/[^\n]*/g, ' ');
+          if (/biblioRecord\.(create|update|upsert|updateMany|createMany)\b/.test(code)) {
+            trouves.push(relative(racine, chemin));
+          }
+        }
+      }
+    };
+    parcourir(racine);
+    return trouves.sort();
+  })();
 
   /** Extrait les charges d'écriture de `biblioRecord`, par équilibrage d'accolades. */
   function chargesDEcriture(): { fichier: string; corps: string }[] {

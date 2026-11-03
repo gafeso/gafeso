@@ -25,8 +25,8 @@
  * · que chaque écran à état vide l'EMPLOIE, par une obligation déclarée ;
  * · qu'un état vide donne TOUJOURS une sortie.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -66,6 +66,19 @@ const ECRANS_A_ETAT_VIDE: ReadonlyArray<{ readonly fichier: string; readonly quo
 ];
 
 const sourceDe = (f: string) => readFileSync(resolve(process.cwd(), f), 'utf-8');
+const RACINE_APP = resolve(process.cwd(), 'app');
+
+/**
+ * ⚠ Les commentaires RETIRÉS avant de chercher `EtatVide` : un commentaire qui
+ * explique pourquoi un écran ne l'emploie PAS satisfairait la recherche. Ce
+ * dépôt a payé ce motif plusieurs fois, dont le jour même.
+ */
+const sansCommentaires = (src: string) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('//'))
+    .join('\n');
 
 describe('⭐⭐ ce que `EtatVide` REND — mesuré, pas déclaré', () => {
   function rendre(actions = [{ libelle: 'Parcourir le catalogue', href: '/opac' }]) {
@@ -150,13 +163,66 @@ describe('⭐ l’obligation : chaque écran à état vide emploie `EtatVide`', 
     }
   });
 
-  it('⭐ compte EXACT des écrans déclarés — il convoque', () => {
-    expect(ECRANS_A_ETAT_VIDE).toHaveLength(4);
-    expect(ECRANS_A_ETAT_VIDE.map((e) => e.fichier).sort()).toEqual([
-      'app/admin/etiquettes/page.tsx',
-      'app/mes-consultations/page.tsx',
-      'app/mes-documents-hors-ligne/page.tsx',
-      'app/mes-prets/page.tsx',
-    ]);
+  /**
+   * ⭐⭐ LA POPULATION EST DÉRIVÉE DU DISQUE — et elle ne l'était pas.
+   *
+   * ## 🔴 CE QUI VIVAIT LÀ, et pourquoi ça ne gardait rien
+   *
+   * ```ts
+   * expect(ECRANS_A_ETAT_VIDE).toHaveLength(4);
+   * expect(ECRANS_A_ETAT_VIDE.map((e) => e.fichier).sort()).toEqual([ …les 4… ]);
+   * ```
+   *
+   * Il comparait la liste déclarée **à une copie d'elle-même**. Il ne pouvait
+   * donc convoquer qu'au moment où quelqu'un ÉDITE la liste — jamais quand un
+   * écran neuf apparaît. Et l'en-tête de ce fichier affirmait le contraire :
+   * *« un écran neuf n'est pas dans la liste, et le compte exact convoque »*.
+   *
+   * ⚠ C'est « un garde qui compare une copie à une copie : il vérifie qu'on
+   * s'est recopié soi-même », avec une affirmation fausse écrite à côté.
+   * Trouvé le 3 novembre 2026, en balayant les populations déclarées à la
+   * clôture de la v1.
+   *
+   * ## ⭐ CE QUI LE REMPLACE : les écrans qui emploient `EtatVide`, LUS
+   *
+   * La dérivation n'est pas circulaire, et c'est la question qu'il fallait se
+   * poser : elle ne demande pas « qui devrait employer `EtatVide` » — elle
+   * demande **qui l'emploie**, et exige que celui-là soit déclaré. Un écran
+   * neuf qui adopte le composant sans entrer dans la liste échappe aux règles
+   * de ton vérifiées plus haut ; c'est la dérive réelle, et elle est fermée.
+   *
+   * ⚠⚠ SA BORNE, MESURÉE ET ÉCRITE : **25 écrans** portent un texte
+   * « aucun/aucune » SANS employer `EtatVide`. Ce n'est pas un défaut en soi —
+   * une ligne « Aucun résultat » dans un tableau n'est pas un état vide avec
+   * titre et sortie. Savoir lequel des 25 DEVRAIT basculer est un jugement par
+   * écran, pas une propriété mécanisable. Ce garde ne le prétend donc pas.
+   */
+  it('⭐⭐ tout écran qui emploie `EtatVide` est DÉCLARÉ — population dérivée', () => {
+    const ecrans: string[] = [];
+    const parcourir = (dossier: string) => {
+      for (const e of readdirSync(join(RACINE_APP, dossier), { withFileTypes: true })) {
+        const rel = dossier ? `${dossier}/${e.name}` : e.name;
+        if (e.isDirectory()) parcourir(rel);
+        else if (e.name === 'page.tsx') ecrans.push(`app/${rel}`);
+      }
+    };
+    parcourir('');
+
+    // ⚠ TÉMOIN DE LECTURE : sinon tout ce qui suit est vert sur le vide.
+    expect(ecrans.length, 'le relevé n’a lu aucun écran').toBeGreaterThan(30);
+
+    const emploient = ecrans
+      .filter((f) => sansCommentaires(sourceDe(f)).includes('EtatVide'))
+      .sort();
+    // ⚠ TÉMOIN DE PRÉSENCE sur un cas dont je connais la réponse.
+    expect(emploient).toContain('app/mes-prets/page.tsx');
+
+    const declares = ECRANS_A_ETAT_VIDE.map((e) => e.fichier).sort();
+    expect(
+      emploient,
+      'un écran emploie `EtatVide` sans être déclaré ici : il échappe aux règles ' +
+        'de ton vérifiées plus haut (aucun jeton d’erreur, aucun role="alert", ' +
+        'une SORTIE). Déclarez-le avec ce que son vide dit.',
+    ).toEqual(declares);
   });
 });

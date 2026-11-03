@@ -6,6 +6,7 @@ import { CirculationService } from './circulation.service';
 import { HOLD_PICKUP_DAYS } from './circulation-rules';
 import { PatronsService } from '../patrons/patrons.service';
 import { nomDeLAdherent } from '../patrons/noms-divergents';
+import { FORME_ADRESSE } from '../common/forme-adresse';
 
 export type TenantDb = PrismaClient;
 
@@ -13,7 +14,7 @@ const DAY_MS = 24 * 3600 * 1000;
 const ACTIVE_HOLD_STATUSES: HoldStatus[] = [HoldStatus.PENDING, HoldStatus.AVAILABLE];
 
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return FORME_ADRESSE.test(email);
 }
 
 /**

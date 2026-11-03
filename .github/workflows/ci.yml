@@ -178,3 +178,13 @@ jobs:
       # l'autre — « ne pas écrire dans un état qu'un autre processus possède ».
       - name: Gardes vivants contre une pile montée par le compose de production
         run: ./scripts/gardes-vivants-en-ci.sh --build
+
+      # ⚠ CETTE RECETTE N'EST PAS DANS `npm test`, ET C'EST UN CHOIX.
+      #
+      # Tranché par le responsable le 3 novembre 2026 : `npm test` doit rester
+      # lançable sans infrastructure, « c'est ce qui fait qu'on le lance
+      # souvent ». Elle exige un cluster PostgreSQL, un Meilisearch et une API
+      # démarrée — d'où sa place ICI. Le fichier le dit aussi, pour que
+      # personne ne la ramène dans la suite unitaire.
+      - name: Le seed conclut ce qu'il a fait (code de sortie mesuré par l'effet)
+        run: ./scripts/recette-reserves-du-seed.sh

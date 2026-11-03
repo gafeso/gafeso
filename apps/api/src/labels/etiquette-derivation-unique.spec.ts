@@ -321,50 +321,67 @@ describe('🔴 LE FRONT CONSOMME LA VALEUR SERVIE, il ne la redéclare pas', () 
         'pas dans un commentaire qui raconte la bascule',
     ).toBe(true);
   });
-
-  /**
-   * ⚠ CE CAS-CI N'EST PAS `skip`é, et c'est le seul qui compte aujourd'hui :
-   * tant que les deux dérivations coexistent, elles doivent rendre LA MÊME
-   * valeur. C'est lui qui a mordu quand on a figé le front à 13.
-   */
-  it('⭐ tant que les deux coexistent, elles rendent LA MÊME valeur', () => {
-    if (frontADejaBascule) return;
-    const nb = (motif: RegExp) => {
-      const l = FRONT_GEO.split('\n').find((x) => motif.test(x));
-      const m = l?.match(/=\s*([0-9.]+)\s*;/);
-      return m ? Number(m[1]) : NaN;
-    };
     /**
-     * 🔴 ON LIT LA VALEUR QUE LE FRONT DÉCLARE, PAS CELLE QU'IL DEVRAIT AVOIR.
+     * 🔴 CE GARDE A SURVÉCU À LA DISPARITION DE SON SUJET.
      *
-     * ⚠ Ma première écriture recalculait la formule depuis les FACTEURS du
-     * front (`seuil`, `silence`, `version`) et comparait ce résultat à l'API.
-     * Elle ne lisait JAMAIS son `QR_COTE_MM`. Le contrôle négatif l'a dit :
-     * figer le front à `13` ne faisait tomber AUCUN cas, parce que les
-     * facteurs, eux, n'avaient pas changé — je mesurais ce que le front
-     * DEVRAIT obtenir, pas ce qu'il obtient.
+     * *Trouvé le 3 novembre 2026 par le balayage du front.* Il commençait par
+     * `if (frontADejaBascule) return;` — juste, tant que les deux dérivations
+     * coexistaient. Depuis la bascule du front, hier, il SORTAIT avant de
+     * mesurer quoi que ce soit : vert, et muet.
      *
-     * C'est « l'instrument qui se trompe sur ce qu'il mesure », dans un garde
-     * écrit pour traquer exactement cette famille.
+     * ⚠ C'est une famille à part, et elle n'était pas nommée : un garde dont la
+     * correction supprime le sujet ne devient pas inutile, il devient MUET. Son
+     * vert ne dit plus rien, et rien ne le signale. (Règle ajoutée à
+     * CLAUDE.md §2 le même jour.)
      *
-     * Les deux formes se lisent donc séparément : un LITTÉRAL se prend tel
-     * quel, une DÉRIVATION se recalcule depuis les facteurs.
+     * Il mesure donc AUTRE CHOSE désormais, et c'est la propriété qui reste
+     * vraie après la bascule : **la valeur SERVIE et celle du PDF sont la
+     * même.** Si le PDF se remettait à porter son propre côté, une étiquette
+     * imprimée et un aperçu à l'écran divergeraient — et une étiquette collée
+     * est définitive.
      */
-    const litteral = ligneFront?.match(/=\s*([0-9.]+)\s*;/);
-    let coteFront: number;
-    if (litteral) {
-      coteFront = Number(litteral[1]);
-    } else {
-      const seuil = nb(/^export const LARGEUR_MODULE_MIN_MM\b/);
-      const silence = nb(/^export const SILENCE\b/);
-      const version = nb(/^export const VERSION_MAX_ETIQUETTE\b/);
-      expect([seuil, silence, version].some(Number.isNaN), 'facteurs illisibles').toBe(false);
-      coteFront = Math.ceil((4 * version + 17 + 2 * silence) * seuil);
-    }
-    expect(
-      coteFront,
-      `le côté du front (${coteFront} mm) diffère de celui de l’API (${QR_COTE_MM} mm) — ` +
-        'une étiquette collée est définitive',
-    ).toBe(QR_COTE_MM);
-  });
+    it('⭐ la valeur SERVIE et celle du PDF sont la même — après la bascule aussi', () => {
+      // ⚠ Pas de sortie anticipée : ce cas mesure dans les DEUX états du front.
+      // Le PDF consomme-t-il bien la géométrie, au lieu d'en déclarer une ?
+      const pdfNet = sansCommentaires(PDF);
+      expect(
+        pdfNet,
+        'label-pdf.ts déclare son propre côté : le PDF imprimé et l’aperçu peuvent diverger',
+      ).not.toMatch(/const\s+QR_COTE_MM\s*=/);
+      expect(pdfNet, 'le PDF n’importe plus la géométrie').toContain('QR_COTE_MM');
+      // ET L'EFFET : la valeur servie par l'API est celle que le PDF emploie.
+      // Elles ne peuvent plus différer — il n'y a qu'une déclaration — et ce cas
+      // tombe si une seconde réapparaît d'un côté ou de l'autre.
+      const geoNet = sansCommentaires(SOURCE_API);
+      const declarations = [
+        ...geoNet.matchAll(/^export const QR_COTE_MM\b/gm),
+        ...pdfNet.matchAll(/^(?:export )?const QR_COTE_MM\b/gm),
+      ];
+      expect(
+        declarations.length,
+        'le côté est déclaré plus d’une fois : deux sources s’accordent jusqu’au jour où l’une bouge',
+      ).toBe(1);
+      expect(QR_COTE_MM).toBeGreaterThan(0);
+    });
+
+    /**
+     * ⚠ ET LE SEUIL DU MODULE, MÊME EXIGENCE — une seule déclaration.
+     *
+     * *Trouvé le 3 novembre 2026 par le balayage du front, et mon propre
+     * balayage l'avait manqué : je cherchais des expressions régulières
+     * dupliquées, pas des constantes numériques.* `LARGEUR_MODULE_MIN_MM`
+     * était déclaré dans `label-pdf.ts` ET dans `identifiant-perenne.ts`, à
+     * 0,25 des deux côtés.
+     */
+    it('🔴 `LARGEUR_MODULE_MIN_MM` n’est déclaré qu’UNE fois dans apps/api', () => {
+      const declarations = [
+        ...sansCommentaires(SOURCE_API).matchAll(/^export const LARGEUR_MODULE_MIN_MM\b/gm),
+        ...sansCommentaires(PDF).matchAll(/^export const LARGEUR_MODULE_MIN_MM\s*=/gm),
+      ];
+      expect(
+        declarations.length,
+        'le seuil du module est déclaré deux fois : c’est la quatrième occurrence ' +
+          'de cette famille en trois jours',
+      ).toBe(1);
+    });
 });

@@ -356,7 +356,8 @@ export type AdresseScannee =
  *
  * ## ⚠ CE QUI LA DISTINGUE DU SEUIL DU CODE-BARRES, et il faut le dire ici
  *
- * `LARGEUR_MODULE_MIN_MM` (0,25 mm, dans `label-pdf.ts`) borne le module du
+ * `LARGEUR_MODULE_MIN_MM` (0,25 mm, déclaré ICI et réexporté par
+ * `labels/label-pdf.ts`) borne le module du
  * **CODE 128**, qui dépend de la longueur du CODE-BARRES. Les chiffres
  * ci-dessus sont la densité du **QR**, qui dépend de la longueur de l'URL. Deux
  * grandeurs en millimètres par module, du même ordre, et **ce ne sont pas les

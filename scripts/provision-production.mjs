@@ -96,10 +96,23 @@ async function provisionTenant() {
   else throw new Error(`provisioning: HTTP ${res.status} ${await res.text()}`);
 
   // Propage d'éventuelles nouvelles tables si l'école existait déjà.
-  await fetch(`${API}/admin/tenants/${SLUG}/sync-schema`, {
+  // ⚠ ON LIT LA RÉPONSE. Trouvé le 3 novembre 2026 en BALAYANT les autres sites
+  // de la règle après avoir corrigé `reindex()` — pas en corrigeant celui qu'on
+  // m'avait montré. `await fetch(...)` sans lire `ok` annonçait « schéma
+  // synchronisé » sur un refus, et `sync-schema` rattrape les COLLATIONS ICU que
+  // Prisma ne modélise pas : un échec muet laisse une école dont les tris sont
+  // faux, défaut qui ressemble à un problème de DONNÉES et qu'on cherche
+  // ailleurs pendant des jours.
+  const sync = await fetch(`${API}/admin/tenants/${SLUG}/sync-schema`, {
     method: 'POST',
     headers: { 'x-admin-api-key': ADMIN_KEY },
   });
+  if (!sync.ok) {
+    throw new Error(
+      `sync-schema: HTTP ${sync.status} ${await sync.text()} — les collations ICU ` +
+        "n'ont PAS été rattrapées. L'instance ne doit pas partir en service ainsi.",
+    );
+  }
   log('schéma synchronisé');
 }
 
@@ -260,6 +273,64 @@ async function reindex() {
   log(`${indexed} notice(s) indexée(s) dans Meilisearch`);
 }
 
+// ── 7. CLÔTURE DE L'INSTALLATION ────────────────────────────────────
+//
+// 🔴 CE QUI MANQUAIT, ET CE QUE ÇA A COÛTÉ.
+//
+// *Mesuré le 3 novembre 2026 sur une démo installée à neuf le matin même :*
+//
+//     /api/installation/etat → {"requise":true}
+//     /installation          → la page « Installer Gafeso », publique
+//
+// Ce script ne contenait pas une seule fois le mot « installation ». Une
+// instance ENTIÈREMENT provisionnée annonçait donc son état installable à qui
+// passait, et l'api réengendrait un jeton d'amorçage à CHAQUE redémarrage —
+// jeton que le journal du conteneur affiche, et qu'un journal se colle à un
+// tiers pour demander de l'aide.
+//
+// ⚠ « DANS LA MÊME TRANSACTION QUE LE PROVISIONNEMENT » EST IMPOSSIBLE, et
+// c'est déjà mesuré dans `installation.service.ts` : le schéma `tenant_<slug>`
+// n'est adressable qu'après le COMMIT de son DDL, donc le compte
+// administrateur exige une SECONDE connexion. Ce script emploie deux clients
+// Prisma pour cette raison, et aucune transaction ne couvre les deux.
+//
+// ⚠ ET CLORE PLUS TÔT SERAIT PIRE. L'ordre T1/T2/T3 est un dispositif : clore
+// avant que le compte administrateur existe laisserait, sur un échec, une
+// instance INSTALLÉE SANS ADMINISTRATEUR et un assistant FERMÉ — exactement le
+// défaut que l'assistant existe pour résoudre, rendu définitif.
+//
+// Ce qui est donc garanti ici, et c'est le maximum disponible :
+//   · la clôture est UN SEUL `UPDATE`, atomique en lui-même ;
+//   · elle suit immédiatement la création du compte administrateur, dans la
+//     même exécution — plus de fenêtre de deux heures, quelques millisecondes ;
+//   · si quoi que ce soit échoue AVANT, l'installation reste OUVERTE : c'est
+//     l'état sûr, et il est reprenable.
+async function cloreInstallation(pub) {
+  // ⚠ CEINTURE : on ne clôt pas une instance qui ne porte aucune école. Sans
+  // ce garde, un échec silencieux en amont fermerait l'assistant sur une
+  // instance vide — et il n'y aurait plus aucun chemin pour l'installer.
+  const ecoles = await pub.tenant.count();
+  if (ecoles === 0) {
+    throw new Error("clôture refusée : aucune école en base, l'instance n'est pas installée");
+  }
+  // Idempotente : une réinstallation --force ne redate pas une clôture faite.
+  const r = await pub.installation.updateMany({
+    where: { id: 'unique', termineeLe: null },
+    data: { termineeLe: new Date(), jetonHash: null },
+  });
+  if (r.count > 0) {
+    console.log('✔ Installation CLÔTURÉE : /installation est fermé, le jeton est mort.');
+  } else {
+    console.log('  installation déjà clôturée — rien à faire.');
+  }
+  // ⚠ LE FICHIER DU JETON N'EST PAS SUPPRIMÉ ICI, et c'est délibéré : son
+  // chemin est dérivé par `installation/jeton-amorcage.ts`, que ce script .mjs
+  // ne peut pas importer. Le redériver ici en ferait une SECONDE
+  // implémentation d'un chemin. `main.ts` l'efface au démarrage suivant, et
+  // d'ici là le fichier est INERTE : `jetonHash` est NULL, donc
+  // `ouvrirSession` refuse « le jeton a déjà été consommé ».
+}
+
 // ── Orchestration ────────────────────────────────────────────────────
 async function main() {
   console.log(`Provisioning PRODUCTION — ${SCHOOL} (${DOMAIN})\n`);
@@ -271,6 +342,10 @@ async function main() {
     await ensureSuperAdmin(pub);
     const tenant = await applyBranding(pub);
     await ensureSchoolAdmin(db);
+    // ⚠ ICI, pas après `seedDemoData` : les données de démonstration sont
+    // cosmétiques, et laisser l’installation ouverte parce qu’une notice
+    // d’exemple a échoué serait laisser la porte ouverte pour rien.
+    await cloreInstallation(pub);
     await seedDemoData(pub, db, tenant);
   } finally {
     await pub.$disconnect();

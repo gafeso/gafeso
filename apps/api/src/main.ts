@@ -10,7 +10,7 @@ import { HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { VERSION_PUBLIEE } from './health/version';
 import { InstallationService } from './installation/installation.service';
-import { engendrerJeton } from './installation/jeton-amorcage';
+import { effacerLeJeton, engendrerJeton } from './installation/jeton-amorcage';
 import { PrismaService } from './prisma/prisma.service';
 import { MulterExceptionFilter } from './common/multer-exception.filter';
 
@@ -133,6 +133,10 @@ async function bootstrap() {
    */
   try {
     const installation = app.get(InstallationService, { strict: false });
+    // ⚠ LE RATTRAPAGE PASSE AVANT. Sans lui, une instance installée par une
+    // version antérieure se verrait « requise » et réengendrerait un jeton —
+    // c’est exactement ce que la démo faisait à chaque redémarrage.
+    await installation.rattraperInstallationOuverte();
     if (await installation.estRequise()) {
       const { empreinte, chemin } = engendrerJeton();
       await app.get(PrismaService, { strict: false }).installation.update({
@@ -146,6 +150,26 @@ async function bootstrap() {
           'donnez ce CHEMIN. Il est consommé par l’installation et le fichier effacé.',
         'Bootstrap',
       );
+    } else {
+      /**
+       * ⭐ L'INSTALLATION EST CLOSE : le fichier du jeton n'a plus rien à dire.
+       *
+       * *Posé le 3 novembre 2026, avec la clôture par `install.sh`.* Le script
+       * de provisionnement clôt l'installation en base, mais il ne peut pas
+       * supprimer le fichier : son chemin est dérivé ICI, et un script `.mjs`
+       * ne peut pas importer ce module TypeScript. Le redériver là-bas en
+       * ferait une seconde implémentation d'un chemin.
+       *
+       * ⚠ Le fichier était déjà INERTE — `jetonHash` est NULL, donc
+       * `ouvrirSession` refuse « le jeton a déjà été consommé ». Mais un
+       * fichier nommé `jeton-installation.txt` qui traîne finit par être lu,
+       * copié, ou collé dans une demande d'aide. On l'efface.
+       *
+       * ⚠ ET ÇA RATTRAPE LES INSTANCES EXISTANTES : toute instance installée
+       * avant cette version porte un fichier périmé, et le perdra à son
+       * prochain démarrage sans qu'on ait rien à demander à son exploitant.
+       */
+      effacerLeJeton();
     }
   } catch (erreur) {
     // ⚠ On NE BLOQUE PAS le démarrage : une instance déjà installée dont la

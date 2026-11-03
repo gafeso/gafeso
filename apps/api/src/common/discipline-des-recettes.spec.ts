@@ -68,6 +68,19 @@ const MARQUE_ATTENDUE = /const MARQUE = /;
  * écrite plus bas, mesurée plutôt que supposée.
  */
 const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
+  // ⚠ Déclarée le 3 novembre 2026 avec la clôture de l'installation. Elle
+  // ÉCRIT — elle doit remettre l'instance dans l'état « ouvert » pour mesurer
+  // la clôture par l'effet — donc elle RECENSE l'état avant et le rend à
+  // l'identique. Il n'y a qu'UNE ligne d'installation par instance : l'écraser
+  // sans la rendre casserait l'état de la base de travail.
+  'installation/cloture-en-base.spec.ts': {
+    discipline: 'nettoyage-recense',
+    motif:
+      'elle relève `termineeLe` et `jetonHash` dans `beforeAll` et les réécrit ' +
+      'à l’identique dans `afterAll`. ⚠ Un recensement, et non une marque : la ' +
+      'ligne est unique et préexistante, on ne peut pas la reconnaître à un ' +
+      'préfixe qu’on aurait posé.',
+  },
   // ⚠ Déclarée le 3 novembre 2026 avec la borne du slug. Elle est
   // `lecture-seule` au sens le plus strict qui existe dans ce fichier : elle
   // n'ouvre même pas de transaction, et ne nomme AUCUNE table. Elle demande au
@@ -219,7 +232,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT dix-huit — une dix-neuvième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT dix-neuf — une vingtième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

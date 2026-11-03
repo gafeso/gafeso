@@ -33,6 +33,7 @@ const BCRYPT_ROUNDS = 10;
  * importer depuis ce fichier. Ré-export conservé pour ne casser aucun import.
  */
 import type { MailOutcome } from './mail/mail-outcome';
+import { FORME_ADRESSE } from '../common/forme-adresse';
 export type { MailOutcome };
 
 export interface RegistrationResult {
@@ -64,7 +65,7 @@ export interface ImportResult {
 }
 
 /** Validation d'email pragmatique (suffisante pour une liste d'école). */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = FORME_ADRESSE;
 
 /**
  * Plafond de correspondances pré-résolues par la recherche insensible aux

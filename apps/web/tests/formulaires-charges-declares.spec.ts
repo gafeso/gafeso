@@ -58,6 +58,68 @@ type Nature =
  */
 
 const ECRANS: Record<string, { nature: Nature; motif: string }> = {
+  /* ───────────────────────────────────────────────────────────────────────
+   * ⭐⭐ LES SIX ÉCRANS QUE LE PRÉDICAT NE VOYAIT PAS — 3 novembre 2026.
+   *
+   * Ils n'appellent l'API que par `api<T>(…)`, et `\bapi\(` ne matchait pas
+   * cette forme. Ils rendaient des champs, ils chargeaient, et ils étaient dans
+   * AUCUNE des deux listes — le garde vert sur une population amputée.
+   *
+   * ⚠ La nature de chacun est MESURÉE, pas devinée : on a compté ses écritures
+   * (`method:`, `POST`/`PATCH`/`DELETE`), ses `<form>`, ses `onSubmit` et ses
+   * `disabled`.
+   * ─────────────────────────────────────────────────────────────────────── */
+  'journal/page.tsx': {
+    nature: 'lecture-seule',
+    motif:
+      'ses champs sont un FORMULAIRE DE FILTRE : il porte un <form> et un ' +
+      'onSubmit, et sa soumission RELIT le journal — zéro écriture mesurée ' +
+      '(aucun method:, aucun POST/PATCH/DELETE). Rien ne peut être soumis trop ' +
+      'tôt : soumettre, ici, c’est lire.',
+  },
+  'rapport-annuel/page.tsx': {
+    nature: 'lecture-seule',
+    motif:
+      'un sélecteur d’année et rien d’autre : aucun <form>, aucun onSubmit, ' +
+      'zéro écriture mesurée. Le champ CHOISIT ce qu’on lit.',
+  },
+  'rappels/page.tsx': {
+    nature: 'lecture-seule',
+    motif:
+      'des filtres sur la liste des rappels : aucun <form>, aucun onSubmit, ' +
+      'zéro écriture mesurée. ⚠ Le déclenchement manuel des rappels vit sur une ' +
+      'AUTRE surface — cet écran ne fait que lire.',
+  },
+  'statistiques/page.tsx': {
+    nature: 'lecture-seule',
+    motif:
+      'deux champs de date et une granularité, qui bornent la LECTURE : aucun ' +
+      '<form>, aucun onSubmit, zéro écriture mesurée.',
+  },
+  /* ⚠ LES DEUX SUIVANTS ÉCRIVENT, et c'est une DETTE DATÉE — pas un « garde
+   * déjà ». Mesuré : leur seul `disabled` protège de la DOUBLE soumission
+   * (`saving`, `enCours`), jamais de l'attente des options chargées. Les
+   * déclarer « garde-a-la-main » serait une affirmation que le code ne porte
+   * pas, et l'obligation exigerait une épreuve d'effet qui ne pourrait pas
+   * passer. */
+  'catalogue/page.tsx': {
+    nature: 'a-migrer',
+    motif:
+      'formulaire de CRÉATION de notice : il poste /cataloging/records avec un ' +
+      '`category` et un `recordType` dont les options arrivent par chargement. ' +
+      'Son `disabled={saving}` ne protège que de la double soumission — on peut ' +
+      'donc soumettre avant que les vocabulaires soient là. ⚠ DETTE du ' +
+      '3 novembre 2026, trouvée en élargissant le prédicat ; non corrigée ici ' +
+      'parce qu’un écran de création de notice ne se migre pas à la veille ' +
+      'd’une v1.',
+  },
+  'depots-soumis/page.tsx': {
+    nature: 'a-migrer',
+    motif:
+      'il poste un `directorId` choisi dans une liste de directeurs CHARGÉE. ' +
+      'Son `disabled={enCours === d.id}` ne protège que de la double ' +
+      'soumission. ⚠ Même dette, même date, même motif de report.',
+  },
   'accueil/page.tsx': {
     nature: 'migre',
     /*
@@ -230,14 +292,90 @@ function ecransDuDisque(): string[] {
  * ⚠ LA POPULATION SE DÉRIVE DU DISQUE, pas d'une liste écrite à la main : une
  * liste écrite à la main ne peut pas signaler ce qu'elle ignore.
  */
+/**
+ * ⚠ LE CODE SEUL — les commentaires RETIRÉS.
+ *
+ * 🔴 Mesuré par l'effet le 3 novembre 2026 : un commentaire citant `api(` et
+ * `<input />` en PROSE suffisait à faire exiger une déclaration pour un écran
+ * qui n'a ni l'un ni l'autre. Un détecteur qui signale du code correct se fait
+ * désactiver, et il ne sert plus le jour où il a raison.
+ *
+ * ⚠ Le retrait est volontairement SIMPLE, et son témoin ci-dessous mesure qu'il
+ * ne mange pas trop : ce dépôt a payé un nettoyeur gourmand qui avalait 2 262
+ * caractères d'un fichier.
+ */
+export function codeSeul(source: string): string {
+  const sansBloc = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  return sansBloc
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('//'))
+    .join('\n');
+}
+
+/**
+ * ⭐⭐ LE PRÉDICAT QUI SÉLECTIONNE — et il a été AVEUGLE SUR SIX ÉCRANS.
+ *
+ * 🔴 Mesuré le 3 novembre 2026 : `\bapi\(` ne matche PAS la forme GÉNÉRIQUE
+ * `api<T>(…)`, qui est celle qu'emploie la moitié de ce dépôt. Neuf écrans de
+ * `app/admin` n'appellent l'API que sous cette forme ; **six d'entre eux
+ * rendent aussi des champs, et aucun n'était déclaré.**
+ *
+ * L'obligation existait pour qu'« un écran neuf soit dans aucune des deux
+ * listes et que le test échoue ». Un écran écrit avec `api<T>(` était dans
+ * aucune des deux listes **et le test passait** : c'est le vert sur une
+ * population amputée, sur le garde censé l'empêcher.
+ *
+ * ⚠ Et ce n'est pas un oubli d'écriture : `\bapi\(` est exactement ce qu'on
+ * tape quand on pense « l'appel à l'API ». La forme générique ne vient à
+ * l'esprit qu'en relisant les appels réels — c'est-à-dire en mesurant.
+ */
 function chargeEtRendDesChamps(source: string): boolean {
-  const appelle = /\bapi\(|\bfetch\(/.test(source);
-  const champs = /<(input|textarea|select|Input|Textarea|Select)\b/.test(source);
+  const code = codeSeul(source);
+  // ⚠ `api<` autant qu'`api(` : la forme générique est la plus répandue ici.
+  const appelle = /\bapi[(<]|\bfetch\(/.test(code);
+  const champs = /<(input|textarea|select|Input|Textarea|Select)\b/.test(code);
   return appelle && champs;
 }
 
 describe('formulaires chargés — obligation déclarée', () => {
   const surLeDisque = ecransDuDisque();
+
+  /**
+   * ⭐⭐ LE TÉMOIN DU PRÉDICAT — et il manquait, mesuré le 3 novembre 2026.
+   *
+   * 🔴 Le contrôle négatif « le motif rétrécit à `\bapi\(` » n'a PAS mordu.
+   * Logique : les six écrans qu'il cessait de voir sont désormais DÉCLARÉS,
+   * donc le garde n'avait plus rien à réclamer. Une sur-déclaration est
+   * inoffensive — et c'est exactement ce qui rend la régression invisible.
+   *
+   * ⭐ La propriété « le prédicat voit la forme générique » n'était tenue par
+   * RIEN. Elle l'est ici, par deux témoins sur l'instrument lui-même : un cas
+   * qu'il DOIT voir, un cas qu'il ne doit PAS voir. C'est « un témoin COMPTE, il
+   * ne constate pas une présence », appliqué au sélecteur plutôt qu'au relevé.
+   */
+  it('⭐⭐ le prédicat VOIT la forme générique `api<T>(…)` — témoin de présence', () => {
+    const source = readFileSync(join(RACINE, 'statistiques/page.tsx'), 'utf8');
+    // ⚠ ce fichier n'appelle l'API QUE par la forme générique : c'est ce qui en
+    // fait le bon témoin. Si un jour il passe à `api(`, ce cas le dira.
+    expect(codeSeul(source)).toMatch(/\bapi</);
+    expect(codeSeul(source)).not.toMatch(/\bapi\(/);
+    expect(
+      chargeEtRendDesChamps(source),
+      '🔴 le prédicat ne voit plus `api<T>(…)` : six écrans de app/admin ' +
+        'n’appellent l’API que sous cette forme, et ils redeviendraient ' +
+        'invisibles à cette obligation',
+    ).toBe(true);
+  });
+
+  /*
+   * ⚠ TÉMOIN D'ABSENCE sur la confusion PLAUSIBLE : un écran qui ne charge rien
+   * et ne rend aucun champ. Sans lui, un prédicat qui rendrait `true` partout
+   * serait indiscernable d'un prédicat juste — et plus rassurant.
+   */
+  it('⚠ et il ne voit PAS un écran sans appel ni champ', () => {
+    const source = readFileSync(join(RACINE, 'parametres/page.tsx'), 'utf8');
+    expect(chargeEtRendDesChamps(source)).toBe(false);
+  });
 
   it('⚠ le relevé LIT quelque chose : sinon tout ce qui suit est vert sur le vide', () => {
     expect(surLeDisque.length).toBeGreaterThan(20);

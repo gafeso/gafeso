@@ -16,6 +16,7 @@ import {
 import { DATE_CORRECTIF_STATUT_ENVOI, statutFiable } from './fiabilite-du-statut';
 import { UpdateReminderSettingsDto } from './dto/update-reminder-settings.dto';
 import { nomDeLAdherent } from '../patrons/noms-divergents';
+import { FORME_ADRESSE } from '../common/forme-adresse';
 
 /** Jeu de données d'exemple pour l'aperçu des modèles. */
 const SAMPLE_VARS: ReminderVars = {
@@ -63,7 +64,7 @@ function dayDiff(a: Date, b: Date): number {
 }
 
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return FORME_ADRESSE.test(email);
 }
 
 /** Ne garde d'un modèle entrant que les champs texte non vides (les vides → défaut au rendu). */

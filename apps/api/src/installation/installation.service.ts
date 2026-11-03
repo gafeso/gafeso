@@ -53,6 +53,98 @@ export class InstallationService {
   }
 
   /**
+   * ⭐⭐ RATTRAPAGE — CLÔT UNE INSTALLATION QU'UNE VERSION ANTÉRIEURE A LAISSÉE
+   * OUVERTE. Elle ne CRÉE jamais rien : elle clôt, point.
+   *
+   * *Décision du responsable, 3 novembre 2026, après vérification sur une démo
+   * installée à neuf le matin même :*
+   *
+   *     /api/installation/etat → {"requise":true}
+   *     /installation          → la page « Installer Gafeso », publique
+   *
+   * `provision-production.mjs` ne clôturait pas. Toute instance installée
+   * depuis que l'assistant existe est donc dans cet état : une page publique
+   * qui annonce son état installable, et un jeton d'amorçage réengendré à
+   * CHAQUE redémarrage — dans le JOURNAL du conteneur, qu'on colle à un tiers
+   * pour demander de l'aide. Le correctif du script n'y change rien : il agit
+   * au provisionnement, qui est déjà passé.
+   *
+   * ## 🔴 LE DISCRIMINANT, ET POURQUOI IL N'EST PAS « UNE ÉCOLE EXISTE »
+   *
+   * Clore sur la seule existence d'une école tuerait la REPRISE de l'assistant.
+   * L'ordre T1/T2/T3 est un dispositif : un assistant interrompu entre T1 et T2
+   * laisse une école SANS administrateur, et la porte reste ouverte exprès pour
+   * qu'on reprenne. Un rattrapage naïf rendrait ce cas DÉFINITIF — c'est-à-dire
+   * le défaut même que l'assistant existe pour résoudre.
+   *
+   * On clôt donc si **une école existe ET porte au moins un compte ADMIN** :
+   *
+   *   · `install.sh` crée toujours l'administrateur → on clôt ;
+   *   · assistant interrompu entre T1 et T2 → aucun ADMIN → on NE clôt PAS.
+   *
+   * Mesuré : deux écoles interrogées en 38 ms. C'est gratuit.
+   *
+   * ## ⚠ ET IL EST BRUYANT, SUR EXIGENCE DU RESPONSABLE
+   *
+   * « Une correction silencieuse d'un état de sécurité est une correction qu'on
+   * ne peut pas auditer. » Le journal nomme la date, l'école et la condition
+   * qui a déclenché la clôture.
+   */
+  async rattraperInstallationOuverte(): Promise<{ close: boolean; motif: string }> {
+    const l = await this.ligne();
+    if (!l || l.termineeLe !== null) {
+      return { close: false, motif: 'installation déjà close ou absente' };
+    }
+    const ecoles = await this.prisma.tenant.findMany({ select: { slug: true } });
+    if (ecoles.length === 0) {
+      return { close: false, motif: 'aucune école : cette instance est à installer' };
+    }
+    // ⚠ On cherche une école ADMINISTRÉE, pas n'importe laquelle. Le compte vit
+    // dans le schéma de l'école, donc une requête par école — bornée et mesurée.
+    for (const { slug } of ecoles) {
+      let administrateurs = 0;
+      try {
+        administrateurs = await this.prisma
+          .forTenant(slug)
+          .user.count({ where: { role: UserRole.ADMIN } });
+      } catch (erreur) {
+        // ⚠ UN SCHÉMA ILLISIBLE N'EST PAS UNE ABSENCE D'ADMINISTRATEUR. On ne
+        // clôt pas sur une mesure qui n'a pas pu avoir lieu.
+        this.logger.warn(
+          `Rattrapage : le schéma de « ${slug} » n’a pas pu être lu ` +
+            `(${(erreur as Error).message}) — cette école ne compte pas.`,
+        );
+        continue;
+      }
+      if (administrateurs > 0) {
+        await this.prisma.installation.update({
+          where: { id: 'unique' },
+          data: { termineeLe: new Date(), jetonHash: null },
+        });
+        const motif =
+          `l’école « ${slug} » porte ${administrateurs} compte(s) ADMIN : ` +
+          'cette instance est installée, l’assistant n’a plus rien à y faire';
+        // ⚠ BRUYANT, et c'est exigé : un changement d'état de sécurité qui ne
+        // laisse aucune trace est indiscernable d'un bug.
+        this.logger.warn(
+          `INSTALLATION CLOSE RÉTROACTIVEMENT le ${new Date().toISOString()} — ${motif}. ` +
+            'Elle avait été laissée OUVERTE par une version antérieure du ' +
+            'provisionnement : /installation est désormais fermé et le jeton ' +
+            'd’amorçage est mort. Rien n’a été créé ni supprimé.',
+          'Rattrapage',
+        );
+        return { close: true, motif };
+      }
+    }
+    return {
+      close: false,
+      motif:
+        'des écoles existent mais aucune ne porte de compte ADMIN — un assistant ' +
+        'interrompu doit pouvoir REPRENDRE, on ne clôt pas',
+    };
+  }
+
+  /**
    * ⚠ ELLE NE REND QUE CE BOOLÉEN. Tout ce qu'on ajouterait ici serait lisible
    * SANS jeton : ni nom d'établissement, ni domaine, ni version.
    */

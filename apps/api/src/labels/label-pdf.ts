@@ -46,7 +46,26 @@ export interface LabelData {
  * seuil, **le QR n'est pas dessiné**. Ce n'est pas une dégradation silencieuse :
  * c'est la bonne priorité, et `buildLabelsPdf` le RAPPORTE à son appelant.
  */
-export const LARGEUR_MODULE_MIN_MM = 0.25;
+/**
+ * ⚠ ELLE N'EST PLUS DÉCLARÉE ICI — RÉEXPORTÉE depuis la géométrie.
+ *
+ * *Trouvé le 3 novembre 2026 par le balayage du front, et mon propre balayage
+ * l'avait MANQUÉ : je cherchais des expressions régulières dupliquées, pas des
+ * constantes numériques.* Ce seuil était déclaré DEUX fois, à 0,25 des deux
+ * côtés — ici pour la décision d'abandon du QR, et dans
+ * `opac/identifiant-perenne.ts` pour la dérivation du côté. Quatrième fois en
+ * trois jours que deux sources s'accordent par coïncidence.
+ *
+ * ⚠ Et le pire : le commentaire de la géométrie affirmait que la source était
+ * « 0,25 mm, dans label-pdf.ts » — tout en déclarant sa propre copie. Une
+ * affirmation sur du code qui vit ailleurs, fausse au moment où elle était
+ * écrite.
+ *
+ * La géométrie la porte, parce que c'est elle qui en DÉRIVE `QR_COTE_MM`. On la
+ * réexporte pour ne pas casser les épreuves qui l'importent d'ici : il n'y a
+ * qu'une valeur, et un seul endroit qui la fixe.
+ */
+export { LARGEUR_MODULE_MIN_MM };
 
 /** Côté du QR, et l'écart qui le sépare du code-barres. */
 /**
@@ -62,7 +81,11 @@ export const LARGEUR_MODULE_MIN_MM = 0.25;
  * côtés pour refuser qu'ils se désaccordent — un test d'exécution verrait une
  * constante figée s'accorder avec sa propre valeur.
  */
-import { QR_COTE_MM, QR_ECART_MM } from '../opac/identifiant-perenne';
+import {
+  LARGEUR_MODULE_MIN_MM,
+  QR_COTE_MM,
+  QR_ECART_MM,
+} from '../opac/identifiant-perenne';
 
 export interface LabelLayout {
   /** Colonnes × lignes de la grille. */

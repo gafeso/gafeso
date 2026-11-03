@@ -35,15 +35,48 @@ const ADMIN_KEY = process.env.ADMIN_API_KEY ?? 'dev_admin_key_local';
 const SLUG = 'zinda'; // slug technique (le nom affiché est celui de SCHOOL)
 const SCHOOL = 'Université d’Exemple';
 
-// ⚠ GARDE-FOU DE CIBLE. Ce seed CRÉE une école entière avec des comptes dont
-// le mot de passe est partagé. Sur une instance en service, il ouvrirait des
-// accès et polluerait le catalogue vu par les lecteurs. Seules les cibles
-// locales sont admises ; forcer exige un acte délibéré (SEED_FORCE=1).
-if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API) && process.env.SEED_FORCE !== '1') {
-  console.error(`✖ Cible non locale (${API}).`);
-  console.error('  Ce seed crée une école de démonstration avec des comptes partagés.');
-  console.error('  Sur une installation réelle, relancez avec SEED_FORCE=1 en connaissance de cause.');
-  process.exit(2);
+// ⚠ GARDE-FOU DE DÉPLOIEMENT. Ce seed CRÉE une école entière avec des comptes
+// dont le mot de passe est partagé. Sur une instance en service, il ouvrirait
+// des accès et polluerait le catalogue vu par les lecteurs.
+//
+// 🔴 IL INTERROGEAIT `SEED_API_URL`, ET C'EST L'AUTO-ADRESSE DU SCRIPT.
+//
+// *Mesuré le 3 novembre 2026 : dans le conteneur `api`, `SEED_API_URL` vaut
+// `http://localhost:4000` — c'est l'adresse à laquelle le script se parle à
+// lui-même, pas celle à laquelle l'instance est servie.* Le garde était donc
+// vert sur un serveur PUBLIC, et ce seed y a tourné : il a créé un
+// établissement aux domaines `localhost`, invisible depuis Internet.
+//
+// C'est « une mesure prise depuis l'intérieur du système ne dit rien du
+// dehors », appliquée à un garde-fou : il mesurait la boucle locale et croyait
+// mesurer la cible.
+//
+// ⭐ CE QUI DÉSIGNE LE DÉPLOIEMENT est `APP_URL` — l'identité PUBLIQUE de
+// l'instance, celle que le compose de production exige (`${APP_URL:?}`) et que
+// les liens absolus portent. Mesuré : `http://localhost:3000` en
+// développement, le domaine réel en production.
+//
+// ⚠ TROIS ISSUES, pas deux. `APP_URL` absente n'est pas « locale » : c'est
+// INDÉCIDABLE, et un garde qui n'a pas pu mesurer ne dit jamais « bon ».
+const DEPLOIEMENT = process.env.APP_URL?.trim() ?? '';
+const EST_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(DEPLOIEMENT);
+if (process.env.SEED_FORCE !== '1') {
+  if (!DEPLOIEMENT) {
+    console.error('✖ INDÉCIDABLE : APP_URL est absente, impossible de savoir où cette instance est servie.');
+    console.error('  Ce seed crée une école de démonstration avec des comptes partagés : il');
+    console.error('  refuse plutôt que de supposer. Posez APP_URL, ou SEED_FORCE=1 en');
+    console.error('  connaissance de cause.');
+    process.exit(2);
+  }
+  if (!EST_LOCAL) {
+    console.error(`✖ DÉPLOIEMENT NON LOCAL (APP_URL = ${DEPLOIEMENT}).`);
+    console.error('  Ce seed crée une école de démonstration avec des comptes dont le mot de');
+    console.error('  passe est PARTAGÉ, et des domaines `localhost` invisibles depuis Internet.');
+    console.error(`  ⚠ Ce n'est PAS l'adresse à laquelle le script s'adresse (${API}) qui décide :`);
+    console.error("     celle-là vaut localhost jusque dans un conteneur de production.");
+    console.error('  Sur une installation réelle, relancez avec SEED_FORCE=1 en connaissance de cause.');
+    process.exit(2);
+  }
 }
 
 // Mot de passe des comptes de démonstration. TIRÉ AU HASARD par défaut et
@@ -57,6 +90,37 @@ const PASSWORD =
 
 const log = (msg) => console.log(`  • ${msg}`);
 
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴 UN PAS SAUTÉ CHANGE LA CONCLUSION — il n'ajoute pas seulement une ligne.
+//
+// *Mesuré le 3 novembre 2026, deuxième passe de ce script sur la démo :*
+//
+//     • réindexation ignorée (login bibliothécaire indisponible)
+//     ✔ Démo prête.
+//
+// Il annonçait « prête » APRÈS avoir sauté la réindexation. Le catalogue n'en a
+// pas souffert ce jour-là — l'index de la première passe tenait — mais sur une
+// PREMIÈRE exécution, il aurait rendu une démo au catalogue VIDE en se
+// déclarant prête. Et deux autres sections pouvaient disparaître de la même
+// façon (« comptes de démonstration absents », « aucune notice »).
+//
+// ⭐ TROIS ISSUES DÉSORMAIS, et chacune a son code de sortie :
+//     0  prête, rien n'a été sauté
+//     3  prête AVEC RÉSERVE — ce qui manque est nommé, et ce qu'il faut
+//        relancer aussi
+//     1  échec (exception)
+//     2  refus du garde-fou de déploiement
+//
+// ⚠ Le code 3 est le point : un `|| echo "tout va bien"` ou un `set -e` qui ne
+// regarde que 0 verrait l'ancienne version comme un succès. Celle-ci tombe.
+const RESERVES = [];
+/** Note un pas qui N'A PAS eu lieu, avec ce qu'il faut faire pour le rattraper. */
+const reserver = (quoi, relancer) => {
+  RESERVES.push({ quoi, relancer });
+  console.log(`  ⚠ RÉSERVE — ${quoi}`);
+};
+
+
 // ── 1. Provisioning de l'école (via l'API admin) ──────────────
 async function provision() {
   const res = await fetch(`${API}/admin/tenants`, {
@@ -69,11 +133,25 @@ async function provision() {
   else throw new Error(`provisioning: HTTP ${res.status} ${await res.text()}`);
 
   // Propage d'éventuelles nouvelles tables aux écoles existantes.
-  await fetch(`${API}/admin/tenants/${SLUG}/sync-schema`, {
+  // ⚠ ON LIT LA RÉPONSE. Trouvé le 3 novembre 2026 en BALAYANT les autres sites
+  // de la règle après avoir corrigé `reindex()` — pas en corrigeant celui qu'on
+  // m'avait montré. `await fetch(...)` sans lire `ok` annonçait « schéma
+  // synchronisé » sur un refus, et `sync-schema` rattrape les COLLATIONS ICU que
+  // Prisma ne modélise pas : un échec muet laisse une école dont les tris sont
+  // faux, défaut qui ressemble à un problème de DONNÉES et qu'on cherche
+  // ailleurs pendant des jours.
+  const sync = await fetch(`${API}/admin/tenants/${SLUG}/sync-schema`, {
     method: 'POST',
     headers: { 'x-admin-api-key': ADMIN_KEY },
   });
-  log('schéma synchronisé');
+  if (!sync.ok) {
+    reserver(
+      `le schéma N’A PAS été synchronisé (HTTP ${sync.status}) : les collations ICU ne sont pas rattrapées`,
+      'relancez ce seed — sans elles, les tris de la démo sont faux',
+    );
+  } else {
+    log('schéma synchronisé');
+  }
 }
 
 // ── Clients Prisma (public + schéma de l'école) ───────────────
@@ -1368,7 +1446,10 @@ async function seedActivite(db) {
   // `encadrements.voir`) : il peut décider, et il a des encadrements à montrer.
   const directeur = await db.user.findFirst({ where: { email: 'zongo@exemple.bf' } });
   if (!deposant || !directeur) {
-    console.log('  ⚠ activité : comptes de démonstration absents, section ignorée.');
+    reserver(
+      'l’activité de démonstration est ABSENTE : aucun compte de démonstration trouvé',
+      'relancez ce seed depuis une base vide — les comptes se créent plus haut dans ce même script',
+    );
     return;
   }
 
@@ -1409,7 +1490,10 @@ async function seedActivite(db) {
 
   const notices = await db.biblioRecord.findMany({ select: { id: true }, take: 40 });
   if (notices.length === 0) {
-    console.log('  ⚠ activité : aucune notice, section ignorée.');
+    reserver(
+      'l’activité de démonstration est ABSENTE : aucune notice au catalogue',
+      'relancez ce seed depuis une base vide — les notices se créent plus haut dans ce même script',
+    );
     return;
   }
 
@@ -1593,13 +1677,26 @@ async function sessionBibliothecaire() {
 async function reindex() {
   const accessToken = await sessionBibliothecaire();
   if (!accessToken) {
-    log('réindexation ignorée (login bibliothécaire indisponible)');
+    reserver(
+      'le catalogue N’A PAS été réindexé : le login bibliothécaire est indisponible',
+      'relancez ce seed une fois le login rétabli — sans index, la recherche ne rend RIEN',
+    );
     return;
   }
-  await fetch(`${API}/cataloging/reindex`, {
+  // ⚠ ET ON REGARDE LA RÉPONSE. `await fetch(...)` sans lire `ok` annonçait
+  // « catalogue réindexé » sur un refus de l'API : le second défaut de la même
+  // famille, trouvé en relisant cette fonction pour le premier.
+  const r = await fetch(`${API}/cataloging/reindex`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, Host: 'localhost' },
   });
+  if (!r.ok) {
+    reserver(
+      `le catalogue N’A PAS été réindexé : l’API a refusé (HTTP ${r.status})`,
+      'relancez ce seed — sans index, la recherche ne rend RIEN',
+    );
+    return;
+  }
   log('catalogue réindexé (Meilisearch)');
 }
 
@@ -1802,13 +1899,33 @@ async function main() {
   }
 
   await reindex();
-  console.log(`\n✔ Démo prête. Mot de passe de TOUS les comptes : ${PASSWORD}`);
+
+  // ⚠ LA CONCLUSION DÉPEND DES RÉSERVES, et le code de sortie avec elle.
+  if (RESERVES.length > 0) {
+    console.log(`\n⚠ Démo prête AVEC RÉSERVE — ${RESERVES.length} pas n’a/n’ont pas eu lieu :`);
+    for (const { quoi, relancer } of RESERVES) {
+      console.log(`   · ${quoi}`);
+      console.log(`     → ${relancer}`);
+    }
+    console.log('\n  Ce n’est PAS une démo prête : ne la montrez pas sans avoir levé');
+    console.log('  les réserves ci-dessus. Code de sortie 3.');
+  } else {
+    console.log('\n✔ Démo prête — aucun pas sauté.');
+  }
+  console.log(`  Mot de passe de TOUS les comptes : ${PASSWORD}`);
   console.log('  (tiré au hasard — fixez-le avec SEED_PASSWORD pour le garder d’une fois sur l’autre)');
   console.log('  Comptes :');
   console.log('   admin@exemple.bf · gestion@exemple.bf · bib@exemple.bf · awa@exemple.bf');
 }
 
-main().catch((err) => {
-  console.error('\n✖ Seed échoué :', err.message);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // ⚠ C'EST ICI QUE LE CODE DE SORTIE TOMBE. Imprimer la réserve sans
+    // changer le code laisserait un appelant — `set -e`, une CI, un `&&` —
+    // conclure au succès : exactement ce que l'ancienne version faisait.
+    if (RESERVES.length > 0) process.exit(3);
+  })
+  .catch((err) => {
+    console.error('\n✖ Seed échoué :', err.message);
+    process.exit(1);
+  });

@@ -59,7 +59,7 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement QUATORZE', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement QUINZE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
@@ -93,6 +93,11 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
     // ⚠ Et il a trouvé un défaut DANS CE FICHIER : le relevé de non-silence
     // accusait le garde neuf parce que son COMMENTAIRE citait la forme
     // interdite. Le relevé dépouille désormais les commentaires.
+    // ⚠ PUIS À QUINZE le 3 novembre 2026 : la clôture de l'installation
+    // (`installation/cloture-en-base.spec.ts`). Posée après qu'une démo
+    // installée à neuf a annoncé `{"requise":true}` pendant deux heures sur une
+    // page publique. Le compte a fait son office : il a obligé à la classer et
+    // à déclarer sa discipline d'écriture.
     expect(VIVANTS.map((f) => f.replace(RACINE + '/', '')).sort()).toEqual([
       // Classé GLOBALE, et ce garde m'a mis en garde contre exactement ce geste
       // REFUSÉ ma première rédaction qui citait la forme interdite dans un
@@ -115,6 +120,7 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
       'collections/nom-de-collection-en-base.spec.ts',
+      'installation/cloture-en-base.spec.ts',
       'opac/compte-filtre-exact-en-base.spec.ts',
       'roles/roles-systeme-en-base.spec.ts',
       'stats/usage-nominatif-en-base.spec.ts',
@@ -259,6 +265,12 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
     'limite-identifiant-en-base.spec.ts':
       'la troncature des identifiants est une constante de compilation du ' +
       'MOTEUR (NAMEDATALEN−1) — elle ne dépend d’aucun schéma d’école',
+    // ⚠ Classé GLOBALE le 3 novembre 2026. `public.installation` porte UNE
+    // ligne par instance — « id = 'unique' » : l'état d'installation n'est pas
+    // une propriété d'école et ne peut pas se dériver de l'une à l'autre.
+    'cloture-en-base.spec.ts':
+      'l’état d’installation est UNE ligne dans `public.installation` ' +
+      '(id = « unique ») — il n’y en a pas une par école',
   };
 
   it('⚠ CHAQUE garde vivant est PAR-ÉCOLE ou GLOBAL — un garde neuf fait tomber ce test', () => {

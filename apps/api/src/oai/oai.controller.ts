@@ -10,6 +10,7 @@ import { ResolvedTenant } from '../tenancy/tenancy.service';
 import { OaiService } from './oai.service';
 import { oaiError } from './oai-xml';
 import { normalizeHomeContent } from '../tenancy/home-content';
+import { FORME_ADRESSE } from '../common/forme-adresse';
 
 /**
  * Entrepôt OAI-PMH 2.0 — endpoint PUBLIC, tenant-scopé par le Host (comme
@@ -113,7 +114,7 @@ export class OaiController {
         select: { homepageContent: true },
       });
       const email = normalizeHomeContent(settings?.homepageContent).contact.email.trim();
-      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return email;
+      if (FORME_ADRESSE.test(email)) return email;
     } catch {
       /* base indisponible : on retombe sur le repli domaine ci-dessous */
     }

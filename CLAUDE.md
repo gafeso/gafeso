@@ -50,6 +50,12 @@ Pièges mesurés, à ne pas refaire :
   citait cette forme pour expliquer qu'elle ne l'emploie pas ;
 - une doublure qui porte elle-même la borne qu'elle teste rend l'épreuve verte
   avec comme sans le défaut.
+- **un garde peut survivre à la disparition de son sujet.** Quand une
+  correction supprime ce qu'un garde surveillait, le garde ne devient pas
+  inutile : il devient **muet**, et son vert ne dit plus rien. Vérifier
+  périodiquement qu'un garde a encore quelque chose à mesurer fait partie du
+  balayage. Mesuré : un cas comparant deux dérivations commençait par
+  `if (frontADejaBascule) return` — juste la veille, muet le lendemain ;
 - **la position dans le fichier n'est pas l'ordre d'exécution.** Un garde qui
   compare deux `indexOf` dans une source mesure l'ordre des OCTETS. Extraire
   une fonction la déplace sans rien changer à ce qui s'exécute : le garde tombe
