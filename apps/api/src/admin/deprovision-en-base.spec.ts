@@ -163,6 +163,7 @@ describe.runIf(process.env.PG_LIVE === '1')('Déprovision : ce qu’elle LAISSE 
       null as never,
       null as never,
       null as never,
+      { get: () => undefined } as any,
     );
     const resultat = await admin.deprovisionTenant(SLUG);
 

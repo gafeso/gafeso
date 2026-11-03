@@ -301,7 +301,28 @@ export function buildUniqueIndexStatements(slug: string): string[] {
 const INDEXED_TENANT_TABLES = [...new Set(TENANT_INDEXES.map((i) => i.table))];
 
 // Slug : minuscule initiale, puis minuscules/chiffres/tirets (2 à 49 caractères).
-const SLUG_PATTERN = /^[a-z][a-z0-9-]{1,48}$/;
+/**
+ * ⭐ LE MOTIF DU SLUG — UNE SEULE SOURCE, et il est EXPORTÉ pour ça.
+ *
+ * *Jusqu'au 3 novembre 2026, ce motif existait en DEUX copies identiques : ici
+ * et dans `provision-tenant.dto.ts`. Deux copies qui s'accordent s'accordent
+ * jusqu'au jour où l'une bouge* — et celle du DTO est la seule que voit une
+ * requête HTTP, celle d'ici la seule que voit `tenantSchemaName`.
+ *
+ * ⚠ LA BORNE DE 48 N'EST PAS LA VRAIE BORNE, et il faut le savoir en la
+ * lisant : elle vient de l'identifiant PostgreSQL (`tenant_` + slug ≤ 63
+ * octets), et `limite-identifiant-postgres.spec.ts` la confronte au serveur
+ * RÉEL. La borne qui mord dans la pratique est bien plus basse : c'est celle du
+ * QR d'étiquette, dérivée dans `labels/capacite-qr-etiquette.ts` — 32
+ * caractères pour une origine de 17, trois pour une de 46. Ce motif-ci ne la
+ * connaît pas, parce qu'elle dépend de l'origine que l'installation sert.
+ */
+export const LIMITE_IDENTIFIANT_POSTGRES = 63;
+const PREFIXE_SCHEMA = 'tenant_';
+export const LONGUEUR_SLUG_MAX_SCHEMA = LIMITE_IDENTIFIANT_POSTGRES - PREFIXE_SCHEMA.length;
+// ⚠ DÉRIVÉ, et non écrit : `{1,N}` compte les caractères APRÈS le premier, donc
+// N = max − 1. Écrire « 48 » à la main a tenu deux mois par coïncidence.
+export const SLUG_PATTERN = new RegExp(`^[a-z][a-z0-9-]{1,${LONGUEUR_SLUG_MAX_SCHEMA - 1}}$`);
 
 export function isValidSlug(slug: string): boolean {
   return SLUG_PATTERN.test(slug);
@@ -311,7 +332,7 @@ export function tenantSchemaName(slug: string): string {
   if (!isValidSlug(slug)) {
     throw new Error(`Slug de tenant invalide : "${slug}"`);
   }
-  return `tenant_${slug}`;
+  return `${PREFIXE_SCHEMA}${slug}`;
 }
 
 /** Identifiant SQL entre guillemets (le slug est déjà validé en amont). */

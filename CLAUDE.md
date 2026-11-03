@@ -43,7 +43,11 @@ Pièges mesurés, à ne pas refaire :
   `expect(COTE).toBe(14)` passe sur un 14 écrit à la main. Seul un instrument
   qui **lit la source** ou **observe l'effet** les sépare ;
 - un relevé textuel satisfait par un **commentaire** ne mesure rien :
-  dépouiller les commentaires, ou préférer un garde d'effet ;
+  dépouiller les commentaires, ou préférer un garde d'effet. **Et la règle vaut
+  dans les deux sens** : un relevé peut aussi *accuser* par un commentaire, et
+  punir celui qui documente pourquoi il fait bien. Mesuré : un garde refusait la
+  forme `if (!joignable) return` et accusait l'épreuve dont le commentaire
+  citait cette forme pour expliquer qu'elle ne l'emploie pas ;
 - une doublure qui porte elle-même la borne qu'elle teste rend l'épreuve verte
   avec comme sans le défaut.
 - **la position dans le fichier n'est pas l'ordre d'exécution.** Un garde qui
@@ -118,10 +122,14 @@ Signaler ses propres erreurs avant qu'on les trouve vaut mieux que de les avoir
 
 | | |
 |---|---|
-| Toute publication | instantané public, release GitHub, Play Store |
+| Toute publication | Release GitHub, Play Store, et l'étiquette v1.0.0 |
 | Toute suppression | fichiers, volumes, données, conteneurs |
 | Toute dépense | serveurs, services, matériel |
 | `demo.gafeso.org` | **aucune session n'y touche jamais** — Jean seul y agit, sous dictée du responsable |
+
+Un instantané public de travail et son étiquette `rc` relèvent du responsable,
+pas de Jean. Une release annonce une version au monde ; un instantané fait
+avancer le dépôt.
 
 **Au responsable :** arbitrages de périmètre, formats d'échange entre sessions,
 choix de conception irréversibles, contenu d'un instantané.

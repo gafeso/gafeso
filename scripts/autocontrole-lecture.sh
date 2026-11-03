@@ -68,13 +68,52 @@ trap nettoyer EXIT
 # ⚠ Le code ET l'en-tête dans le MÊME appel : deux appels mesureraient deux
 # instants, et l'URL signée pourrait expirer entre les deux.
 CORPS=/tmp/autocontrole-$$.bin
-ENT="$(curl -sS -D- -o "$CORPS" -H "Origin: $ORIGINE" "$URL" 2>&1)" || {
-  rouge "✖ LE STOCKAGE EST INJOIGNABLE DEPUIS L'HÔTE."
+ENT="$(curl -sS -D- -o "$CORPS" -H "Origin: $ORIGINE" "$URL" 2>&1)"
+CURL=$?
+if [ "$CURL" != 0 ]; then
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 « INJOIGNABLE » CONFONDAIT TROIS CAUSES — corrigé le 3 novembre 2026.
+  #
+  # *Mesuré par la recette d'installation sur une machine neuve : Caddy
+  # obtenait encore ses certificats, et ce contrôle annonçait « LE STOCKAGE EST
+  # INJOIGNABLE DEPUIS L'HÔTE » avec, juste en dessous,*
+  #
+  #   curl: (35) … error:0A000438:SSL routines::tlsv1 alert internal error
+  #
+  # Deux minutes plus tard tout répondait. Le contrôle était juste, sa CAUSE
+  # était fausse — et un exploitant envoyé vérifier « le DNS, Caddy, et que le
+  # conteneur tourne » cherche là où il n'y a rien.
+  #
+  # ⚠ Ce script est AUSSI lancé à la main depuis DEPLOY.md : corriger seulement
+  # le moment dans install.sh aurait laissé la fausse cause en place là.
+  # ═══════════════════════════════════════════════════════════════════════
   gris "$ENT"
-  rouge "  Le domaine de stockage ne répond pas. Vérifiez le DNS, Caddy, et que"
-  rouge "  le conteneur du stockage tourne."
+  case "$CURL" in
+    35|58|60|77|83)
+      rouge "✖ CERTIFICAT TLS ABSENT OU INVALIDE — ce n'est PAS « injoignable »."
+      rouge "  La poignée de main TLS échoue (curl $CURL) : Caddy n'a pas encore de"
+      rouge "  certificat valide pour ce domaine, ou ACME a échoué."
+      rouge "  Sur une installation NEUVE, attendez : Let's Encrypt prend parfois"
+      rouge "  deux minutes. Sinon : dc logs --tail=80 caddy."
+      rouge "  ⚠ NE DÉTRUISEZ RIEN : la pile et ses données sont intactes."
+      ;;
+    6)
+      rouge "✖ LE DNS NE RÉSOUT PAS le domaine de stockage (curl 6)."
+      rouge "  Créez l'enregistrement A et attendez la propagation."
+      ;;
+    7|28)
+      rouge "✖ RIEN NE RÉPOND sur le domaine de stockage (curl $CURL)."
+      rouge "  Le DNS résout, mais aucune connexion n'aboutit : pare-feu, port 443"
+      rouge "  fermé, ou Caddy arrêté. Regardez dc ps."
+      ;;
+    *)
+      rouge "✖ LE STOCKAGE EST INJOIGNABLE DEPUIS L'HÔTE (curl $CURL)."
+      rouge "  Cause non classée — la ligne de curl ci-dessus la nomme. Je ne"
+      rouge "  devine pas, et je ne conseille donc aucun remède."
+      ;;
+  esac
   rm -f "$CORPS"; exit 1
-}
+fi
 CODE=$(printf '%s' "$ENT" | awk 'NR==1{print $2}')
 ACAO=$(printf '%s' "$ENT" | grep -i '^access-control-allow-origin:' | head -1 | cut -d: -f2- | tr -d ' \r')
 

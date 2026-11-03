@@ -68,6 +68,20 @@ const MARQUE_ATTENDUE = /const MARQUE = /;
  * écrite plus bas, mesurée plutôt que supposée.
  */
 const DISCIPLINES: Record<string, { discipline: Discipline; motif: string }> = {
+  // ⚠ Déclarée le 3 novembre 2026 avec la borne du slug. Elle est
+  // `lecture-seule` au sens le plus strict qui existe dans ce fichier : elle
+  // n'ouvre même pas de transaction, et ne nomme AUCUNE table. Elle demande au
+  // moteur ce qu'il FAIT d'un identifiant trop long, par un cast vers `name`.
+  'tenancy/limite-identifiant-en-base.spec.ts': {
+    discipline: 'lecture-seule',
+    motif:
+      'elle évalue `length(repeat(…)::name)` et `current_setting(…)` — aucune ' +
+      'table n’est lue, aucune écriture n’est faite, aucun schéma n’est touché. ' +
+      '⚠ Elle mesure l’EFFET (la troncature réelle) et non la déclaration, parce ' +
+      'qu’un serveur compilé avec un autre NAMEDATALEN tronquerait les noms de ' +
+      'schéma sans bruit — deux écoles aux slugs proches partageraient alors un ' +
+      'schéma.',
+  },
   'tenancy/index-des-ecoles-en-base.spec.ts': {
     discipline: 'lecture-seule',
     motif:
@@ -205,7 +219,7 @@ function recettes(): { cle: string; source: string }[] {
 }
 
 describe('L’instrument : le relevé des recettes qui touchent une vraie base', () => {
-  it('⚠ il en trouve EXACTEMENT dix-sept — une dix-huitième force à relire ceci', () => {
+  it('⚠ il en trouve EXACTEMENT dix-huit — une dix-neuvième force à relire ceci', () => {
     // ⚠ TÉMOIN QUI COMPTE. « Au moins une » confirmerait que le relevé tourne ;
     // seul un compte exact signale la recette écrite demain par quelqu'un qui
     // n'aura pas entendu parler des trois faux dispositifs d'aujourd'hui.

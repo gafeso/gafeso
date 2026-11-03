@@ -61,6 +61,7 @@ function makeService(prisma = makePrisma(), cataloging = makeCataloging()) {
       {} as any,
       {} as any,
       {} as any,
+      { get: () => undefined } as any,
     ),
     prisma,
     tx: prisma._tx,

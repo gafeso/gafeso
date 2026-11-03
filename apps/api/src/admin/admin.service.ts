@@ -49,6 +49,8 @@ import {
   IntrospectedCollation,
 } from '../tenancy/tenant-schema';
 import { ProvisionTenantDto } from './dto/provision-tenant.dto';
+import { ConfigService } from '@nestjs/config';
+import { longueurSlugMaxPourEtiquette } from '../labels/capacite-qr-etiquette';
 
 /** Charge utile d'un JWT super-admin plateforme (hors tenant). */
 export interface SuperAdminPayload {
@@ -111,6 +113,7 @@ export class AdminService {
     private readonly categories: CategoriesService,
     private readonly authors: AuthorsService,
     private readonly roles: RolesService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -280,6 +283,39 @@ export class AdminService {
   async provisionTenant(dto: ProvisionTenantDto) {
     if (!isValidSlug(dto.slug)) {
       throw new BadRequestException('Slug invalide.');
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔴 LA BORNE DU SLUG — celle qui MORD, et elle n'est pas celle du schéma
+    //
+    // `isValidSlug` ne borne que l'identifiant PostgreSQL (49 caractères). La
+    // borne PRATIQUE vient du QR d'étiquette : l'adresse gravée
+    // `<ORIGINE>/P/OAI:<SLUG>:<UUID>` tient dans un carré de côté FIXE, donc un
+    // slug plus long ne fait pas un plus grand QR — il fait monter sa VERSION,
+    // des modules plus petits, et **un QR imprimé illisible** sans qu'aucun
+    // code n'échoue.
+    //
+    // ⚠ ELLE SE FAIT RESPECTER ICI PARCE QUE C'EST ICI QUE LE SLUG SE CHOISIT.
+    // La découvrir en imprimant une planche serait la découvrir quand le slug
+    // est déjà gravé dans chaque identifiant pérenne de l'école.
+    //
+    // ⚠ ET ELLE DÉPEND DE L'ORIGINE, donc du domaine demandé : 32 caractères
+    // pour `https://bib.uo.bf`, trois pour une origine de 46. On la calcule
+    // avec le domaine de CETTE demande, pas avec une valeur de référence.
+    // ═══════════════════════════════════════════════════════════════════════
+    const appUrl = this.config.get<string>('APP_URL')?.trim() ?? '';
+    const borne = longueurSlugMaxPourEtiquette(appUrl, dto.domain?.toLowerCase() ?? null);
+    // `null` : pas d'APP_URL, donc aucune étiquette à imprimer et aucune borne
+    // à faire respecter. Inventer un nombre refuserait des slugs pour une
+    // raison inexistante.
+    if (borne !== null && dto.slug.length > borne) {
+      throw new BadRequestException(
+        `Slug trop long pour le QR d'étiquette : ${dto.slug.length} caractères, ` +
+          `maximum ${borne} pour l'origine « ${dto.domain?.toLowerCase() ?? appUrl} ». ` +
+          `Au-delà, le QR imprimé passe en version supérieure et devient illisible ` +
+          `dans le carré réservé. Deux issues : un slug plus court, ou un domaine ` +
+          `plus court — l'adresse gravée contient les deux.`,
+      );
     }
     const existing = await this.prisma.tenant.findUnique({
       where: { slug: dto.slug },

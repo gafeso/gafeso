@@ -12,6 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { SLUG_PATTERN } from '../../tenancy/tenant-schema';
 
 class EtablissementDto {
   @ApiProperty({ example: 'Université d’Exemple' })
@@ -20,7 +21,11 @@ class EtablissementDto {
 
   @ApiProperty({ example: 'uex', description: 'minuscules, chiffres, tirets ; commence par une lettre' })
   @IsString()
-  @Matches(/^[a-z][a-z0-9-]{1,48}$/, {
+  // ⚠ TROISIÈME COPIE DU MÊME MOTIF, trouvée le 3 novembre 2026 en balayant
+  // APRÈS avoir corrigé les deux que je connaissais. Je ne l'aurais pas vue en
+  // relisant les deux fichiers signalés : c'est le geste « chercher les autres
+  // sites de la même règle » qui l'a sortie, pas la correction elle-même.
+  @Matches(SLUG_PATTERN, {
     message: 'identifiant invalide (minuscules, chiffres, tirets ; commence par une lettre).',
   })
   slug: string;

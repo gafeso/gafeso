@@ -59,7 +59,7 @@ function tousLesTests(dir: string): string[] {
 const VIVANTS = gardesVivants(RACINE);
 
 describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
-  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement TREIZE', () => {
+  it('⚠ TÉMOIN QUI COMPTE : il y en a exactement QUATORZE', () => {
     // « Au moins un » confirmerait que le relevé tourne. Seul un compte exact
     // signale le suivant, écrit demain par quelqu'un qui n'aura pas lu ceci
     // — et qui pourrait le rendre vert sur une base absente.
@@ -83,34 +83,45 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
     // les deux fois : il a fallu revenir ici et vérifier que les gardes neufs
     // respectent les deux promesses de ce fichier — nom en `-en-base`, et
     // ROUGE quand la base ne répond pas plutôt que vert sur rien.
+    // ⚠ PUIS À QUATORZE le 3 novembre 2026 : la limite d'identifiant du moteur
+    // (`tenancy/limite-identifiant-en-base.spec.ts`), posée avec la borne du
+    // slug. Le compte a fait son office une fois de plus — il a obligé à
+    // revenir ici, et le garde neuf ne tenait AUCUNE des deux promesses : il
+    // s'appelait `limite-identifiant-postgres.spec.ts` et n'avait aucune
+    // assertion de joignabilité. Renommé, et quatre assertions ajoutées.
+    //
+    // ⚠ Et il a trouvé un défaut DANS CE FICHIER : le relevé de non-silence
+    // accusait le garde neuf parce que son COMMENTAIRE citait la forme
+    // interdite. Le relevé dépouille désormais les commentaires.
     expect(VIVANTS.map((f) => f.replace(RACINE + '/', '')).sort()).toEqual([
+      // Classé GLOBALE, et ce garde m'a mis en garde contre exactement ce geste
+      // REFUSÉ ma première rédaction qui citait la forme interdite dans un
+      // au critère (c) qu'il nomme lui-même : la propriété éprouvée est le
+      // commentaire.
+      // confronté au compte en base. Le compte a fait son office — il a obligé
+      // donc invisible, et c'est celle qui coûte.
+      // gabarit. Son frère ci-dessus compare les COLONNES et n'a jamais
+      // là-dedans ne peut dériver d'une école à l'autre.
+      // niveau d'isolation du MOTEUR sur `public.tenant_settings`, et rien
+      // regardé un index — une contrainte unique absente d'une école était
+      // à le classer PAR_ECOLE, à déclarer sa discipline de recette, et il a
+      // — « ne le classez pas en GLOBALE pour vous débloquer ». Le motif tient
+      // ⭐ DOUZIÈME, le 9 octobre 2026 : la course sur les pages légales.
+      // ⭐ ONZIÈME, le 9 octobre 2026 : le compte filtré par le moteur,
+      // ⭐ TREIZIÈME, le 9 octobre 2026 : les INDEX des écoles contre le
       'admin/deprovision-en-base.spec.ts',
       'cataloging/fonds-conforme-en-base.spec.ts',
       'cataloging/formes-decomposees-en-base.spec.ts',
       'cataloging/vocabulaire-des-types-en-base.spec.ts',
       'collections/hierarchie-en-base.spec.ts',
       'collections/nom-de-collection-en-base.spec.ts',
-      // ⭐ ONZIÈME, le 9 octobre 2026 : le compte filtré par le moteur,
-      // confronté au compte en base. Le compte a fait son office — il a obligé
-      // à le classer PAR_ECOLE, à déclarer sa discipline de recette, et il a
-      // REFUSÉ ma première rédaction qui citait la forme interdite dans un
-      // commentaire.
       'opac/compte-filtre-exact-en-base.spec.ts',
       'roles/roles-systeme-en-base.spec.ts',
       'stats/usage-nominatif-en-base.spec.ts',
       'tenancy/derive-des-schemas-en-base.spec.ts',
-      // ⭐ TREIZIÈME, le 9 octobre 2026 : les INDEX des écoles contre le
-      // gabarit. Son frère ci-dessus compare les COLONNES et n'a jamais
-      // regardé un index — une contrainte unique absente d'une école était
-      // donc invisible, et c'est celle qui coûte.
       'tenancy/index-des-ecoles-en-base.spec.ts',
       'tenancy/isolement-des-ecoles-en-base.spec.ts',
-      // ⭐ DOUZIÈME, le 9 octobre 2026 : la course sur les pages légales.
-      // Classé GLOBALE, et ce garde m'a mis en garde contre exactement ce geste
-      // — « ne le classez pas en GLOBALE pour vous débloquer ». Le motif tient
-      // au critère (c) qu'il nomme lui-même : la propriété éprouvée est le
-      // niveau d'isolation du MOTEUR sur `public.tenant_settings`, et rien
-      // là-dedans ne peut dériver d'une école à l'autre.
+      'tenancy/limite-identifiant-en-base.spec.ts',
       'tenancy/version-des-pages-legales-en-base.spec.ts',
     ]);
   });
@@ -140,12 +151,23 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
   });
 
   it('⚠ aucun ne sort en SILENCE quand la base ne répond pas', () => {
-    // La forme interdite est `if (!joignable) return` : elle rend vert un test
-    // qui n'a rien mesuré. La forme juste est une assertion.
+    // La forme interdite rend vert un test qui n'a rien mesuré ; la forme juste
+    // est une assertion.
+    //
+    // ⚠ CE RELEVÉ DÉPOUILLE LES COMMENTAIRES — corrigé le 3 novembre 2026. Il
+    // accusait un garde neuf dont le COMMENTAIRE citait la forme interdite pour
+    // expliquer qu'il ne l'emploie pas. « Un relevé textuel satisfait par un
+    // commentaire ne mesure rien » (CLAUDE.md §2) vaut dans les DEUX sens : il
+    // peut aussi ACCUSER par un commentaire, et punir celui qui documente
+    // pourquoi il fait bien.
     for (const f of VIVANTS) {
-      const source = readFileSync(f, 'utf8');
-      expect(source, f).not.toMatch(/if\s*\(\s*!\s*joignable\s*\)\s*return/);
-      expect(source, f).toContain('MESSAGE_BASE_INJOIGNABLE');
+      const code = readFileSync(f, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(?<!:)\/\/[^\n]*/g, ' ');
+      expect(code, f).not.toMatch(/if\s*\(\s*!\s*joignable\s*\)\s*return/);
+      expect(code, `${f} : MESSAGE_BASE_INJOIGNABLE doit être employé dans le CODE`).toContain(
+        'MESSAGE_BASE_INJOIGNABLE',
+      );
     }
   });
 
@@ -228,6 +250,15 @@ describe('⚠ Les gardes vivants, et ce qu’ils promettent', () => {
       'le trigger de hiérarchie vit dans `public` — il n’y en a qu’un, pas un par école',
     'nom-de-collection-en-base.spec.ts':
       'l’index unique porte sur `public.collections` — les collections sont PARTAGÉES',
+    // ⚠ Classé GLOBALE le 3 novembre 2026, et le motif n'est pas un
+    // contournement : la propriété éprouvée est celle du MOTEUR —
+    // `NAMEDATALEN - 1`, fixé à la compilation de PostgreSQL. Elle ne peut pas
+    // varier d'une école à l'autre, puisqu'elle ne dépend d'aucun schéma. Ce
+    // garde ne lit ni n'écrit aucune donnée d'école : il demande au serveur ce
+    // qu'il FAIT d'un identifiant trop long, par un cast vers `name`.
+    'limite-identifiant-en-base.spec.ts':
+      'la troncature des identifiants est une constante de compilation du ' +
+      'MOTEUR (NAMEDATALEN−1) — elle ne dépend d’aucun schéma d’école',
   };
 
   it('⚠ CHAQUE garde vivant est PAR-ÉCOLE ou GLOBAL — un garde neuf fait tomber ce test', () => {

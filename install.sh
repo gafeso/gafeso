@@ -967,6 +967,24 @@ compose_up() {
     sleep 5; elapsed=$((elapsed+5))
   done
   ok "Tous les services sont sains (migrations Prisma appliquées au démarrage de l'api)."
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 🔴 LE REMÈDE DOIT DÉPENDRE DE LA CAUSE — et à partir d'ici il change.
+  #
+  # *Trouvé le 3 novembre 2026 par la recette d'installation sur une machine
+  # neuve.* `CLEANUP_HINT` était posé une seule fois, au début de cette
+  # fonction, et restait armé pendant le provisionnement ET l'auto-contrôle. Un
+  # échec de CERTIFICAT conseillait donc « dc down -v puis rm -f .env.prod » —
+  # **la destruction d'une installation parfaitement saine**, volumes compris,
+  # pour un défaut qui se résolvait tout seul en deux minutes.
+  #
+  # Tant que la pile ne démarre pas, repartir de zéro est le bon conseil. Dès
+  # qu'elle est saine, ce n'est plus jamais le bon : les données existent.
+  # ═══════════════════════════════════════════════════════════════════════
+  CLEANUP_HINT="La pile TOURNE et ses données existent — ne la détruisez pas.
+    Pour reprendre après correction : relancez ./install.sh --force (il
+    conserve les identifiants d'infrastructure et les volumes).
+    Pour voir ce qui se passe : dc ps puis dc logs --tail=50 caddy api."
 }
 
 # ── Provisioning du premier établissement ────────────────────────────────
@@ -1045,6 +1063,94 @@ verifier_compose() {
     die "Le compose REFUSE cet environnement (voir ci-dessus). Rien n'a été lancé."
   fi
   ok "L'environnement est complet : le compose se résout."
+}
+
+# ═════════════════════════════════════════════════════════════════════════
+# 🔴 ATTENDRE QUE LE CERTIFICAT EXISTE — le contrôle était juste, son MOMENT faux.
+#
+# *Mesuré le 3 novembre 2026 par la recette d'installation, sur une machine
+# neuve et de vrais domaines :*
+#
+#   6/7 · Lecture d'un document, de bout en bout
+#   ✖ LE STOCKAGE EST INJOIGNABLE DEPUIS L'HÔTE.
+#   curl: (35) OpenSSL/3.0.13: error:0A000438:SSL routines::tlsv1 alert internal error
+#
+# Deux minutes plus tard les trois domaines répondaient. Caddy obtenait encore
+# ses certificats auprès de Let's Encrypt : l'installation s'est arrêtée sur un
+# **défaut inexistant**, et elle l'aurait fait chez CHAQUE auto-hébergeur
+# installant sur de vrais domaines.
+#
+# ⚠ TROIS ISSUES, PAS DEUX. « Le certificat n'est pas encore là » n'est pas
+# « le stockage est injoignable », et ni l'une ni l'autre n'est « le DNS ne
+# résout pas ». Les confondre envoie l'exploitant chercher au mauvais endroit —
+# et dans le cas mesuré, détruire son installation.
+# ═════════════════════════════════════════════════════════════════════════
+attendre_certificat() {
+  # ⚠ ON DÉRIVE LES ORIGINES DES VALEURS ÉCRITES, on ne les recompose pas :
+  # `MINIO_PUBLIC_URL` et `APP_URL` portent leur schéma dans les DEUX modes, et
+  # c'est le seul endroit où le mode est déjà tranché.
+  local origines="$MINIO_PUBLIC_URL $APP_URL"
+  case "$MINIO_PUBLIC_URL$APP_URL" in
+    *https://*) ;;
+    *)
+      # Mode localhost : Caddy sert en clair, il n'y a aucun certificat à
+      # attendre. Le dire plutôt que de sauter en silence.
+      info "Pas de TLS en mode local : aucun certificat à attendre."
+      return 0
+      ;;
+  esac
+
+  local timeout="${CERT_TIMEOUT:-180}" elapsed=0 code=0 origine reste
+  info "Attente des certificats Let's Encrypt (jusqu'à ${timeout}s)…"
+  for origine in $origines; do
+    case "$origine" in https://*) ;; *) continue ;; esac
+    while :; do
+      # Toute réponse HTTP prouve que la poignée de main TLS a abouti : le code
+      # HTTP ne nous intéresse pas ici, seule l'existence du certificat.
+      curl -sS -o /dev/null --max-time 10 "$origine/" 2>/dev/null
+      code=$?
+      [ "$code" = 0 ] && break
+      reste=$((timeout - elapsed))
+      [ "$reste" -le 0 ] && break
+      printf '\r  %s%s — en attente (%ss restantes, curl %s)%s ' \
+        "$DIM" "$origine" "$reste" "$code" "$RST"
+      sleep 5; elapsed=$((elapsed+5))
+    done
+    printf '\r%*s\r' 78 ''
+    if [ "$code" != 0 ]; then
+      # ⚠ LA CAUSE SE NOMME PAR LE CODE DE curl, et chaque cause a SON remède.
+      case "$code" in
+        35|58|60|77|83)
+          CLEANUP_HINT="La pile TOURNE : ne la détruisez PAS. Le certificat
+    n'est pas encore là, ou ACME a échoué. Regardez : dc logs --tail=80 caddy.
+    Causes habituelles : le port 80 n'est pas joignable depuis l'extérieur, ou
+    le DNS ne pointe pas encore ici. Relancez ./install.sh --force après
+    correction — vos données et vos identifiants sont conservés."
+          die "CERTIFICAT NON OBTENU pour $origine (curl $code, erreur TLS).
+    Ce n'est PAS « le stockage est injoignable » : la poignée de main TLS
+    échoue, donc Caddy n'a pas encore de certificat valide pour ce domaine.
+    L'installation s'arrête ici, mais RIEN n'est à détruire."
+          ;;
+        6)
+          die "LE DNS NE RÉSOUT PAS $origine (curl 6).
+    Créez l'enregistrement A, attendez la propagation, puis relancez
+    ./install.sh --force. Rien n'est à détruire."
+          ;;
+        7|28)
+          die "RIEN NE RÉPOND SUR $origine (curl $code).
+    Le DNS résout mais aucune connexion n'aboutit : pare-feu, port 443 fermé,
+    ou Caddy arrêté. Regardez dc ps et dc logs --tail=80 caddy.
+    Rien n'est à détruire."
+          ;;
+        *)
+          die "IMPOSSIBLE DE JOINDRE $origine (curl $code).
+    Cause non classée — le code de curl ci-dessus la nomme. Je ne devine pas,
+    et je ne conseille donc aucun remède. Rien n'est à détruire."
+          ;;
+      esac
+    fi
+    ok "$origine répond en TLS."
+  done
 }
 
 autocontrole() {
@@ -1192,6 +1298,7 @@ main() {
   check_dns         # dernier point de contrôle juste avant de lancer Caddy/ACME
   compose_up
   provision
+  attendre_certificat  # le certificat AVANT la lecture : voir son en-tête
   autocontrole
   recap
 }

@@ -21,7 +21,7 @@ const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, t
 function service(admin: { id: string; email: string; password: string } | null) {
   const update = vi.fn(async (_args: { data: { password: string } }) => ({}));
   const prisma = { superAdmin: { findUnique: vi.fn(async () => admin), update } } as any;
-  const svc = new AdminService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+  const svc = new AdminService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, { get: () => undefined } as any);
   return { svc, update, prisma };
 }
 

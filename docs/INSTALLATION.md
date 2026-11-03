@@ -90,6 +90,42 @@ l'hébergeur.
 
 Les ports **80** et **443** doivent être libres et ouverts dans le pare-feu.
 
+#### ⚠ La longueur du domaine limite le nom de vos écoles — lisez-le avant de choisir
+
+Ce point surprend, et il se décide **maintenant**, pas après : un domaine long
+réduit la place disponible pour l'**identifiant** de chaque école (son *slug*).
+
+La raison est physique. L'étiquette collée dans chaque livre porte un QR qui
+encode l'adresse permanente de la notice :
+
+```
+https://biblio.mon-ecole.org/p/OAI:MON-ECOLE:9DE9B299-CDE5-4ACC-9E76-0E800AD94281
+```
+
+Le carré réservé à ce QR sur l'étiquette a une taille **fixe**. Une adresse plus
+longue n'agrandit pas le carré : elle y met plus de modules, donc des modules
+plus petits — jusqu'au point où le QR imprimé n'est plus lisible par un
+téléphone. Gafeso borne donc l'identifiant d'école, et **refuse au
+provisionnement** un identifiant qui ne tiendrait pas.
+
+Ce qui reste, mesuré (capacité réelle de l'encodeur, correction d'erreur haute) :
+
+| Votre domaine | Caractères disponibles pour l'identifiant d'école |
+|---|---|
+| `https://gafeso.org` (18 caractères) | 31 |
+| `https://biblio.mon-ecole.org` (28) | 21 |
+| `https://bibliotheque.universite-exemple.edu.bf` (46) | **3** |
+
+**Règle simple : chaque caractère gagné sur le domaine est un caractère gagné
+sur l'identifiant d'école.** Un domaine court n'est pas une coquetterie — c'est
+de la marge de nommage pour toutes les écoles que vous hébergerez.
+
+Si une école déclare son propre domaine principal, c'est **celui-là** qui entre
+dans l'adresse gravée, et donc dans le calcul.
+
+Le message de refus, si vous dépassez, nomme le maximum applicable et les deux
+issues : un identifiant plus court, ou un domaine plus court.
+
 ### 1.4 Une boîte mail d'envoi
 
 Gafeso envoie des courriels : liens d'activation de compte, réinitialisation de
